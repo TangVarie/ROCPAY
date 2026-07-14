@@ -62,6 +62,18 @@ export const config = {
     // 收款 openid 与该 appid 必须一致；本方案 = 你的【小程序 AppID】
     appid: required('WECHATPAY_APPID'),
     transferSceneId: optional('WECHATPAY_TRANSFER_SCENE_ID', '1000'),
+    // 场景报备信息（JSON 数组），必须匹配你申请到的转账场景要求的字段。
+    // 例：WECHATPAY_SCENE_REPORT_INFOS=[{"info_type":"岗位类型","info_content":"推广合作"},{"info_type":"报酬说明","info_content":"{remark}"}]
+    sceneReportInfos: (() => {
+      const raw = optional('WECHATPAY_SCENE_REPORT_INFOS');
+      if (!raw) return null;
+      try {
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) && arr.every((i) => i && i.info_type) ? arr : null;
+      } catch {
+        return null;
+      }
+    })(),
     notifyUrl: optional('WECHATPAY_NOTIFY_URL'), // 商家转账回调，形如 https://xxx/api/notify
     // 平台验签/加密：微信支付公钥模式（可选），留空则自动下载平台证书
     publicKeyId: optional('WECHATPAY_PUBLIC_KEY_ID'),

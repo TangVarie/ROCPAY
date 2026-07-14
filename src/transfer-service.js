@@ -29,20 +29,34 @@ export async function createTransferBill({ outBillNo, openid, amountFen, remark,
   }
   if (!openid) throw new Error('缺少收款人 openid');
 
+  // 场景报备信息：优先用调用方传的 → 环境变量 WECHATPAY_SCENE_REPORT_INFOS 配置的 → 默认(场景1000)。
+  // 不同转账场景要求的 info_type 不同（如 1000现金营销=活动名称/奖励说明，1005佣金报酬=岗位类型/报酬说明），
+  // 必须和你申请到的场景严格一致，否则微信报「未传入完整且对应的转账场景报备信息」。
+  // 支持在 info_content 里用占位符 {remark} 自动替换为本次备注。
+  const remarkText = String(remark || '客户奖励').slice(0, 32);
+  const fillRemark = (arr) =>
+    arr.map((i) => ({
+      info_type: i.info_type,
+      info_content: String(i.info_content || '').replace(/\{remark\}/g, remarkText).slice(0, 256),
+    }));
+  const reportInfos =
+    sceneReportInfos && sceneReportInfos.length
+      ? sceneReportInfos
+      : config.wechatpay.sceneReportInfos && config.wechatpay.sceneReportInfos.length
+        ? fillRemark(config.wechatpay.sceneReportInfos)
+        : [
+            { info_type: '活动名称', info_content: '客户奖励发放' },
+            { info_type: '奖励说明', info_content: remarkText },
+          ];
+
   const body = {
     appid: config.wechatpay.appid,
     out_bill_no: outBillNo,
     transfer_scene_id: config.wechatpay.transferSceneId,
     openid,
     transfer_amount: amountFen,
-    transfer_remark: String(remark || '客户奖励').slice(0, 32),
-    transfer_scene_report_infos:
-      sceneReportInfos && sceneReportInfos.length
-        ? sceneReportInfos
-        : [
-            { info_type: '活动名称', info_content: '客户奖励发放' },
-            { info_type: '奖励说明', info_content: String(remark || '客户奖励').slice(0, 32) },
-          ],
+    transfer_remark: remarkText,
+    transfer_scene_report_infos: reportInfos,
   };
   if (config.wechatpay.notifyUrl) body.notify_url = config.wechatpay.notifyUrl;
 
