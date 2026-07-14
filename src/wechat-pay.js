@@ -84,6 +84,9 @@ export async function request(method, urlPath, body = null, opts = {}) {
   const headers = {
     Authorization: buildAuthorization(method, urlPath, bodyStr),
     Accept: 'application/json',
+    // 微信支付只认简单的 Accept-Language（如 zh-CN），显式写死，
+    // 覆盖运行时/代理可能注入的复杂值（否则报 HTTP 406 传入了不支持的 Accept-Language）
+    'Accept-Language': 'zh-CN',
     'User-Agent': 'wecom-transfer/1.0 (+node)',
   };
   if (bodyStr) headers['Content-Type'] = 'application/json';
