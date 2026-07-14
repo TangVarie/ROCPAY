@@ -11,6 +11,9 @@ import { db } from './db.js';
 
 const app = express();
 
+// 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
+const BUILD = 'accept-lang-zhcn';
+
 // 落库辅助：尽力而为，任何写库失败只记日志，绝不阻断发钱/领钱链路
 function persist(action, fn) {
   if (!db.dbEnabled) return;
@@ -40,7 +43,7 @@ function isAdmin(openid) {
 // 健康检查（云托管探活）
 app.get('/', (_req, res) => res.status(200).send('ok'));
 app.get('/api/health', async (_req, res) => {
-  res.json({ ok: true, time: new Date().toISOString(), db: await db.ping() });
+  res.json({ ok: true, build: BUILD, time: new Date().toISOString(), db: await db.ping() });
 });
 
 // 当前用户：帮员工拿到自己的 openid、判断是否管理员
