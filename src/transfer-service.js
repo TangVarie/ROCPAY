@@ -37,7 +37,7 @@ export async function createTransferBill({ outBillNo, openid, amountFen, remark,
   const fillRemark = (arr) =>
     arr.map((i) => ({
       info_type: i.info_type,
-      info_content: String(i.info_content || '').replace(/\{remark\}/g, remarkText).slice(0, 256),
+      info_content: String(i.info_content || '').replace(/\{remark\}/g, remarkText).slice(0, 32),
     }));
   const reportInfos =
     sceneReportInfos && sceneReportInfos.length
