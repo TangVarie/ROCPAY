@@ -13,9 +13,20 @@ import { config } from './config.js';
 const BASE_URL = 'https://api.mch.weixin.qq.com';
 
 // 商户私钥（apiclient_key.pem，用于给请求签名）：优先环境变量 PEM，否则读文件
-const merchantPrivateKey = crypto.createPrivateKey(
-  config.wechatpay.privateKeyPem || readFileSync(config.wechatpay.privateKeyPath, 'utf8')
-);
+let merchantPrivateKey;
+try {
+  merchantPrivateKey = crypto.createPrivateKey(
+    config.wechatpay.privateKeyPem || readFileSync(config.wechatpay.privateKeyPath, 'utf8')
+  );
+} catch (e) {
+  throw new Error(
+    `[配置错误] 商户私钥解析失败：${e.message}\n` +
+      `  多半是 WECHATPAY_PRIVATE_KEY 的换行没弄对（PEM 的 BEGIN/正文/END 之间必须有换行）。\n` +
+      `  最稳妥办法：改用 WECHATPAY_PRIVATE_KEY_BASE64 —— 把整个私钥文件 base64 后填入：\n` +
+      `      base64 -w0 apiclient_key.pem      （macOS: base64 apiclient_key.pem | tr -d '\\n'）\n` +
+      `  并确认填的是【商户私钥 apiclient_key.pem】，不是证书 apiclient_cert.pem。`
+  );
+}
 
 // 平台公钥缓存：serial -> publicKeyObject（用于验签/加密）
 const platformKeys = new Map();

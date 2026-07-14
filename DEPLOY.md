@@ -98,7 +98,7 @@
 | `WECHATPAY_MCHID` | 商户号（纯数字） |
 | `WECHATPAY_API_V3_KEY` | APIv3 密钥（正好 32 位） |
 | `WECHATPAY_MERCHANT_CERT_SERIAL` | 商户证书序列号 |
-| `WECHATPAY_PRIVATE_KEY` | `apiclient_key.pem` 的**完整内容**（含 BEGIN/END 行；多行不便时把换行替换成 `\n` 连成一行，代码会自动还原） |
+| `WECHATPAY_PRIVATE_KEY` | `apiclient_key.pem` 的**完整内容**（含 BEGIN/END 行）。**推荐改用 `WECHATPAY_PRIVATE_KEY_BASE64`**：把整个 pem 文件 base64（`base64 -w0 apiclient_key.pem`），填成一长串、无换行无转义烦恼，最不易出错 |
 | `WECHATPAY_APPID` | 你的**小程序 AppID** |
 | `WECHATPAY_TRANSFER_SCENE_ID` | 转账场景 ID（如 1000） |
 | `WECHATPAY_NOTIFY_URL` | 先留空；拿到服务域名后回填 `https://<服务域名>/api/notify` |
@@ -174,6 +174,7 @@
 | 启动日志「自动建表失败」 | 库连不上/权限不足 | 服务仍能跑转账，只是不落库；修好连接后重启即自动建表 |
 | appid 和 mch_id 不匹配 | 小程序没关联商户号 | 商户平台 AppID授权管理 关联小程序 |
 | 此IP不允许调用接口 | 出口IP没进白名单 | API安全 → 接口安全IP 加入出口IP |
+| 启动崩溃 `DECODER routines::unsupported` | 私钥 PEM 换行被压坏 | 改用 `WECHATPAY_PRIVATE_KEY_BASE64`（`base64 -w0 apiclient_key.pem`），并确认填的是私钥不是证书 |
 | SIGN_ERROR 签名错误 | 证书序列号/私钥/APIv3 不对 | 用 `/api/diagnose` 自检 |
 | 客户收不到钱 | 客户没点确认收款 | 必须客户在微信里点「确认收款」，24h 不确认自动退回 |
 

@@ -34,6 +34,21 @@ function unescapePem(s) {
   return s ? s.replace(/\\n/g, '\n') : '';
 }
 
+// 读取 PEM 类环境变量：
+//   优先 <NAME>_BASE64（把整个 .pem 文件 base64 后填入，一长串、无换行无转义，最稳妥）；
+//   否则用 <NAME>（普通粘贴，自动把字面量 \n 还原成真换行）。
+function readPemEnv(name) {
+  const b64 = optional(`${name}_BASE64`);
+  if (b64) {
+    try {
+      return Buffer.from(b64, 'base64').toString('utf8');
+    } catch {
+      return '';
+    }
+  }
+  return unescapePem(optional(name));
+}
+
 export const config = {
   port: Number(optional('PORT', '3000')),
 
@@ -41,8 +56,8 @@ export const config = {
     mchid: required('WECHATPAY_MCHID'),
     apiV3Key: required('WECHATPAY_API_V3_KEY'),
     merchantSerial: required('WECHATPAY_MERCHANT_CERT_SERIAL'),
-    // 商户私钥：优先用环境变量 PEM 内容（云托管友好），否则读文件
-    privateKeyPem: unescapePem(optional('WECHATPAY_PRIVATE_KEY')),
+    // 商户私钥：优先环境变量（WECHATPAY_PRIVATE_KEY 或更稳妥的 _BASE64），否则读文件
+    privateKeyPem: readPemEnv('WECHATPAY_PRIVATE_KEY'),
     privateKeyPath: resolvePath(optional('WECHATPAY_PRIVATE_KEY_PATH', './cert/apiclient_key.pem')),
     // 收款 openid 与该 appid 必须一致；本方案 = 你的【小程序 AppID】
     appid: required('WECHATPAY_APPID'),
@@ -50,7 +65,7 @@ export const config = {
     notifyUrl: optional('WECHATPAY_NOTIFY_URL'), // 商家转账回调，形如 https://xxx/api/notify
     // 平台验签/加密：微信支付公钥模式（可选），留空则自动下载平台证书
     publicKeyId: optional('WECHATPAY_PUBLIC_KEY_ID'),
-    publicKeyPem: unescapePem(optional('WECHATPAY_PUBLIC_KEY')),
+    publicKeyPem: readPemEnv('WECHATPAY_PUBLIC_KEY'),
     publicKeyPath: resolvePath(optional('WECHATPAY_PUBLIC_KEY_PATH')),
   },
 
