@@ -1,0 +1,13 @@
+{
+  "appid": "wx1234567890abcdef",
+  "projectname": "reward-transfer",
+  "miniprogramRoot": "miniprogram/",
+  "compileType": "miniprogram",
+  "libVersion": "latest",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "postcss": true,
+    "minified": true
+  }
+}

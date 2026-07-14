@@ -1,0 +1,51 @@
+<view class="container">
+  <view class="card" wx:if="{{isAdmin}}">
+    <view class="title">发放客户奖励</view>
+
+    <view class="field"><text>金额(元)</text>
+      <input type="digit" placeholder="如 8.88" value="{{amountYuan}}" bindinput="onAmount" />
+    </view>
+    <view class="field"><text>备注</text>
+      <input placeholder="用户可见，如 老客户回馈" value="{{remark}}" bindinput="onRemark" />
+    </view>
+    <view class="field"><text>姓名(选填)</text>
+      <input placeholder="≥2000元必填收款人真实姓名" value="{{name}}" bindinput="onName" />
+    </view>
+
+    <button class="btn-primary" bindtap="onGenerate" loading="{{loading}}">生成奖励</button>
+    <view class="err" wx:if="{{error}}">{{error}}</view>
+
+    <block wx:if="{{reward}}">
+      <view class="divider"></view>
+      <view class="muted">已生成：¥{{reward.amountYuan}} {{reward.remark}}</view>
+      <button class="btn-primary" open-type="share">转发给客户</button>
+      <view class="muted small">点「转发给客户」，把卡片发到与客户的微信/企微聊天里，客户点开即可领取。</view>
+    </block>
+  </view>
+
+  <!-- 最近发放记录（后端开库后自动出现） -->
+  <view class="card" wx:if="{{isAdmin && records.length}}">
+    <view class="title">最近发放</view>
+    <view class="stats" wx:if="{{stats}}">
+      共 {{stats.total}} 笔 · 到账 {{stats.success_count}} · 待确认 {{stats.pending_count}}
+    </view>
+    <view class="rec" wx:for="{{records}}" wx:key="rid">
+      <view class="rec-main">
+        <text class="rec-amt">¥{{item.yuan}}</text>
+        <text class="rec-remark">{{item.remark}}</text>
+      </view>
+      <view class="rec-side">
+        <text class="rec-status status-{{item.status}}">{{item.status}}</text>
+        <text class="rec-time">{{item.createdAt}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="card" wx:else>
+    <view class="muted">你还不是管理员，无法发放奖励。</view>
+    <view class="muted small">把下面这个 openid 发给系统管理员，加入白名单后即可使用：</view>
+    <view class="openid" bindtap="copyOpenid">{{openid || '（无法获取，请在微信小程序内打开）'}}</view>
+    <view class="muted small">点击上方 openid 可复制。</view>
+    <view class="err" wx:if="{{error}}">{{error}}</view>
+  </view>
+</view>

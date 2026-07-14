@@ -1,0 +1,10 @@
+{
+  "pages": ["pages/claim/claim", "pages/admin/admin"],
+  "window": {
+    "navigationBarTitleText": "奖励领取",
+    "navigationBarBackgroundColor": "#07c160",
+    "navigationBarTextStyle": "white"
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2"
+}

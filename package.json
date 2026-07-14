@@ -1,0 +1,21 @@
+{
+  "name": "wecom-transfer",
+  "version": "1.0.0",
+  "description": "企业微信员工向外部联系人发起微信支付『商家转账』（新版·用户确认收款）",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js",
+    "smoke": "node src/smoke-test.js",
+    "db:ping": "node src/db-cli.js ping",
+    "db:migrate": "node src/db-cli.js migrate"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mysql2": "^3.22.6"
+  }
+}

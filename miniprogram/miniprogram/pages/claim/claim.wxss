@@ -1,0 +1,25 @@
+.amount {
+  font-size: 72rpx;
+  font-weight: 700;
+  color: #07c160;
+  margin: 24rpx 0;
+}
+.claim-btn {
+  margin-top: 48rpx;
+  height: 92rpx;
+  line-height: 92rpx;
+  font-size: 32rpx;
+}
+.small {
+  margin-top: 24rpx;
+}
+.tip {
+  margin-top: 24rpx;
+  font-size: 28rpx;
+}
+.tip.ok {
+  color: #07c160;
+}
+.tip.fail {
+  color: #e64340;
+}

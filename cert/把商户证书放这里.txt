@@ -1,0 +1,7 @@
+把从微信支付商户平台下载的证书文件放到本目录（server/cert/）：
+
+  apiclient_key.pem    ← 商户私钥（必需，用于给请求签名）
+  apiclient_cert.pem   ← 商户证书（可选）
+
+⚠️ 这些文件绝密，不要提交 Git、不要外发。
+（如果你在 .env 里用了「微信支付公钥」模式，把 pub_key.pem 也放这里。）

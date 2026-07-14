@@ -1,0 +1,29 @@
+<view class="container">
+  <block wx:if="{{hasToken}}">
+    <view class="card">
+      <view class="muted">你收到一笔奖励</view>
+      <view class="amount">¥{{amt || '--'}}</view>
+      <view class="muted" wx:if="{{remark}}">{{remark}}</view>
+      <button
+        class="btn-primary claim-btn"
+        bindtap="onClaim"
+        loading="{{status==='loading'}}"
+        disabled="{{status==='loading' || status==='ok'}}"
+      >{{ status==='ok' ? '已领取' : '领取到微信零钱' }}</button>
+      <view class="tip {{status}}" wx:if="{{message}}">{{message}}</view>
+      <view class="muted small">点击领取后会弹出微信官方「确认收款」页，确认即到账。</view>
+    </view>
+  </block>
+
+  <block wx:else>
+    <view class="card">
+      <view wx:if="{{isAdmin}}">
+        <view class="muted">管理员，你好</view>
+        <button class="btn-primary claim-btn" bindtap="goAdmin">去发放奖励</button>
+      </view>
+      <view wx:else>
+        <view class="muted">请通过收到的「领取链接」进入本页面领取奖励。</view>
+      </view>
+    </view>
+  </block>
+</view>

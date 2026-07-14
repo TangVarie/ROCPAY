@@ -1,0 +1,92 @@
+.title {
+  font-size: 34rpx;
+  font-weight: 700;
+  margin-bottom: 24rpx;
+}
+.field {
+  display: flex;
+  align-items: center;
+  margin: 20rpx 0;
+}
+.field text {
+  width: 170rpx;
+  color: #555;
+}
+.field input {
+  flex: 1;
+  background: #f5f6f8;
+  border-radius: 12rpx;
+  padding: 16rpx 20rpx;
+}
+.btn-primary {
+  margin-top: 32rpx;
+  height: 88rpx;
+  line-height: 88rpx;
+}
+.divider {
+  height: 1rpx;
+  background: #eee;
+  margin: 32rpx 0;
+}
+.err {
+  color: #e64340;
+  margin-top: 20rpx;
+  font-size: 28rpx;
+}
+.openid {
+  word-break: break-all;
+  background: #f5f6f8;
+  padding: 20rpx;
+  border-radius: 12rpx;
+  margin: 16rpx 0;
+  font-size: 26rpx;
+}
+.small {
+  margin-top: 16rpx;
+}
+.stats {
+  color: #888;
+  font-size: 26rpx;
+  margin-bottom: 16rpx;
+}
+.rec {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+.rec-main {
+  display: flex;
+  flex-direction: column;
+}
+.rec-amt {
+  font-size: 30rpx;
+  font-weight: 600;
+}
+.rec-remark {
+  color: #999;
+  font-size: 24rpx;
+  margin-top: 4rpx;
+}
+.rec-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.rec-status {
+  font-size: 24rpx;
+  color: #888;
+}
+.status-SUCCESS {
+  color: #07c160;
+}
+.status-FAIL,
+.status-CLOSED {
+  color: #e64340;
+}
+.rec-time {
+  color: #bbb;
+  font-size: 22rpx;
+  margin-top: 4rpx;
+}
