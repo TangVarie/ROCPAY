@@ -12,12 +12,19 @@ Page({
     error: '',
     records: [], // 最近发放记录（需后端开库）
     stats: null, // 汇总
+    minAmountYuan: 0.1, // 金额下限（从后端 /api/me 拿）
+    maxAmountYuan: 5000, // 金额上限
   },
 
   onLoad() {
     call('/api/me', 'GET')
       .then((me) => {
-        this.setData({ openid: me.openid || '', isAdmin: !!me.isAdmin });
+        this.setData({
+          openid: me.openid || '',
+          isAdmin: !!me.isAdmin,
+          minAmountYuan: me.minAmountYuan || 0.1,
+          maxAmountYuan: me.maxAmountYuan || 5000,
+        });
         if (me.isAdmin) this.loadRecords();
       })
       .catch((e) => this.setData({ error: '无法连接后端：' + (e.errMsg || e.message || '') }));
@@ -53,6 +60,14 @@ Page({
     const yuan = Number(this.data.amountYuan);
     if (!(yuan > 0)) {
       this.setData({ error: '请输入正确金额' });
+      return;
+    }
+    if (yuan < this.data.minAmountYuan) {
+      this.setData({ error: `金额不能小于 ${this.data.minAmountYuan} 元（微信有最低单笔限额）` });
+      return;
+    }
+    if (yuan > this.data.maxAmountYuan) {
+      this.setData({ error: `金额不能大于 ${this.data.maxAmountYuan} 元` });
       return;
     }
     this.setData({ loading: true, error: '', reward: null });

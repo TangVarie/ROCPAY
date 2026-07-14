@@ -3,7 +3,7 @@
     <view class="title">发放客户奖励</view>
 
     <view class="field"><text>金额(元)</text>
-      <input type="digit" placeholder="如 8.88" value="{{amountYuan}}" bindinput="onAmount" />
+      <input type="digit" placeholder="≥{{minAmountYuan}} 元，如 8.88" value="{{amountYuan}}" bindinput="onAmount" />
     </view>
     <view class="field"><text>备注</text>
       <input placeholder="用户可见，如 老客户回馈" value="{{remark}}" bindinput="onRemark" />

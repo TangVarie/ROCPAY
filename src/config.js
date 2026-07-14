@@ -93,6 +93,8 @@ export const config = {
     rewardTtlHours: Number(optional('REWARD_TTL_HOURS', '72')),
     // 单笔转账上限（元），保护性阈值
     maxAmountYuan: Number(optional('MAX_AMOUNT_YUAN', '5000')),
+    // 单笔转账下限（元），前端/后端提前拦截，避免小于微信系统最低额被拒
+    minAmountYuan: Number(optional('MIN_AMOUNT_YUAN', '0.1')),
   },
 
   // 业务库（微信云托管自带 MySQL）。留空则不建库、退回无状态模式。

@@ -12,7 +12,7 @@ import { db } from './db.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'scene-1005-ready';
+const BUILD = 'min-amount-and-browse';
 
 // 落库辅助：尽力而为，任何写库失败只记日志，绝不阻断发钱/领钱链路
 function persist(action, fn) {
@@ -46,10 +46,15 @@ app.get('/api/health', async (_req, res) => {
   res.json({ ok: true, build: BUILD, time: new Date().toISOString(), db: await db.ping() });
 });
 
-// 当前用户：帮员工拿到自己的 openid、判断是否管理员
+// 当前用户：帮员工拿到自己的 openid、判断是否管理员，并告知金额上下限（前端预校验用）
 app.get('/api/me', (req, res) => {
   const openid = getOpenid(req);
-  res.json({ openid, isAdmin: isAdmin(openid) });
+  res.json({
+    openid,
+    isAdmin: isAdmin(openid),
+    minAmountYuan: config.app.minAmountYuan,
+    maxAmountYuan: config.app.maxAmountYuan,
+  });
 });
 
 // 部署自检：验证 商户号/证书/私钥/APIv3密钥/出口IP白名单 是否全部有效
@@ -80,6 +85,9 @@ app.post('/api/rewards', (req, res) => {
   const { amountYuan, remark = '', name = '' } = req.body || {};
   const yuan = Number(amountYuan);
   if (!(yuan > 0)) return res.status(400).json({ error: '金额必须大于 0' });
+  if (yuan < config.app.minAmountYuan) {
+    return res.status(400).json({ error: `金额不能小于 ${config.app.minAmountYuan} 元（微信商家转账有最低单笔限额）` });
+  }
   if (yuan > config.app.maxAmountYuan) {
     return res.status(400).json({ error: `金额超过上限 ${config.app.maxAmountYuan} 元` });
   }
@@ -95,10 +103,14 @@ app.post('/api/rewards', (req, res) => {
   }
 });
 
-// 【员工】后台：最近发放记录 + 汇总（需管理员；需已开库）
+// 【员工】后台：最近发放记录 + 汇总。
+// 两种鉴权：① 小程序内 x-wx-openid 命中管理员；或 ② 浏览器带 ?key=REWARD_TOKEN_SECRET（对账用）。
 app.get('/api/rewards', async (req, res) => {
-  const openid = getOpenid(req);
-  if (!isAdmin(openid)) return res.status(403).json({ error: '无权限：仅管理员可查看' });
+  const byOpenid = isAdmin(getOpenid(req));
+  const byKey = !!config.app.rewardTokenSecret && req.query.key === config.app.rewardTokenSecret;
+  if (!byOpenid && !byKey) {
+    return res.status(403).json({ error: '无权限：小程序内管理员访问，或浏览器带 ?key=REWARD_TOKEN_SECRET' });
+  }
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库，无发放记录（配置 MYSQL_* 后可用）' });
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);

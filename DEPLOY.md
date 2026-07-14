@@ -100,17 +100,19 @@
 | `WECHATPAY_MERCHANT_CERT_SERIAL` | 商户证书序列号 |
 | `WECHATPAY_PRIVATE_KEY` | `apiclient_key.pem` 的**完整内容**（含 BEGIN/END 行）。**推荐改用 `WECHATPAY_PRIVATE_KEY_BASE64`**：把整个 pem 文件 base64（`base64 -w0 apiclient_key.pem`），填成一长串、无换行无转义烦恼，最不易出错 |
 | `WECHATPAY_APPID` | 你的**小程序 AppID** |
-| `WECHATPAY_TRANSFER_SCENE_ID` | 转账场景 ID（如 1000） |
+| `WECHATPAY_TRANSFER_SCENE_ID` | 转账场景 ID（如 1000 现金营销 / 1005 佣金报酬），要和下面的报备信息配套 |
+| `WECHATPAY_SCENE_REPORT_INFOS` | 该场景要求的报备字段（JSON 数组）。**非 1000 场景必填**，见 §11 |
 | `WECHATPAY_NOTIFY_URL` | 先留空；拿到服务域名后回填 `https://<服务域名>/api/notify` |
 | `REWARD_TOKEN_SECRET` | 一串长随机字符串（务必改） |
 | `ADMIN_OPENIDS` | 先留空；第 6 步再填员工小程序 openid |
-| **`MYSQL_HOST`** | **云托管 MySQL 内网地址**（或改用 `MYSQL_URL`） |
+| **`MYSQL_HOST`** | **云托管 MySQL 内网地址**（纯地址，**不要带 `:3306`**；或改用 `MYSQL_URL`） |
 | **`MYSQL_PORT`** | **3306** |
 | **`MYSQL_USER`** | **root** |
 | **`MYSQL_PASSWORD`** | **你设置的 root 密码** |
 | **`MYSQL_DATABASE`** | **rocpay** |
 
-> 可选：`MYSQL_POOL_SIZE`（默认 5）、`DB_AUTO_MIGRATE`（默认 true）、`REWARD_TTL_HOURS`（默认 72）、`MAX_AMOUNT_YUAN`（默认 5000）。
+> 可选：`MYSQL_POOL_SIZE`（默认 5）、`DB_AUTO_MIGRATE`（默认 true）、`REWARD_TTL_HOURS`（默认 72）、`MAX_AMOUNT_YUAN`（默认 5000）、`MIN_AMOUNT_YUAN`（默认 0.1，见 §11）。
+> 私钥推荐用 `WECHATPAY_PRIVATE_KEY_BASE64`（`base64 -w0 apiclient_key.pem`），比多行 PEM 稳。
 > `PORT` 不用填（Dockerfile 已设 3000）；但部署页「端口」字段一定要填 3000。
 
 填完点 **发布**，等构建部署（几分钟）。
@@ -175,6 +177,11 @@
 | appid 和 mch_id 不匹配 | 小程序没关联商户号 | 商户平台 AppID授权管理 关联小程序 |
 | 此IP不允许调用接口 | 出口IP没进白名单 | API安全 → 接口安全IP 加入出口IP |
 | 启动崩溃 `DECODER routines::unsupported` | 私钥 PEM 换行被压坏 | 改用 `WECHATPAY_PRIVATE_KEY_BASE64`（`base64 -w0 apiclient_key.pem`），并确认填的是私钥不是证书 |
+| `db.ok=false` 且日志 `ENOTFOUND` | `MYSQL_HOST` 填错（常见误带 `:3306`） | `MYSQL_HOST` 只填纯地址，端口放 `MYSQL_PORT` |
+| `db.ok=false` 且日志 `ETIMEDOUT` | MySQL 与服务不在同一环境/网络不通 | 确认 MySQL 就在本服务所在环境里开的 |
+| diagnose `HTTP 406 传入了不支持的 Accept-Language` | 运行时/代理注入了微信不认的头 | 代码已写死 `Accept-Language: zh-CN`；确保跑的是最新构建 |
+| 转账 `PARAM_ERROR 未传入完整且对应的转账场景报备信息` | 报备字段和场景不符 | 按场景配 `WECHATPAY_SCENE_REPORT_INFOS`（见 §11） |
+| 转账 `INVALID_REQUEST 超过单笔转账上下限` | 金额低于系统最低额 / 高于你的单笔上限 | 金额取在下限~单笔上限之间；用 `MIN_AMOUNT_YUAN` 前端拦截 |
 | SIGN_ERROR 签名错误 | 证书序列号/私钥/APIv3 不对 | 用 `/api/diagnose` 自检 |
 | 客户收不到钱 | 客户没点确认收款 | 必须客户在微信里点「确认收款」，24h 不确认自动退回 |
 
@@ -191,5 +198,55 @@
 - 管理员身份靠请求头 `x-wx-openid` 判断。这个头在**通过小程序 `wx.cloud.callContainer` 调用云托管**时由平台注入、无法伪造；但服务的**公网域名**（给 `/api/notify` 回调用）不会注入它。
 - 因此：**不要把管理员 openid 当秘密到处发**；如条件允许，在云托管为服务开启「仅小程序端可访问 / 访问来源限制」，或用网关规则**限制公网直接访问 `/api/rewards`、`/api/me`** 等管理接口，只放行 `/api/notify`、`/api/health`。
 - `/api/diagnose` 已用 `?key=REWARD_TOKEN_SECRET` 保护；`/api/health` 不回传任何数据库连接细节。
+
+---
+
+## 11. 转账额度与场景备忘（实战踩坑总结）
+
+### 11.1 转账额度（商户平台 → 商家转账 → 转账额度）
+新商户默认额度较小，**这些是上限，下限由微信系统固定、页面不显示也不可改**：
+
+| 额度 | 默认值 | 说明 |
+|---|---|---|
+| 单笔转账 | 约 ¥100 | 一次最多转多少 |
+| 单日转账总额 | 约 ¥1,000 | 一天所有转账合计 |
+| 单日向单用户 | 约 ¥200 | 一天给同一个人最多 |
+| 单商户单月 | 3,000 万 | 不可改 |
+| **单笔最低额（下限）** | 微信系统值 | 页面看不到；`0.01` 会被拒。用 `MIN_AMOUNT_YUAN` 前端拦截（默认 0.1，按实际调） |
+
+- 发奖会超出上限 → 商户平台点「**修改额度**」申请提额（文档建议用一段时间后再申请）。
+- 商户**可用余额要充足**，转账从余额扣。
+
+### 11.2 转账场景与报备信息（`transfer_scene_id` + `WECHATPAY_SCENE_REPORT_INFOS` 配套）
+不同场景要求的 `transfer_scene_report_infos` 字段不同，**必须严格一致**，否则报
+`未传入完整且对应的转账场景报备信息`。常见：
+
+| 场景ID | 场景 | 报备字段 `info_type`（各≤32字） |
+|---|---|---|
+| 1000 | 现金营销 | `活动名称`、`奖励说明`（**代码默认**，不填 `WECHATPAY_SCENE_REPORT_INFOS` 即用它） |
+| 1005 | 佣金报酬 | `岗位类型`、`报酬说明` |
+| 其他 | —— | 以「发起转账API文档 → `transfer_scene_report_infos` 参数表」为准 |
+
+配置示例（场景 1005）：
+```
+WECHATPAY_TRANSFER_SCENE_ID=1005
+WECHATPAY_SCENE_REPORT_INFOS=[{"info_type":"岗位类型","info_content":"推广合作"},{"info_type":"报酬说明","info_content":"{remark}"}]
+```
+- `info_content` 里的 `{remark}` 会自动替换成本次发奖备注。
+- **换场景 = 两个一起改**（scene_id + report_infos）；换回 1000 可直接删掉 `WECHATPAY_SCENE_REPORT_INFOS`。
+- ⚠️ 场景要和**实际用途一致**：给客户的营销奖励更贴近 `1000 现金营销`；`1005 佣金报酬` 通常是发员工/合作方。按你申请到的场景用。
+
+### 11.3 对账 / 查看记录（数据库账本）
+- 浏览器（对账）：`https://<域名>/api/rewards?key=<REWARD_TOKEN_SECRET>` → 返回 `{ list, stats }`。
+- 小程序：管理员页底部「最近发放」。
+- 单笔并回写状态：`GET /api/transfers/<out_bill_no>`。
+- 客户「确认收款」后微信回调 `/api/notify`，状态自动更新为 `SUCCESS`（单调、不回退）。
+
+### 11.4 部署关键顺序（避免返工）
+1. 服务端口 **3000**、健康检查 **`/`**、代码来源指向本仓库分支。
+2. 改代码后重部署**务必走「执行流水线」**（重新构建）；只改环境变量可复用镜像。用 `/api/health` 的 `build` 字段确认线上版本。
+3. MySQL 与服务**同环境**；`MYSQL_HOST` 不带端口。
+4. 出口IP加白名单后再验 `/api/diagnose`。
+5. 私钥用 `_BASE64`；场景报备按 §11.2 配；金额在额度区间内。
 
 > 微信支付客服 95017 ｜ 商家转账文档 https://pay.weixin.qq.com/doc/v3/merchant/4012716434
