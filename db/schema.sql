@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS rewards (
   amount_fen     INT UNSIGNED NOT NULL COMMENT '金额(分)',
   remark         VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注(用户可见)',
   recipient_name VARCHAR(64)  NULL COMMENT '收款人真实姓名(可选·PII)',
+  target_external_userid VARCHAR(64) NULL COMMENT '定向目标企微客户(P2)，NULL=非定向',
   created_by     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '发放人(管理员)openid',
   status         VARCHAR(24)  NOT NULL DEFAULT 'CREATED' COMMENT 'CREATED|CLAIMED|SUCCESS|FAIL|CLOSED',
   expires_at     DATETIME     NULL COMMENT '领取有效期',
@@ -66,3 +67,24 @@ CREATE TABLE IF NOT EXISTS admins (
   updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_admins_role (role)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='员工/管理员';
+
+-- 企微客户缓存 + 身份映射（P2·按备注名搜索、unionid 定向桥）
+CREATE TABLE IF NOT EXISTS customers (
+  external_userid VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '企微外部联系人ID',
+  remark          VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '员工给客户的备注名(搜索主字段)',
+  name            VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '客户微信昵称',
+  avatar          VARCHAR(512) NULL,
+  corp_name       VARCHAR(128) NULL,
+  mobiles         JSON         NULL COMMENT '备注手机号',
+  tags            JSON         NULL COMMENT '标签',
+  follow_userid   VARCHAR(64)  NULL COMMENT '跟进员工企微userid',
+  unionid         VARCHAR(64)  NULL COMMENT 'unionid(定向桥)',
+  openid          VARCHAR(64)  NULL COMMENT '客户开过小程序后回填',
+  synced_at       DATETIME     NULL,
+  created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_customers_remark (remark),
+  KEY idx_customers_unionid (unionid),
+  KEY idx_customers_openid (openid),
+  KEY idx_customers_follow (follow_userid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='企微客户缓存+身份映射';

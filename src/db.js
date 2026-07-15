@@ -56,6 +56,7 @@ const DDL = [
      amount_fen     INT UNSIGNED NOT NULL COMMENT '金额(分)',
      remark         VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注(用户可见)',
      recipient_name VARCHAR(64)  NULL COMMENT '收款人真实姓名(可选·PII)',
+     target_external_userid VARCHAR(64) NULL COMMENT '定向目标企微客户(P2)，NULL=非定向',
      created_by     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '发放人(管理员)openid',
      status         VARCHAR(24)  NOT NULL DEFAULT 'CREATED' COMMENT 'CREATED|CLAIMED|SUCCESS|FAIL|CLOSED',
      expires_at     DATETIME     NULL COMMENT '领取有效期',
@@ -63,6 +64,7 @@ const DDL = [
      updated_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
      KEY idx_rewards_created_by (created_by),
      KEY idx_rewards_status (status),
+     KEY idx_rewards_target (target_external_userid),
      KEY idx_rewards_created_at (created_at)
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='发放的奖励'`,
 
@@ -103,6 +105,26 @@ const DDL = [
      updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
      KEY idx_admins_role (role)
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='员工/管理员'`,
+
+  `CREATE TABLE IF NOT EXISTS customers (
+     external_userid VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '企微外部联系人ID',
+     remark          VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '员工给客户的备注名(搜索主字段)',
+     name            VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '客户微信昵称',
+     avatar          VARCHAR(512) NULL COMMENT '头像',
+     corp_name       VARCHAR(128) NULL COMMENT '客户所在企业(如有)',
+     mobiles         JSON         NULL COMMENT '备注手机号',
+     tags            JSON         NULL COMMENT '标签',
+     follow_userid   VARCHAR(64)  NULL COMMENT '跟进员工的企微userid',
+     unionid         VARCHAR(64)  NULL COMMENT 'unionid(定向桥)',
+     openid          VARCHAR(64)  NULL COMMENT '客户开过小程序后回填',
+     synced_at       DATETIME     NULL COMMENT '最近从企微同步时间',
+     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+     KEY idx_customers_remark (remark),
+     KEY idx_customers_unionid (unionid),
+     KEY idx_customers_openid (openid),
+     KEY idx_customers_follow (follow_userid)
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='企微客户缓存+身份映射'`,
 ];
 
 /**
@@ -134,11 +156,30 @@ async function ensureDatabase() {
   }
 }
 
+/** 给已存在的表补列（幂等）。MySQL 无 ADD COLUMN IF NOT EXISTS，用 information_schema 判断。 */
+async function ensureColumn(table, column, ddl) {
+  if (!pool) return;
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS n FROM information_schema.columns
+      WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+    [table, column]
+  );
+  if (Number(rows[0].n) === 0) {
+    await pool.query(`ALTER TABLE \`${table}\` ADD COLUMN ${ddl}`);
+  }
+}
+
 /** 启动时建库建表（幂等）。失败只记日志，不阻断服务启动。 */
 export async function migrate() {
   if (!pool) return;
   await ensureDatabase();
   for (const stmt of DDL) await pool.query(stmt);
+  // 老库补列：定向目标（P2）
+  await ensureColumn(
+    'rewards',
+    'target_external_userid',
+    "target_external_userid VARCHAR(64) NULL COMMENT '定向目标企微客户(P2)' AFTER recipient_name"
+  );
   await seedSuperAdmins(config.app.adminOpenids);
 }
 
@@ -210,19 +251,21 @@ function clip(s, n) {
   return str.length > n ? str.slice(0, n) : str;
 }
 
-/** 【发奖】管理员生成奖励时落库 */
-export async function saveReward({ rid, amountFen, remark, name, createdBy, exp }) {
+/** 【发奖】管理员生成奖励时落库。targetExternalUserid 非空=定向奖励(P2) */
+export async function saveReward({ rid, amountFen, remark, name, createdBy, exp, targetExternalUserid }) {
   if (!pool) return;
   await pool.execute(
-    `INSERT INTO rewards (rid, amount_fen, remark, recipient_name, created_by, status, expires_at)
-     VALUES (:rid, :amount_fen, :remark, :recipient_name, :created_by, 'CREATED', :expires_at)
+    `INSERT INTO rewards (rid, amount_fen, remark, recipient_name, target_external_userid, created_by, status, expires_at)
+     VALUES (:rid, :amount_fen, :remark, :recipient_name, :target, :created_by, 'CREATED', :expires_at)
      ON DUPLICATE KEY UPDATE amount_fen=VALUES(amount_fen), remark=VALUES(remark),
-       recipient_name=VALUES(recipient_name), created_by=VALUES(created_by)`,
+       recipient_name=VALUES(recipient_name), target_external_userid=VALUES(target_external_userid),
+       created_by=VALUES(created_by)`,
     {
       rid,
       amount_fen: amountFen,
       remark: clip(remark || '', 64),
       recipient_name: name ? clip(name, 64) : null,
+      target: targetExternalUserid || null,
       created_by: clip(createdBy || '', 64),
       expires_at: expToDate(exp),
     }
@@ -457,6 +500,104 @@ export async function countEnabledSupers() {
   return Number(row.n);
 }
 
+// ---------------- 客户（企微缓存 + 定向身份桥）----------------
+
+/** 企微同步：upsert 一个客户。unionid 用 COALESCE 避免被空值冲掉。 */
+export async function upsertCustomer(c) {
+  if (!pool) return;
+  await pool.execute(
+    `INSERT INTO customers
+       (external_userid, remark, name, avatar, corp_name, mobiles, tags, follow_userid, unionid, synced_at)
+     VALUES (:eu, :remark, :name, :avatar, :corp_name, :mobiles, :tags, :follow, :unionid, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE remark=VALUES(remark), name=VALUES(name), avatar=VALUES(avatar),
+       corp_name=VALUES(corp_name), mobiles=VALUES(mobiles), tags=VALUES(tags),
+       follow_userid=VALUES(follow_userid), unionid=COALESCE(VALUES(unionid), unionid),
+       synced_at=CURRENT_TIMESTAMP`,
+    {
+      eu: c.externalUserid,
+      remark: clip(c.remark || '', 64),
+      name: clip(c.name || '', 64),
+      avatar: c.avatar || null,
+      corp_name: c.corpName ? clip(c.corpName, 128) : null,
+      mobiles: JSON.stringify(c.mobiles || []),
+      tags: JSON.stringify(c.tags || []),
+      follow: c.followUserid || null,
+      unionid: c.unionid || null,
+    }
+  );
+}
+
+/** 搜索客户（按备注名/昵称 LIKE）。返回是否已开过小程序(opened)。 */
+export async function searchCustomers({ q = '', followUserid = '', limit = 50, offset = 0 } = {}) {
+  if (!pool) return [];
+  const lim = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+  const off = Math.max(parseInt(offset, 10) || 0, 0);
+  const where = [];
+  const params = {};
+  if (q) {
+    where.push('(remark LIKE :q OR name LIKE :q)');
+    params.q = `%${q}%`;
+  }
+  if (followUserid) {
+    where.push('follow_userid = :fu');
+    params.fu = followUserid;
+  }
+  const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  const [rows] = await pool.query(
+    `SELECT external_userid, remark, name, avatar, corp_name, tags, follow_userid,
+            (openid IS NOT NULL) AS opened
+       FROM customers ${whereSql}
+      ORDER BY remark ASC, name ASC
+      LIMIT ${lim} OFFSET ${off}`,
+    params
+  );
+  return rows.map((r) => ({ ...r, opened: !!r.opened }));
+}
+
+/** 客户开小程序后：用 unionid 回填 openid，并返回其 external_userid（定向桥的落地点） */
+export async function bindCustomerByUnionid(unionid, openid) {
+  if (!pool || !unionid) return null;
+  await pool.execute(`UPDATE customers SET openid=:openid WHERE unionid=:unionid`, { openid, unionid });
+  const [rows] = await pool.query(
+    `SELECT external_userid FROM customers WHERE unionid=:unionid LIMIT 1`,
+    { unionid }
+  );
+  return rows.length ? rows[0].external_userid : null;
+}
+
+/** 直接用 external_userid 回填 openid（备用：已知客户身份时） */
+export async function bindCustomerOpenid(externalUserid, openid) {
+  if (!pool || !externalUserid) return;
+  await pool.execute(`UPDATE customers SET openid=:openid WHERE external_userid=:eu`, {
+    openid,
+    eu: externalUserid,
+  });
+}
+
+/** 找某客户名下"待领取"的定向奖励（用于身份领取，防领错） */
+export async function findPendingRewardForTarget(externalUserid) {
+  if (!pool || !externalUserid) return null;
+  const [rows] = await pool.query(
+    `SELECT rid, amount_fen, remark, recipient_name, expires_at, status
+       FROM rewards
+      WHERE target_external_userid = :t AND status = 'CREATED'
+        AND (expires_at IS NULL OR expires_at > NOW())
+      ORDER BY created_at ASC LIMIT 1`,
+    { t: externalUserid }
+  );
+  return rows.length ? rows[0] : null;
+}
+
+/** 查一笔奖励是否是定向的（供 token 领取时拦截，防止绕过定向） */
+export async function getRewardTarget(rid) {
+  if (!pool || !rid) return null;
+  const [rows] = await pool.query(
+    `SELECT target_external_userid FROM rewards WHERE rid=:rid LIMIT 1`,
+    { rid }
+  );
+  return rows.length ? rows[0].target_external_userid : null;
+}
+
 export const db = {
   dbEnabled,
   migrate,
@@ -473,6 +614,12 @@ export const db = {
   setAdminEnabled,
   deleteAdmin,
   countEnabledSupers,
+  upsertCustomer,
+  searchCustomers,
+  bindCustomerByUnionid,
+  bindCustomerOpenid,
+  findPendingRewardForTarget,
+  getRewardTarget,
 };
 
 export default db;

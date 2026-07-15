@@ -9,6 +9,11 @@ import { config } from './config.js';
 
 const b64url = (buf) => Buffer.from(buf).toString('base64url');
 
+// 生成 32 位商户单号(out_bill_no)。定向奖励用它，无需令牌。
+export function newRid() {
+  return crypto.randomUUID().replace(/-/g, '');
+}
+
 function hmac(dataStr) {
   const secret = config.app.rewardTokenSecret;
   if (!secret) throw new Error('未配置 REWARD_TOKEN_SECRET，无法签发/校验领取令牌');

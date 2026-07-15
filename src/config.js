@@ -97,6 +97,19 @@ export const config = {
     minAmountYuan: Number(optional('MIN_AMOUNT_YUAN', '0.1')),
   },
 
+  // 企业微信（P2·客户列表/群发/unionid定向）。留空则企微功能不启用，不影响现有链路。
+  wecom: (() => {
+    const corpid = optional('WECOM_CORPID');
+    const contactSecret = optional('WECOM_CONTACT_SECRET');
+    return {
+      enabled: !!(corpid && contactSecret),
+      corpid,
+      contactSecret, // 「客户联系」Secret，用于拉客户/群发
+      agentId: optional('WECOM_AGENT_ID'), // 自建应用 AgentId（群发发送者等场景用）
+      appSecret: optional('WECOM_APP_SECRET'), // 自建应用 Secret（可选）
+    };
+  })(),
+
   // 业务库（微信云托管自带 MySQL）。留空则不建库、退回无状态模式。
   // 二选一：① 填 MYSQL_URL 连接串；或 ② 填 MYSQL_HOST/PORT/USER/PASSWORD/DATABASE。
   db: (() => {

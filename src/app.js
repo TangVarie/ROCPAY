@@ -4,15 +4,16 @@
 // ============================================================
 import express from 'express';
 import { config } from './config.js';
-import { createRewardToken, verifyRewardToken } from './reward-token.js';
+import { createRewardToken, verifyRewardToken, newRid } from './reward-token.js';
 import { createTransferBill, queryTransferByOutBillNo } from './transfer-service.js';
 import { wechatpay } from './wechat-pay.js';
 import { db } from './db.js';
+import { wecom } from './wecom.js';
 
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p1-admins-ui';
+const BUILD = 'p2-scaffold';
 
 // 落库辅助：尽力而为，任何写库失败只记日志，绝不阻断发钱/领钱链路
 function persist(action, fn) {
@@ -35,6 +36,10 @@ app.use(
 // 云托管注入 x-wx-openid；本地调试可用 DEV_OPENID 环境变量顶替
 function getOpenid(req) {
   return req.headers['x-wx-openid'] || process.env.DEV_OPENID || '';
+}
+// 云托管在「小程序已绑定开放平台」时注入 x-wx-unionid（P2 定向用）
+function getUnionid(req) {
+  return req.headers['x-wx-unionid'] || process.env.DEV_UNIONID || '';
 }
 // ---- 管理员/员工：DB 缓存 + 引导超管（ADMIN_OPENIDS 里的人始终是超管）----
 const bootstrapSupers = new Set(config.app.adminOpenids);
@@ -225,6 +230,175 @@ app.post('/api/admins/remove', async (req, res) => {
   }
 });
 
+// ================= P2 · 客户 & 定向批量发放 =================
+
+// 搜索客户（按备注名/昵称）——管理员
+app.get('/api/customers', async (req, res) => {
+  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  try {
+    const list = await db.searchCustomers({
+      q: String(req.query.q || '').trim(),
+      followUserid: String(req.query.follow || '').trim(),
+      limit: Number(req.query.limit) || 50,
+      offset: Number(req.query.offset) || 0,
+    });
+    res.json({ list, wecom: wecom.wecomEnabled });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 从企微同步客户入库——管理员（需配企微）。body.userids = 要同步的企微员工 userid 列表
+app.post('/api/customers/sync', async (req, res) => {
+  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  if (!wecom.wecomEnabled) return res.status(503).json({ error: '未配置企微（WECOM_CORPID/WECOM_CONTACT_SECRET）' });
+  const userids = Array.isArray((req.body || {}).userids) ? req.body.userids.filter(Boolean) : [];
+  if (!userids.length) return res.status(400).json({ error: '请在 body.userids 传要同步的企微员工 userid 列表' });
+  try {
+    let synced = 0;
+    for (const uid of userids) {
+      let cursor = '';
+      do {
+        const d = await wecom.batchGetByUser([uid], cursor, 100);
+        for (const item of d.external_contact_list || []) {
+          const c = wecom.normalizeContact(item);
+          if (c.externalUserid) {
+            await db.upsertCustomer(c);
+            synced++;
+          }
+        }
+        cursor = d.next_cursor || '';
+      } while (cursor);
+    }
+    res.json({ ok: true, synced });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 批量定向发放（每人可不同金额/备注）——管理员。需数据库（定向靠库落地）
+app.post('/api/rewards/batch', async (req, res) => {
+  const openid = getOpenid(req);
+  if (!isAdmin(openid)) return res.status(403).json({ error: '无权限：仅管理员可发放' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '定向批量发放需要数据库（配置 MYSQL_* 后可用）' });
+
+  const items = Array.isArray((req.body || {}).items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: '没有要发放的项目' });
+  if (items.length > 200) return res.status(400).json({ error: '单次最多 200 笔' });
+
+  const created = [];
+  const errors = [];
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i] || {};
+    const target = String(it.externalUserid || '').trim();
+    const yuan = Number(it.amountYuan);
+    if (!target) {
+      errors.push({ i, error: '缺少客户 externalUserid' });
+      continue;
+    }
+    if (!(yuan > 0)) {
+      errors.push({ i, target, error: '金额必须大于 0' });
+      continue;
+    }
+    if (yuan < config.app.minAmountYuan) {
+      errors.push({ i, target, error: `金额不能小于 ${config.app.minAmountYuan} 元` });
+      continue;
+    }
+    if (yuan > config.app.maxAmountYuan) {
+      errors.push({ i, target, error: `金额不能大于 ${config.app.maxAmountYuan} 元` });
+      continue;
+    }
+    const rid = newRid();
+    const exp = Math.floor(Date.now() / 1000) + config.app.rewardTtlHours * 3600;
+    try {
+      await db.saveReward({
+        rid,
+        amountFen: Math.round(yuan * 100),
+        remark: it.remark,
+        name: it.name,
+        createdBy: openid,
+        exp,
+        targetExternalUserid: target,
+      });
+      created.push({ rid, externalUserid: target, amountYuan: yuan, remark: it.remark || '' });
+    } catch (e) {
+      errors.push({ i, target, error: '落库失败：' + (e.code || e.message) });
+    }
+  }
+  res.json({ createdCount: created.length, errorCount: errors.length, created, errors });
+});
+
+// 【客户】查我的定向奖励（身份匹配，防领错）
+app.get('/api/claim/mine', async (req, res) => {
+  const openid = getOpenid(req);
+  const unionid = getUnionid(req);
+  if (!openid) return res.status(401).json({ error: '请在微信小程序内打开' });
+  if (!db.dbEnabled) return res.json({ reward: null, reason: 'no_db' });
+  try {
+    const externalUserid = await resolveCustomer(unionid, openid);
+    if (!externalUserid) return res.json({ reward: null, reason: unionid ? 'not_a_customer' : 'no_unionid' });
+    const r = await db.findPendingRewardForTarget(externalUserid);
+    if (!r) return res.json({ reward: null, reason: 'no_pending' });
+    res.json({ reward: { rid: r.rid, amountYuan: r.amount_fen / 100, remark: r.remark } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 【客户】领取我的定向奖励：核对身份 → 发起转账到本人
+app.post('/api/claim/mine', async (req, res) => {
+  const openid = getOpenid(req);
+  const unionid = getUnionid(req);
+  if (!openid) return res.status(401).json({ error: '请在微信小程序内打开' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  try {
+    const externalUserid = await resolveCustomer(unionid, openid);
+    if (!externalUserid) return res.status(403).json({ error: '未识别到你的客户身份，无法领取' });
+    const r = await db.findPendingRewardForTarget(externalUserid);
+    if (!r) return res.status(404).json({ error: '没有属于你的待领奖励' });
+    const result = await createTransferBill({
+      outBillNo: r.rid, // 幂等：重复领取不重复付款
+      openid,
+      amountFen: r.amount_fen,
+      remark: r.remark,
+      name: r.recipient_name || undefined,
+    });
+    persist('recordClaim(mine)', () =>
+      db.recordClaim({
+        rid: r.rid,
+        claimerOpenid: openid,
+        amountFen: r.amount_fen,
+        remark: r.remark,
+        name: r.recipient_name,
+        exp: null,
+        transferBillNo: result.transfer_bill_no,
+        state: result.state,
+        packageInfo: result.package_info,
+      })
+    );
+    res.json({
+      state: result.state,
+      package_info: result.package_info,
+      transfer_bill_no: result.transfer_bill_no,
+      out_bill_no: result.out_bill_no,
+      mchId: config.wechatpay.mchid,
+      appId: config.wechatpay.appid,
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message, detail: e.data });
+  }
+});
+
+// unionid → external_userid（定向身份桥）；成功则回填 openid 到客户档案
+async function resolveCustomer(unionid, openid) {
+  if (!unionid || !wecom.wecomEnabled) return null;
+  const externalUserid = await wecom.unionidToExternalUserid(unionid, openid);
+  if (externalUserid) await db.bindCustomerByUnionid(unionid, openid).catch(() => {});
+  return externalUserid;
+}
+
 // 【客户】领取：发起转账，返回 package_info 供小程序拉起确认页
 app.post('/api/claim', async (req, res) => {
   const openid = getOpenid(req);
@@ -235,6 +409,16 @@ app.post('/api/claim', async (req, res) => {
     payload = verifyRewardToken((req.body || {}).token);
   } catch (e) {
     return res.status(400).json({ error: e.message });
+  }
+
+  // 定向奖励(P2)只能由本人在小程序内按身份领取，禁止用令牌绕过（防领错）
+  if (db.dbEnabled) {
+    try {
+      const target = await db.getRewardTarget(payload.rid);
+      if (target) return res.status(403).json({ error: '这是定向奖励，请由指定客户在小程序内领取' });
+    } catch (_) {
+      /* 查不到就按普通流程走 */
+    }
   }
 
   try {
