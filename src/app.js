@@ -12,7 +12,7 @@ import { db } from './db.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'min-amount-and-browse';
+const BUILD = 'p1-admins-ui';
 
 // 落库辅助：尽力而为，任何写库失败只记日志，绝不阻断发钱/领钱链路
 function persist(action, fn) {
@@ -36,8 +36,42 @@ app.use(
 function getOpenid(req) {
   return req.headers['x-wx-openid'] || process.env.DEV_OPENID || '';
 }
+// ---- 管理员/员工：DB 缓存 + 引导超管（ADMIN_OPENIDS 里的人始终是超管）----
+const bootstrapSupers = new Set(config.app.adminOpenids);
+let adminCache = new Map(); // openid -> { role, enabled }
+let adminCacheAt = 0;
+let adminRefreshing = false;
+const ADMIN_TTL = 15_000;
+
+async function refreshAdmins() {
+  if (!db.dbEnabled) return;
+  try {
+    const rows = await db.loadAdmins();
+    const m = new Map();
+    for (const a of rows) m.set(a.openid, { role: a.role, enabled: a.enabled });
+    adminCache = m;
+    adminCacheAt = Date.now();
+  } catch (e) {
+    console.error('[admins] 刷新缓存失败：', e.code || e.message);
+  }
+}
+function ensureFreshAdmins() {
+  if (!db.dbEnabled || adminRefreshing || Date.now() - adminCacheAt <= ADMIN_TTL) return;
+  adminRefreshing = true;
+  refreshAdmins().finally(() => (adminRefreshing = false));
+}
+function adminRole(openid) {
+  if (!openid) return null;
+  if (bootstrapSupers.has(openid)) return 'super'; // 引导超管，DB 挂了也认
+  ensureFreshAdmins();
+  const a = adminCache.get(openid);
+  return a && a.enabled ? a.role : null;
+}
 function isAdmin(openid) {
-  return !!openid && config.app.adminOpenids.includes(openid);
+  return !!adminRole(openid);
+}
+function isSuperAdmin(openid) {
+  return adminRole(openid) === 'super';
 }
 
 // 健康检查（云托管探活）
@@ -49,9 +83,12 @@ app.get('/api/health', async (_req, res) => {
 // 当前用户：帮员工拿到自己的 openid、判断是否管理员，并告知金额上下限（前端预校验用）
 app.get('/api/me', (req, res) => {
   const openid = getOpenid(req);
+  const role = adminRole(openid); // 'super' | 'operator' | null
   res.json({
     openid,
-    isAdmin: isAdmin(openid),
+    isAdmin: !!role,
+    isSuper: role === 'super',
+    role: role || 'none',
     minAmountYuan: config.app.minAmountYuan,
     maxAmountYuan: config.app.maxAmountYuan,
   });
@@ -117,6 +154,72 @@ app.get('/api/rewards', async (req, res) => {
     const offset = Math.max(Number(req.query.offset) || 0, 0);
     const [list, stats] = await Promise.all([db.listRewards({ limit, offset }), db.getStats()]);
     res.json({ list, stats });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ================= 员工/管理员管理（仅超级管理员）=================
+function requireSuper(req, res) {
+  if (!isSuperAdmin(getOpenid(req))) {
+    res.status(403).json({ error: '仅超级管理员可管理员工' });
+    return false;
+  }
+  if (!db.dbEnabled) {
+    res.status(503).json({ error: '未开启数据库，无法管理员工（配置 MYSQL_* 后可用）' });
+    return false;
+  }
+  return true;
+}
+
+// 列出所有员工
+app.get('/api/admins', async (req, res) => {
+  if (!requireSuper(req, res)) return;
+  try {
+    res.json({ list: await db.loadAdmins(), me: getOpenid(req) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 新增 / 修改员工（openid + 备注名 + 角色）
+app.post('/api/admins', async (req, res) => {
+  if (!requireSuper(req, res)) return;
+  const me = getOpenid(req);
+  const openid = String((req.body || {}).openid || '').trim();
+  const name = String((req.body || {}).name || '').trim();
+  const role = (req.body || {}).role === 'super' ? 'super' : 'operator';
+  if (!openid) return res.status(400).json({ error: '请填写员工的 openid' });
+  if (!/^[A-Za-z0-9_-]{6,64}$/.test(openid)) return res.status(400).json({ error: 'openid 格式不对' });
+  try {
+    // 若把最后一个超管降级为操作员，拦截
+    if (role !== 'super') {
+      const cur = (await db.loadAdmins()).find((a) => a.openid === openid);
+      if (cur && cur.role === 'super' && cur.enabled && (await db.countEnabledSupers()) <= 1) {
+        return res.status(400).json({ error: '不能把最后一个超级管理员降级' });
+      }
+    }
+    await db.upsertAdmin({ openid, name, role, createdBy: me });
+    await refreshAdmins();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 删除员工
+app.post('/api/admins/remove', async (req, res) => {
+  if (!requireSuper(req, res)) return;
+  const openid = String((req.body || {}).openid || '').trim();
+  if (!openid) return res.status(400).json({ error: '缺少 openid' });
+  try {
+    const cur = (await db.loadAdmins()).find((a) => a.openid === openid);
+    if (cur && cur.role === 'super' && cur.enabled && (await db.countEnabledSupers()) <= 1) {
+      return res.status(400).json({ error: '不能删除最后一个超级管理员' });
+    }
+    await db.deleteAdmin(openid);
+    await refreshAdmins();
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -245,12 +348,14 @@ app.listen(config.port, async () => {
     if (config.db.autoMigrate) {
       try {
         await db.migrate();
-        console.log('✅ 数据库已连接，业务表已就绪（rewards / transfers / notify_events）');
+        await refreshAdmins();
+        console.log('✅ 数据库已连接，业务表已就绪（rewards / transfers / notify_events / admins）');
       } catch (e) {
         console.error('⚠️ 自动建表失败（服务仍可运行，落库会被跳过）：', e.code || e.message);
       }
     } else {
       console.log('ℹ️ 已配置数据库，但 DB_AUTO_MIGRATE=false，请手动执行 db/schema.sql');
+      await refreshAdmins();
     }
   } else {
     if (config.db.partialConfig) {

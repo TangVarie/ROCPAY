@@ -1,27 +1,100 @@
+/* ============ ROCPAY 设计系统 · 活泼友好 × 专业工作台 ============ */
 page {
-  background: #f5f6f8;
-  color: #1a1a1a;
+  /* 品牌绿(微信熟悉感) + 暖橙(奖励/红包的雀跃) */
+  --green: #07c160;
+  --green-d: #05a850;
+  --green-l: #e7f8ef;
+  --coral: #ff6a3d;
+  --coral-d: #f2511f;
+  --coral-l: #fff1eb;
+  --gold: #f5a623;
+  --ink: #1d2531;
+  --ink-2: #59636f;
+  --ink-3: #98a1ad;
+  --bg: #f3f5f8;
+  --card: #ffffff;
+  --line: #edf0f4;
+  --line-2: #e2e7ee;
+  --ok: #07c160;
+  --warn: #f5a623;
+  --fail: #fa5151;
+  --radius: 28rpx;
+  --radius-sm: 18rpx;
+  --shadow: 0 10rpx 34rpx rgba(29, 37, 49, 0.06);
+  --shadow-lift: 0 14rpx 40rpx rgba(29, 37, 49, 0.1);
+
+  background: var(--bg);
+  color: var(--ink);
   font-size: 30rpx;
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+  line-height: 1.6;
 }
-.container {
-  padding: 48rpx 40rpx;
+
+/* 页容器 */
+.page {
+  padding: 40rpx 32rpx calc(60rpx + env(safe-area-inset-bottom));
+  min-height: 100vh;
+  box-sizing: border-box;
 }
+
+/* 卡片 */
 .card {
-  background: #fff;
-  border-radius: 24rpx;
-  padding: 48rpx 40rpx;
-  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04);
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 40rpx 36rpx;
+  box-shadow: var(--shadow);
+}
+.card + .card { margin-top: 28rpx; }
+
+/* 按钮 */
+.btn-primary,
+.btn-ghost {
+  border-radius: 999rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  height: 92rpx;
+  line-height: 92rpx;
+  border: none;
+  transition: transform 0.1s ease, opacity 0.15s ease;
 }
 .btn-primary {
-  background: #07c160;
+  background: linear-gradient(135deg, #14c96b, #06a94f);
   color: #fff;
-  border-radius: 16rpx;
+  box-shadow: 0 10rpx 24rpx rgba(7, 193, 96, 0.28);
 }
+.btn-primary:active { transform: scale(0.97); }
 .btn-primary[disabled] {
-  background: #9bd9b3;
+  background: #bfe6cf;
   color: #fff;
+  box-shadow: none;
 }
-.muted {
-  color: #8a8a8a;
-  font-size: 26rpx;
+.btn-ghost {
+  background: var(--green-l);
+  color: var(--green-d);
 }
+.btn-ghost:active { opacity: 0.8; }
+
+/* 文本工具 */
+.muted { color: var(--ink-2); font-size: 26rpx; }
+.faint { color: var(--ink-3); font-size: 24rpx; }
+.title { font-size: 38rpx; font-weight: 700; letter-spacing: -0.5rpx; }
+.subtitle { color: var(--ink-2); font-size: 27rpx; margin-top: 6rpx; }
+
+/* 状态徽章 */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  padding: 6rpx 16rpx;
+  border-radius: 999rpx;
+  background: var(--line);
+  color: var(--ink-2);
+}
+.pill.ok { background: var(--green-l); color: var(--green-d); }
+.pill.warn { background: #fff5e3; color: #c67e00; }
+.pill.fail { background: #ffeceb; color: var(--fail); }
+
+/* 分隔线 */
+.hr { height: 1rpx; background: var(--line); margin: 32rpx 0; }

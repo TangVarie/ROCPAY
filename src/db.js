@@ -92,6 +92,17 @@ const DDL = [
      KEY idx_notify_out_bill_no (out_bill_no),
      KEY idx_notify_received_at (received_at)
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='微信回调审计流水'`,
+
+  `CREATE TABLE IF NOT EXISTS admins (
+     openid     VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '员工的小程序openid',
+     name       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注名(谁)',
+     role       VARCHAR(16)  NOT NULL DEFAULT 'operator' COMMENT 'super|operator',
+     enabled    TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否启用',
+     created_by VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '谁添加的',
+     created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+     KEY idx_admins_role (role)
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='员工/管理员'`,
 ];
 
 /**
@@ -128,6 +139,20 @@ export async function migrate() {
   if (!pool) return;
   await ensureDatabase();
   for (const stmt of DDL) await pool.query(stmt);
+  await seedSuperAdmins(config.app.adminOpenids);
+}
+
+/** 把 ADMIN_OPENIDS 里的人写成超级管理员（幂等，只补不覆盖启用状态） */
+export async function seedSuperAdmins(openids = []) {
+  if (!pool || !openids.length) return;
+  for (const openid of openids) {
+    await pool.execute(
+      `INSERT INTO admins (openid, name, role, enabled, created_by)
+       VALUES (:openid, '超级管理员', 'super', 1, 'bootstrap')
+       ON DUPLICATE KEY UPDATE role='super', enabled=1`,
+      { openid }
+    );
+  }
 }
 
 // 给一个 Promise 加超时，避免 DB 卡住时把请求（尤其是探活）拖死
@@ -384,9 +409,58 @@ export async function getStats() {
   };
 }
 
+// ---------------- 员工/管理员 ----------------
+
+/** 返回全部管理员，用于内存缓存 */
+export async function loadAdmins() {
+  if (!pool) return [];
+  const [rows] = await pool.query(
+    `SELECT openid, name, role, enabled, created_by, created_at
+       FROM admins ORDER BY (role='super') DESC, created_at ASC`
+  );
+  return rows.map((r) => ({ ...r, enabled: !!r.enabled }));
+}
+
+/** 新增/更新一个员工 */
+export async function upsertAdmin({ openid, name, role, createdBy }) {
+  if (!pool) throw new Error('未开启数据库');
+  const r = role === 'super' ? 'super' : 'operator';
+  await pool.execute(
+    `INSERT INTO admins (openid, name, role, enabled, created_by)
+     VALUES (:openid, :name, :role, 1, :created_by)
+     ON DUPLICATE KEY UPDATE name=VALUES(name), role=VALUES(role), enabled=1`,
+    { openid, name: clip(name || '', 64), role: r, created_by: createdBy || '' }
+  );
+}
+
+/** 启用/停用 */
+export async function setAdminEnabled(openid, enabled) {
+  if (!pool) throw new Error('未开启数据库');
+  await pool.execute(`UPDATE admins SET enabled=:e WHERE openid=:openid`, {
+    e: enabled ? 1 : 0,
+    openid,
+  });
+}
+
+/** 删除一个员工 */
+export async function deleteAdmin(openid) {
+  if (!pool) throw new Error('未开启数据库');
+  await pool.execute(`DELETE FROM admins WHERE openid=:openid`, { openid });
+}
+
+/** 统计启用中的超管数量（用于"不能删掉最后一个超管"保护） */
+export async function countEnabledSupers() {
+  if (!pool) return 0;
+  const [[row]] = await pool.query(
+    `SELECT COUNT(*) AS n FROM admins WHERE role='super' AND enabled=1`
+  );
+  return Number(row.n);
+}
+
 export const db = {
   dbEnabled,
   migrate,
+  seedSuperAdmins,
   ping,
   saveReward,
   recordClaim,
@@ -394,6 +468,11 @@ export const db = {
   saveNotifyEvent,
   listRewards,
   getStats,
+  loadAdmins,
+  upsertAdmin,
+  setAdminEnabled,
+  deleteAdmin,
+  countEnabledSupers,
 };
 
 export default db;

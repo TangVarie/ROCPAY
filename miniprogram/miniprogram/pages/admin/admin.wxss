@@ -1,92 +1,211 @@
-.title {
-  font-size: 34rpx;
-  font-weight: 700;
-  margin-bottom: 24rpx;
+/* ===== 工作台头部 ===== */
+.wshead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8rpx 8rpx 28rpx;
 }
+
+/* ===== 分段 Tab ===== */
+.tabs {
+  display: flex;
+  gap: 8rpx;
+  background: #e9edf3;
+  border-radius: 999rpx;
+  padding: 8rpx;
+  margin-bottom: 28rpx;
+}
+.tab {
+  flex: 1;
+  text-align: center;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--ink-2);
+  padding: 18rpx 0;
+  border-radius: 999rpx;
+  transition: all 0.15s ease;
+}
+.tab.on {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 4rpx 14rpx rgba(29, 37, 49, 0.08);
+}
+
+/* ===== 表单 ===== */
 .field {
   display: flex;
   align-items: center;
-  margin: 20rpx 0;
+  margin: 22rpx 0;
 }
-.field text {
-  width: 170rpx;
-  color: #555;
-}
-.field input {
-  flex: 1;
-  background: #f5f6f8;
-  border-radius: 12rpx;
-  padding: 16rpx 20rpx;
-}
-.btn-primary {
-  margin-top: 32rpx;
-  height: 88rpx;
-  line-height: 88rpx;
-}
-.divider {
-  height: 1rpx;
-  background: #eee;
-  margin: 32rpx 0;
-}
-.err {
-  color: #e64340;
-  margin-top: 20rpx;
+.field.top { margin-top: 28rpx; }
+.flabel {
+  width: 150rpx;
+  flex: none;
+  color: var(--ink-2);
   font-size: 28rpx;
 }
-.openid {
-  word-break: break-all;
-  background: #f5f6f8;
-  padding: 20rpx;
-  border-radius: 12rpx;
-  margin: 16rpx 0;
-  font-size: 26rpx;
+.finput {
+  flex: 1;
+  background: var(--bg);
+  border-radius: 16rpx;
+  padding: 22rpx 24rpx;
+  font-size: 30rpx;
 }
-.small {
-  margin-top: 16rpx;
+.block { margin-top: 32rpx; width: 100%; }
+.err { color: var(--fail); margin-top: 20rpx; font-size: 27rpx; }
+
+/* 生成成功 banner */
+.done-banner {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  background: var(--green-l);
+  border-radius: 20rpx;
+  padding: 24rpx 28rpx;
 }
-.stats {
-  color: #888;
-  font-size: 26rpx;
-  margin-bottom: 16rpx;
+.done-emoji { font-size: 44rpx; }
+.done-t { font-size: 32rpx; font-weight: 700; color: var(--green-d); }
+.btn-coral {
+  margin-top: 24rpx;
+  height: 92rpx;
+  line-height: 92rpx;
+  border-radius: 999rpx;
+  font-size: 32rpx;
+  font-weight: 700;
+  border: none;
+  color: #fff;
+  background: linear-gradient(135deg, #ff7a4d, #f2511f);
+  box-shadow: 0 10rpx 24rpx rgba(242, 81, 31, 0.3);
 }
+.btn-coral:active { transform: scale(0.97); }
+.tapline { margin-top: 18rpx; line-height: 1.5; }
+
+/* ===== 记录 · 统计 ===== */
+.statrow {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+.stat {
+  flex: 1;
+  background: var(--card);
+  border-radius: 20rpx;
+  padding: 24rpx 12rpx;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+.sv { display: block; font-size: 40rpx; font-weight: 800; letter-spacing: -1rpx; }
+.sv.green { color: var(--green); }
+.sv.gold { color: #d98a00; }
+.sl { display: block; font-size: 23rpx; color: var(--ink-3); margin-top: 4rpx; }
+
+/* 记录列表 */
+.list { padding: 12rpx 32rpx; }
 .rec {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 18rpx 0;
-  border-bottom: 1rpx solid #f0f0f0;
+  justify-content: space-between;
+  padding: 26rpx 4rpx;
+  border-bottom: 1rpx solid var(--line);
 }
-.rec-main {
+.rec:last-child { border-bottom: none; }
+.rec-l { display: flex; flex-direction: column; gap: 6rpx; }
+.rec-amt { font-size: 34rpx; font-weight: 700; }
+.rec-remark { color: var(--ink-3); font-size: 24rpx; }
+.rec-r { display: flex; flex-direction: column; align-items: flex-end; gap: 8rpx; }
+.rec-time { color: var(--ink-3); font-size: 22rpx; font-variant-numeric: tabular-nums; }
+
+/* ===== 员工 ===== */
+.ctitle { font-size: 32rpx; font-weight: 700; margin-bottom: 8rpx; }
+.rolepick {
   display: flex;
-  flex-direction: column;
+  gap: 14rpx;
+  flex: 1;
 }
-.rec-amt {
+.rp {
+  padding: 16rpx 34rpx;
+  border-radius: 999rpx;
+  font-size: 27rpx;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: var(--bg);
+  border: 2rpx solid transparent;
+}
+.rp.on {
+  color: var(--green-d);
+  background: var(--green-l);
+  border-color: rgba(7, 193, 96, 0.35);
+}
+.staff {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 24rpx 4rpx;
+  border-bottom: 1rpx solid var(--line);
+}
+.staff:last-child { border-bottom: none; }
+.staff-l { flex: 1; min-width: 0; }
+.staff-name {
   font-size: 30rpx;
   font-weight: 600;
-}
-.rec-remark {
-  color: #999;
-  font-size: 24rpx;
-  margin-top: 4rpx;
-}
-.rec-side {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
+  gap: 12rpx;
 }
-.rec-status {
-  font-size: 24rpx;
-  color: #888;
+.me-tag {
+  font-size: 20rpx;
+  color: var(--ink-3);
+  background: var(--line);
+  padding: 2rpx 12rpx;
+  border-radius: 999rpx;
 }
-.status-SUCCESS {
-  color: #07c160;
-}
-.status-FAIL,
-.status-CLOSED {
-  color: #e64340;
-}
-.rec-time {
-  color: #bbb;
+.staff-oid {
   font-size: 22rpx;
-  margin-top: 4rpx;
+  color: var(--ink-3);
+  font-family: Menlo, Consolas, monospace;
+  word-break: break-all;
+  margin-top: 6rpx;
+}
+.rm {
+  flex: none;
+  font-size: 26rpx;
+  color: var(--fail);
+  padding: 10rpx 22rpx;
+  border-radius: 999rpx;
+  background: #ffeceb;
+}
+
+/* ===== 空态 / openid 复制 ===== */
+.empty { text-align: center; }
+.empty-mini { text-align: center; padding: 60rpx 40rpx; }
+.empty-emoji { font-size: 82rpx; display: block; margin-bottom: 14rpx; }
+.empty-title { font-size: 34rpx; font-weight: 700; margin-bottom: 8rpx; }
+.center { text-align: center; }
+.openid-box {
+  margin-top: 28rpx;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  background: var(--bg);
+  border: 2rpx dashed var(--line-2);
+  border-radius: var(--radius-sm);
+  padding: 24rpx 26rpx;
+}
+.openid-text {
+  flex: 1;
+  word-break: break-all;
+  text-align: left;
+  font-size: 25rpx;
+  color: var(--ink-2);
+  font-family: Menlo, Consolas, monospace;
+}
+.copy-badge {
+  flex: none;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--green-d);
+  background: var(--green-l);
+  padding: 8rpx 20rpx;
+  border-radius: 999rpx;
 }

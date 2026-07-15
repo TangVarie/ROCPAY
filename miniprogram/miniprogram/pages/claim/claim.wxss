@@ -1,25 +1,108 @@
-.amount {
-  font-size: 72rpx;
-  font-weight: 700;
-  color: #07c160;
-  margin: 24rpx 0;
+/* ===== 领取页 · 红包/礼物质感 ===== */
+.gift {
+  position: relative;
+  margin-top: 20rpx;
+  border-radius: 40rpx;
+  padding: 72rpx 48rpx 56rpx;
+  text-align: center;
+  color: #fff;
+  overflow: hidden;
+  background: linear-gradient(160deg, #ff7a4d 0%, #f2511f 62%, #e0410f 100%);
+  box-shadow: 0 24rpx 60rpx rgba(242, 81, 31, 0.34);
+}
+.gift.done {
+  background: linear-gradient(160deg, #22cf76 0%, #06a94f 100%);
+  box-shadow: 0 24rpx 60rpx rgba(7, 169, 79, 0.32);
+}
+.gift-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14rpx;
+}
+.gift-emoji { font-size: 76rpx; line-height: 1; }
+.gift-hi { font-size: 30rpx; opacity: 0.92; letter-spacing: 1rpx; }
+.gift-amount {
+  margin: 30rpx 0 8rpx;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  font-weight: 800;
+}
+.gift-amount .sign { font-size: 52rpx; margin-right: 6rpx; }
+.gift-amount .num { font-size: 128rpx; line-height: 1; letter-spacing: -2rpx; }
+.gift-remark {
+  font-size: 28rpx;
+  opacity: 0.94;
+  background: rgba(255, 255, 255, 0.18);
+  display: inline-block;
+  padding: 8rpx 24rpx;
+  border-radius: 999rpx;
+  margin-top: 8rpx;
 }
 .claim-btn {
-  margin-top: 48rpx;
-  height: 92rpx;
-  line-height: 92rpx;
-  font-size: 32rpx;
+  margin-top: 52rpx;
+  height: 100rpx;
+  line-height: 100rpx;
+  border-radius: 999rpx;
+  font-size: 34rpx;
+  font-weight: 700;
+  border: none;
+  background: #fff;
+  color: #e0410f;
+  box-shadow: 0 12rpx 30rpx rgba(0, 0, 0, 0.14);
 }
-.small {
-  margin-top: 24rpx;
-}
+.gift.done .claim-btn { color: #06a94f; }
+.claim-btn:active { transform: scale(0.97); }
+.claim-btn[disabled] { background: rgba(255, 255, 255, 0.72); color: rgba(224, 65, 15, 0.6); box-shadow: none; }
+.gift.done .claim-btn[disabled] { color: #06a94f; background: #fff; }
 .tip {
-  margin-top: 24rpx;
-  font-size: 28rpx;
+  margin-top: 28rpx;
+  font-size: 27rpx;
+  min-height: 34rpx;
 }
-.tip.ok {
-  color: #07c160;
+.tip-fail { color: #fff3ef; font-weight: 600; }
+.tip-ok { color: #fff; font-weight: 600; }
+.fineprint {
+  margin-top: 20rpx;
+  font-size: 23rpx;
+  opacity: 0.8;
+  line-height: 1.5;
 }
-.tip.fail {
-  color: #e64340;
+
+/* ===== 空态 / 加入 ===== */
+.empty { text-align: center; }
+.empty-emoji { font-size: 88rpx; display: block; margin-bottom: 12rpx; }
+.empty-title { font-size: 34rpx; font-weight: 700; margin-bottom: 8rpx; }
+.center { text-align: center; }
+.center-left { text-align: center; }
+.gap { margin: 8rpx 0 40rpx; }
+.join { text-align: center; }
+.join-title { font-size: 30rpx; font-weight: 700; margin-bottom: 8rpx; }
+.openid-box {
+  margin-top: 20rpx;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  background: var(--bg);
+  border: 2rpx dashed var(--line-2);
+  border-radius: var(--radius-sm);
+  padding: 24rpx 26rpx;
+}
+.openid-text {
+  flex: 1;
+  word-break: break-all;
+  text-align: left;
+  font-size: 25rpx;
+  color: var(--ink-2);
+  font-family: Menlo, Consolas, monospace;
+}
+.copy-badge {
+  flex: none;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--green-d);
+  background: var(--green-l);
+  padding: 8rpx 20rpx;
+  border-radius: 999rpx;
 }

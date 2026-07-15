@@ -7,6 +7,7 @@ Page({
     remark: '',
     hasToken: false,
     isAdmin: false,
+    openid: '',
     status: 'idle', // idle | loading | ok | fail
     message: '',
   },
@@ -16,16 +17,24 @@ Page({
     const amt = options.amt || '';
     const remark = options.remark ? decodeURIComponent(options.remark) : '';
     this.setData({ token, amt, remark, hasToken: !!token });
-    // 无 token 时看看是不是管理员，给个「去发放」入口
+    // 无 token：看是不是管理员 + 拿到自己的 openid（供"想成为发放员"复制）
     if (!token) {
       call('/api/me', 'GET')
-        .then((me) => this.setData({ isAdmin: !!(me && me.isAdmin) }))
+        .then((me) => this.setData({ isAdmin: !!(me && me.isAdmin), openid: (me && me.openid) || '' }))
         .catch(() => {});
     }
   },
 
   goAdmin() {
     wx.navigateTo({ url: '/pages/admin/admin' });
+  },
+
+  copyOpenid() {
+    if (!this.data.openid) return;
+    wx.setClipboardData({
+      data: this.data.openid,
+      success: () => wx.showToast({ title: '已复制', icon: 'success' }),
+    });
   },
 
   onClaim() {

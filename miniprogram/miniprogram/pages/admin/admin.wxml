@@ -1,51 +1,132 @@
-<view class="container">
-  <view class="card" wx:if="{{isAdmin}}">
-    <view class="title">发放客户奖励</view>
+<view class="page">
 
-    <view class="field"><text>金额(元)</text>
-      <input type="digit" placeholder="≥{{minAmountYuan}} 元，如 8.88" value="{{amountYuan}}" bindinput="onAmount" />
-    </view>
-    <view class="field"><text>备注</text>
-      <input placeholder="用户可见，如 老客户回馈" value="{{remark}}" bindinput="onRemark" />
-    </view>
-    <view class="field"><text>姓名(选填)</text>
-      <input placeholder="≥2000元必填收款人真实姓名" value="{{name}}" bindinput="onName" />
-    </view>
-
-    <button class="btn-primary" bindtap="onGenerate" loading="{{loading}}">生成奖励</button>
-    <view class="err" wx:if="{{error}}">{{error}}</view>
-
-    <block wx:if="{{reward}}">
-      <view class="divider"></view>
-      <view class="muted">已生成：¥{{reward.amountYuan}} {{reward.remark}}</view>
-      <button class="btn-primary" open-type="share">转发给客户</button>
-      <view class="muted small">点「转发给客户」，把卡片发到与客户的微信/企微聊天里，客户点开即可领取。</view>
-    </block>
-  </view>
-
-  <!-- 最近发放记录（后端开库后自动出现） -->
-  <view class="card" wx:if="{{isAdmin && records.length}}">
-    <view class="title">最近发放</view>
-    <view class="stats" wx:if="{{stats}}">
-      共 {{stats.total}} 笔 · 到账 {{stats.success_count}} · 待确认 {{stats.pending_count}}
-    </view>
-    <view class="rec" wx:for="{{records}}" wx:key="rid">
-      <view class="rec-main">
-        <text class="rec-amt">¥{{item.yuan}}</text>
-        <text class="rec-remark">{{item.remark}}</text>
+  <!-- 管理员工作台 -->
+  <block wx:if="{{isAdmin}}">
+    <view class="wshead">
+      <view>
+        <view class="title">奖励工作台</view>
+        <view class="subtitle">发放客户奖励 · 实时对账</view>
       </view>
-      <view class="rec-side">
-        <text class="rec-status status-{{item.status}}">{{item.status}}</text>
-        <text class="rec-time">{{item.createdAt}}</text>
+      <text class="pill ok" wx:if="{{roleLabel}}">{{roleLabel}}</text>
+    </view>
+
+    <!-- 分段 Tab -->
+    <view class="tabs">
+      <view class="tab {{tab==='send'?'on':''}}" data-tab="send" bindtap="switchTab">发放</view>
+      <view class="tab {{tab==='records'?'on':''}}" data-tab="records" bindtap="switchTab">记录</view>
+      <view class="tab {{tab==='staff'?'on':''}}" data-tab="staff" bindtap="switchTab" wx:if="{{isSuper}}">员工</view>
+    </view>
+
+    <!-- 面板：发放 -->
+    <view class="card" wx:if="{{tab==='send'}}">
+      <view class="field">
+        <text class="flabel">金额(元)</text>
+        <input class="finput" type="digit" placeholder="≥{{minAmountYuan}}，如 8.88" value="{{amountYuan}}" bindinput="onAmount" />
+      </view>
+      <view class="field">
+        <text class="flabel">备注</text>
+        <input class="finput" placeholder="用户可见，如 老客户回馈" value="{{remark}}" bindinput="onRemark" />
+      </view>
+      <view class="field">
+        <text class="flabel">姓名</text>
+        <input class="finput" placeholder="选填，≥2000元必填真实姓名" value="{{name}}" bindinput="onName" />
+      </view>
+
+      <button class="btn-primary block" bindtap="onGenerate" loading="{{loading}}">生成奖励</button>
+      <view class="err" wx:if="{{error}}">{{error}}</view>
+
+      <block wx:if="{{reward}}">
+        <view class="hr"></view>
+        <view class="done-banner">
+          <text class="done-emoji">✅</text>
+          <view>
+            <view class="done-t">已生成 ¥{{reward.amountYuan}}</view>
+            <view class="faint">{{reward.remark || '客户奖励'}}</view>
+          </view>
+        </view>
+        <button class="btn-coral block" open-type="share">转发给客户领取</button>
+        <view class="faint tapline">把卡片发到与客户的微信/企微聊天里，客户点开即可领取</view>
+      </block>
+    </view>
+
+    <!-- 面板：记录 -->
+    <view wx:if="{{tab==='records'}}">
+      <view class="statrow" wx:if="{{stats}}">
+        <view class="stat"><text class="sv">{{stats.total}}</text><text class="sl">发放</text></view>
+        <view class="stat"><text class="sv green">{{stats.success_count}}</text><text class="sl">已到账</text></view>
+        <view class="stat"><text class="sv gold">{{stats.pending_count}}</text><text class="sl">待确认</text></view>
+        <view class="stat"><text class="sv">¥{{stats.total_fen ? (stats.total_fen/100) : 0}}</text><text class="sl">总额</text></view>
+      </view>
+
+      <view class="card list" wx:if="{{records.length}}">
+        <view class="rec" wx:for="{{records}}" wx:key="rid">
+          <view class="rec-l">
+            <text class="rec-amt">¥{{item.yuan}}</text>
+            <text class="rec-remark">{{item.remark || '客户奖励'}}</text>
+          </view>
+          <view class="rec-r">
+            <text class="pill {{item.cls}}">{{item.statusText}}</text>
+            <text class="rec-time">{{item.createdAt}}</text>
+          </view>
+        </view>
+      </view>
+      <view class="card empty-mini" wx:else>
+        <text class="empty-emoji">📋</text>
+        <view class="muted center">还没有发放记录</view>
       </view>
     </view>
-  </view>
 
-  <view class="card" wx:else>
-    <view class="muted">你还不是管理员，无法发放奖励。</view>
-    <view class="muted small">把下面这个 openid 发给系统管理员，加入白名单后即可使用：</view>
-    <view class="openid" bindtap="copyOpenid">{{openid || '（无法获取，请在微信小程序内打开）'}}</view>
-    <view class="muted small">点击上方 openid 可复制。</view>
+    <!-- 面板：员工（仅超管） -->
+    <view wx:if="{{tab==='staff' && isSuper}}">
+      <view class="card">
+        <view class="ctitle">添加发放员</view>
+        <view class="faint tapline" style="margin-top:0">让员工在小程序里打开本页，复制他的 openid 发你，粘贴到这里即可</view>
+        <view class="field top">
+          <text class="flabel">openid</text>
+          <input class="finput" placeholder="粘贴员工 openid" value="{{newOpenid}}" bindinput="onNewOpenid" />
+        </view>
+        <view class="field">
+          <text class="flabel">备注名</text>
+          <input class="finput" placeholder="给员工起个名，如 小王" value="{{newName}}" bindinput="onNewName" />
+        </view>
+        <view class="field">
+          <text class="flabel">角色</text>
+          <view class="rolepick">
+            <text class="rp {{newRole==='operator'?'on':''}}" data-role="operator" bindtap="pickRole">发放员</text>
+            <text class="rp {{newRole==='super'?'on':''}}" data-role="super" bindtap="pickRole">超管</text>
+          </view>
+        </view>
+        <button class="btn-primary block" bindtap="addStaff" loading="{{staffLoading}}">添加</button>
+        <view class="err" wx:if="{{staffMsg}}">{{staffMsg}}</view>
+      </view>
+
+      <view class="card list">
+        <view class="ctitle">员工列表（{{admins.length}}）</view>
+        <view class="staff" wx:for="{{admins}}" wx:key="openid">
+          <view class="staff-l" data-v="{{item.openid}}" bindtap="copyText">
+            <view class="staff-name">
+              {{item.name}}
+              <text class="pill {{item.isSuper?'ok':''}}">{{item.roleText}}</text>
+              <text class="me-tag" wx:if="{{item.isMe}}">我</text>
+            </view>
+            <view class="staff-oid">{{item.openid}}</view>
+          </view>
+          <text class="rm" wx:if="{{!item.isMe}}" data-openid="{{item.openid}}" bindtap="removeStaff">移除</text>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <!-- 非管理员 -->
+  <view class="card empty" wx:else>
+    <text class="empty-emoji">🙋</text>
+    <view class="empty-title">你还不是发放员</view>
+    <view class="muted center">把下面的 openid 发给管理员，加入后即可发奖</view>
+    <view class="openid-box" data-v="{{openid}}" bindtap="copyText">
+      <text class="openid-text">{{ openid || '（请在微信小程序内打开）' }}</text>
+      <text class="copy-badge" wx:if="{{openid}}">复制</text>
+    </view>
     <view class="err" wx:if="{{error}}">{{error}}</view>
   </view>
+
 </view>

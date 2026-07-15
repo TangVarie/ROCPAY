@@ -54,3 +54,15 @@ CREATE TABLE IF NOT EXISTS notify_events (
   KEY idx_notify_out_bill_no (out_bill_no),
   KEY idx_notify_received_at (received_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='微信回调审计流水';
+
+-- 员工/管理员（ADMIN_OPENIDS 里的人启动时自动写成 super）
+CREATE TABLE IF NOT EXISTS admins (
+  openid     VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '员工的小程序openid',
+  name       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注名(谁)',
+  role       VARCHAR(16)  NOT NULL DEFAULT 'operator' COMMENT 'super|operator',
+  enabled    TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否启用',
+  created_by VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '谁添加的',
+  created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_admins_role (role)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='员工/管理员';
