@@ -6,6 +6,15 @@
     <view class="muted center">正在为你查看奖励…</view>
   </view>
 
+  <!-- 连接失败 -->
+  <view class="card center-card" wx:if="{{mode==='error'}}">
+    <text class="big-emoji">🔌</text>
+    <view class="empty-title">连不上服务</view>
+    <view class="muted center">可能是服务正在重启或还没部署最新版本</view>
+    <view class="faint center" wx:if="{{message}}">{{message}}</view>
+    <button class="btn-primary wfull" style="margin-top:36rpx" bindtap="retry">重试</button>
+  </view>
+
   <!-- 礼盒：链接领取 or 定向领取 -->
   <block wx:if="{{mode==='token' || mode==='mine'}}">
     <view class="gift {{status==='ok' ? 'done' : ''}}">

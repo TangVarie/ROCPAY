@@ -38,10 +38,16 @@ Page({
   checkMine() {
     this.setData({ mode: 'loading', status: 'idle', message: '' });
     Promise.all([
-      call('/api/me', 'GET').catch(() => ({})),
+      call('/api/me', 'GET').catch((e) => ({ _err: e })),
       call('/api/claim/mine', 'GET').catch(() => ({})),
     ]).then(([me, mine]) => {
-      const base = { isAdmin: !!(me && me.isAdmin), openid: (me && me.openid) || '' };
+      // /api/me 都拿不到 openid = 后端连不上/没部署好，明确报错而不是装作"没奖励"
+      if (!me || me._err || !me.openid) {
+        const detail = me && me._err ? (me._err.errMsg || me._err.message || '') : '后端无响应';
+        this.setData({ mode: 'error', message: detail });
+        return;
+      }
+      const base = { isAdmin: !!me.isAdmin, openid: me.openid || '' };
       if (mine && mine.reward) {
         this.setData({
           ...base,
@@ -56,6 +62,8 @@ Page({
       }
     });
   },
+
+  retry() { this.checkMine(); },
 
   goAdmin() {
     wx.navigateTo({ url: '/pages/admin/admin' });
