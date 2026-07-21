@@ -1,69 +1,69 @@
-<view class="page">
+<view class="page stagger-in">
 
   <!-- 识别中 -->
-  <view class="card center-card" wx:if="{{mode==='loading'}}">
-    <text class="big-emoji">🌱</text>
-    <view class="muted center">正在为你查看奖励…</view>
+  <view class="state" wx:if="{{mode==='loading'}}">
+    <view class="li li-gift state-icon"></view>
+    <view class="state-t1">正在为你查看奖励</view>
+    <view class="state-t2">通常只需要一两秒</view>
   </view>
 
   <!-- 连接失败 -->
-  <view class="card center-card" wx:if="{{mode==='error'}}">
-    <text class="big-emoji">🔌</text>
-    <view class="empty-title">连不上服务</view>
-    <view class="muted center">可能是服务正在重启或还没部署最新版本</view>
-    <view class="faint center" wx:if="{{message}}">{{message}}</view>
-    <button class="btn-primary wfull" style="margin-top:36rpx" bindtap="retry">重试</button>
+  <view class="state" wx:if="{{mode==='error'}}">
+    <view class="li li-alert state-icon"></view>
+    <view class="state-t1">暂时连不上服务</view>
+    <view class="state-t2">服务可能正在启动，点下方按钮再试一次</view>
+    <view class="state-detail" wx:if="{{message}}">{{message}}</view>
+    <button class="btn btn-fill state-btn" bindtap="retry">再试一次</button>
   </view>
 
-  <!-- 礼盒：链接领取 or 定向领取 -->
+  <!-- 奖励色块：领取前红块 / 到账后蓝块，块内纯白 -->
   <block wx:if="{{mode==='token' || mode==='mine'}}">
-    <view class="gift {{status==='ok' ? 'done' : ''}}">
-      <view class="gift-head">
-        <text class="gift-emoji">{{ status==='ok' ? '🎉' : '🧧' }}</text>
-        <text class="gift-hi">{{ status==='ok' ? '奖励已到账' : (mode==='mine' ? '有一笔属于你的奖励' : '你收到一笔奖励') }}</text>
-      </view>
-
-      <view class="gift-amount">
-        <text class="sign">¥</text><text class="num">{{ mode==='mine' ? (mineAmt || '--') : (amt || '--') }}</text>
-      </view>
-      <view class="gift-remark" wx:if="{{mode==='mine' ? mineRemark : remark}}">{{ mode==='mine' ? mineRemark : remark }}</view>
+    <view class="reward-block {{status==='ok' ? 'block-blue' : 'block-red'}} block">
+      <view class="rb-label">{{ status==='ok' ? '已到账微信零钱' : (mode==='mine' ? '属于你的奖励' : '你收到一笔奖励') }}</view>
+      <view class="rb-amount"><text class="rb-sign num">¥</text><text class="rb-num num">{{ mode==='mine' ? mineAmt : amtText }}</text></view>
+      <view class="rb-remark" wx:if="{{mode==='mine' ? mineRemark : remark}}">{{ mode==='mine' ? mineRemark : remark }}</view>
 
       <button
-        class="claim-btn"
+        class="rb-btn {{status==='ok' ? 'rb-btn-blue' : ''}}"
         bindtap="{{ mode==='mine' ? 'onClaimMine' : 'onClaimToken' }}"
         loading="{{status==='loading'}}"
         disabled="{{status==='loading' || status==='ok'}}"
-      >{{ status==='ok' ? '已到账微信零钱' : '领取到微信零钱' }}</button>
+      >{{ status==='ok' ? '已到账' : '领取到微信零钱' }}</button>
 
-      <view class="tip tip-{{status}}" wx:if="{{message}}">{{message}}</view>
-      <view class="fineprint">点击领取会弹出微信官方「确认收款」，确认即到账</view>
+      <view class="rb-tip" wx:if="{{message}}">{{message}}</view>
+      <view class="rb-fine">点领取后弹出微信官方「确认收款」，确认即到账</view>
     </view>
 
-    <view class="card slim" wx:if="{{mode==='mine' && claimedCount > 0 && status!=='ok'}}">
-      <view class="muted center">本次已领取 {{claimedCount}} 笔 🎊 还有新的奖励在上面</view>
+    <view class="after-note" wx:if="{{mode==='mine' && claimedCount > 0 && status!=='ok'}}">
+      本次已领取 {{claimedCount}} 笔，上面是新的一笔
     </view>
   </block>
 
-  <!-- 没有奖励 -->
-  <view class="card center-card" wx:if="{{mode==='empty'}}">
+  <!-- 无奖励 -->
+  <block wx:if="{{mode==='empty'}}">
     <block wx:if="{{isAdmin}}">
-      <text class="big-emoji">🪵</text>
-      <view class="empty-title">管理员，你好</view>
-      <view class="muted center gap-b">进入工作台发放客户奖励</view>
-      <button class="btn-primary wfull" bindtap="goAdmin">进入工作台</button>
-    </block>
-    <block wx:else>
-      <text class="big-emoji">🎁</text>
-      <view class="empty-title">暂时没有你的奖励</view>
-      <view class="muted center">收到员工发来的奖励后，打开这里即可领取</view>
-      <view class="hr"></view>
-      <view class="join-title">是本公司员工？</view>
-      <view class="faint center">把下面的 openid 发给管理员开通发放权限</view>
-      <view class="openid-box" bindtap="copyOpenid">
-        <text class="openid-text">{{ openid || '（请在微信小程序内打开）' }}</text>
-        <text class="copy-badge" wx:if="{{openid}}">复制</text>
+      <view class="state">
+        <view class="li li-users state-icon"></view>
+        <view class="state-t1">管理员，你好</view>
+        <view class="state-t2">进入工作台，把奖励发给对的人</view>
+        <button class="btn btn-blue state-btn" bindtap="goAdmin">进入工作台</button>
       </view>
     </block>
-  </view>
+    <block wx:else>
+      <view class="state">
+        <view class="li li-gift state-icon"></view>
+        <view class="state-t1">暂时没有你的奖励</view>
+        <view class="state-t2">收到奖励后，打开这里即可领取</view>
+      </view>
+      <view class="panel join">
+        <view class="join-t t-dark">是本公司员工？</view>
+        <view class="join-s t-light">把下面的编号发给管理员，开通发放权限</view>
+        <view class="openid-row">
+          <text class="openid-text num">{{ openid || '请在微信小程序内打开' }}</text>
+          <text class="openid-copy" wx:if="{{openid}}" bindtap="copyOpenid">复制</text>
+        </view>
+      </view>
+    </block>
+  </block>
 
 </view>

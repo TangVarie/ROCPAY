@@ -2,9 +2,9 @@
   "pages": ["pages/claim/claim", "pages/admin/admin"],
   "window": {
     "navigationBarTitleText": "芭梧奖励",
-    "navigationBarBackgroundColor": "#2e7d5b",
-    "navigationBarTextStyle": "white",
-    "backgroundColor": "#f6f1e7"
+    "navigationBarBackgroundColor": "#fafafb",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#fafafb"
   },
   "lazyCodeLoading": "requiredComponents",
   "sitemapLocation": "sitemap.json",

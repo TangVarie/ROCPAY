@@ -1,88 +1,125 @@
-/* ===== 领取页 · BYWOOD 礼盒 ===== */
-.gift {
-  position: relative;
-  margin-top: 20rpx;
-  border-radius: 40rpx;
-  padding: 76rpx 48rpx 56rpx;
-  text-align: center;
-  color: #fff;
-  overflow: hidden;
-  background: linear-gradient(155deg, #f2683b 0%, #e8552f 55%, #cf4520 100%);
-  box-shadow: 0 24rpx 60rpx rgba(207, 69, 32, 0.32);
-}
-.gift.done {
-  background: linear-gradient(155deg, #379268 0%, #2e7d5b 55%, #256349 100%);
-  box-shadow: 0 24rpx 60rpx rgba(46, 125, 91, 0.3);
-}
-/* 纸纹高光 */
-.gift::before {
-  content: "";
-  position: absolute;
-  top: -140rpx; left: -60rpx;
-  width: 460rpx; height: 460rpx;
-  background: radial-gradient(closest-side, rgba(255,255,255,0.16), transparent);
-  pointer-events: none;
-}
-.gift-head { display: flex; flex-direction: column; align-items: center; gap: 14rpx; }
-.gift-emoji { font-size: 78rpx; line-height: 1; }
-.gift-hi { font-size: 30rpx; opacity: 0.94; letter-spacing: 1rpx; }
-.gift-amount {
-  margin: 28rpx 0 8rpx;
-  display: flex; align-items: baseline; justify-content: center;
-  font-weight: 800;
-}
-.gift-amount .sign { font-size: 52rpx; margin-right: 6rpx; }
-.gift-amount .num { font-size: 130rpx; line-height: 1; letter-spacing: -2rpx; }
-.gift-remark {
-  font-size: 28rpx;
-  background: rgba(255, 255, 255, 0.18);
-  display: inline-block;
-  padding: 8rpx 26rpx;
-  border-radius: 999rpx;
-  margin-top: 8rpx;
-}
-.claim-btn {
-  margin-top: 52rpx;
-  height: 102rpx; line-height: 102rpx;
-  border-radius: 999rpx;
-  font-size: 34rpx; font-weight: 750;
-  border: none;
-  background: #fffdf8;
-  color: #cf4520;
-  box-shadow: 0 12rpx 30rpx rgba(43, 33, 24, 0.16);
-}
-.gift.done .claim-btn { color: #256349; }
-.claim-btn:active { transform: scale(0.97); }
-.claim-btn[disabled] { background: rgba(255, 253, 248, 0.75); color: rgba(207, 69, 32, 0.55); box-shadow: none; }
-.gift.done .claim-btn[disabled] { color: #256349; background: #fffdf8; }
-.tip { margin-top: 28rpx; font-size: 27rpx; min-height: 34rpx; font-weight: 600; }
-.tip-fail, .tip-ok { color: #fff6ef; }
-.fineprint { margin-top: 18rpx; font-size: 23rpx; opacity: 0.82; line-height: 1.5; }
+/* ===== 领取页 · BYWOOD ===== */
 
-/* ===== 空态 / 通用 ===== */
-.center-card { text-align: center; padding-top: 64rpx; padding-bottom: 56rpx; }
-.big-emoji { font-size: 92rpx; display: block; margin-bottom: 16rpx; }
-.empty-title { font-size: 34rpx; font-weight: 750; margin-bottom: 8rpx; }
-.center { text-align: center; }
-.gap-b { margin-bottom: 40rpx; }
-.wfull { width: 100%; }
-.slim { margin-top: 24rpx; padding: 26rpx 32rpx; }
-.join-title { font-size: 30rpx; font-weight: 700; margin-bottom: 6rpx; }
-.openid-box {
-  margin-top: 22rpx;
-  display: flex; align-items: center; gap: 16rpx;
-  background: var(--linen);
-  border: 2rpx dashed var(--line-2);
-  border-radius: var(--radius-sm);
-  padding: 24rpx 26rpx;
+/* 奖励色块：纯色，块内纯白，无渐变无阴影 */
+.reward-block {
+  margin-top: 16rpx;
+  padding: 56rpx 44rpx 44rpx;
+  text-align: center;
+  color: #ffffff;
+}
+.rb-label {
+  font-size: 26rpx;
+  font-weight: 500;
+  color: #ffffff;
+  letter-spacing: 1rpx;
+}
+.rb-amount {
+  margin: 28rpx 0 6rpx;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  color: #ffffff;
+}
+.rb-sign { font-size: 44rpx; margin-right: 8rpx; font-weight: 600; }
+.rb-num { font-size: 120rpx; line-height: 1.05; font-weight: 700; }
+.rb-remark {
+  font-size: 26rpx;
+  color: #ffffff;
+  margin-top: 10rpx;
+}
+.rb-btn {
+  margin-top: 48rpx;
+  height: 96rpx;
+  line-height: 96rpx;
+  border-radius: 24rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  border: none;
+  background: #ffffff;
+  color: var(--block-red);
+  transition: transform 120ms ease-out;
+}
+.rb-btn::after { border: none; }
+.rb-btn:active { transform: scale(0.98); }
+.rb-btn[disabled] { background: rgba(255, 255, 255, 0.85); color: rgba(217, 35, 43, 0.55); }
+.rb-btn-blue { color: var(--block-blue); }
+.rb-btn-blue[disabled] { background: #ffffff; color: var(--block-blue); }
+.rb-tip {
+  margin-top: 24rpx;
+  font-size: 26rpx;
+  font-weight: 500;
+  color: #ffffff;
+  min-height: 34rpx;
+}
+.rb-fine {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.5;
+}
+.after-note {
+  margin-top: 20rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: var(--text-light);
+}
+
+/* ===== 状态页（空/错/加载）：裸线性图标 + 两行文案 + 次按钮 ===== */
+.state {
+  padding: 96rpx 32rpx 40rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.state-icon { margin-bottom: 28rpx; }
+.state-t1 {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+.state-t2 {
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  color: var(--text-light);
+  text-align: center;
+}
+.state-detail {
+  margin-top: 16rpx;
+  font-size: 22rpx;
+  color: var(--text-faint);
+  text-align: center;
+  word-break: break-all;
+  max-height: 200rpx;
+  overflow: hidden;
+}
+.state-btn {
+  margin-top: 40rpx;
+  width: 320rpx;
+}
+
+/* ===== 员工入口（白底描边块） ===== */
+.join { margin-top: 8rpx; }
+.join-t { font-size: 30rpx; font-weight: 600; }
+.join-s { font-size: 26rpx; margin-top: 4rpx; }
+.openid-row {
+  margin-top: 24rpx;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  background: var(--fill);
+  border-radius: 16rpx;
+  padding: 22rpx 26rpx;
 }
 .openid-text {
-  flex: 1; word-break: break-all; text-align: left;
-  font-size: 25rpx; color: var(--ink-2);
-  font-family: Menlo, Consolas, monospace;
+  flex: 1;
+  word-break: break-all;
+  font-size: 24rpx;
+  color: var(--text-light);
 }
-.copy-badge {
-  flex: none; font-size: 24rpx; font-weight: 650;
-  color: var(--pine-d); background: var(--pine-l);
-  padding: 8rpx 20rpx; border-radius: 999rpx;
+.openid-copy {
+  flex: none;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--primary);
+  padding: 10rpx 14rpx;
 }

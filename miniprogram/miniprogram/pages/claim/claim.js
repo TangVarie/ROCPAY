@@ -7,6 +7,7 @@ Page({
     // 链接领取（token）
     token: '',
     amt: '',
+    amtText: '--',
     remark: '',
     // 定向领取（身份识别）
     mineAmt: '',
@@ -22,11 +23,13 @@ Page({
   onLoad(options) {
     const token = options.token ? decodeURIComponent(options.token) : '';
     if (token) {
-      // 链接进入：老的令牌流程
+      // 链接进入：令牌流程。金额一律两位小数（BYWOOD 规范）
+      const n = Number(options.amt);
       this.setData({
         mode: 'token',
         token,
         amt: options.amt || '',
+        amtText: n > 0 ? n.toFixed(2) : '--',
         remark: options.remark ? decodeURIComponent(options.remark) : '',
       });
       return;

@@ -277,7 +277,11 @@ Page({
               createdAt: (r.created_at || '').replace('T', ' ').slice(5, 16),
             };
           });
-          this.setData({ records, stats: res.stats || null });
+          this.setData({
+            records,
+            stats: res.stats || null,
+            statsTotalYuan: res.stats ? (res.stats.total_fen / 100).toFixed(2) : '0.00',
+          });
         }
       })
       .catch(() => {});
