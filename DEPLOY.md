@@ -290,16 +290,18 @@ WECHATPAY_SCENE_REPORT_INFOS=[{"info_type":"岗位类型","info_content":"推广
 
 0. **前置（决定成败）**：确认你的域名（如 `lyrison.com.cn`）已备案，且**备案主体 = 企微企业主体**。
    个人备案对企业主体、或不同公司，都会报「域名主体校验未通过」。不一致就得改备案主体或联系企微客服。
-1. **绑自定义域名到云托管**：云托管 → 自定义域名 → 绑定。用一个子域名（如 `pay.lyrison.com.cn`），
-   关联服务 `roc`，开启 HTTPS，上传该域名的 SSL 证书 + 私钥（腾讯云「SSL 证书 → 免费证书」几分钟可签发，
-   下载 Nginx 格式得 `.crt`/`.key`）。确定后按提示在你的 DNS 加一条 CNAME 指向云托管给的目标。
-   解析生效后访问 `https://pay.lyrison.com.cn/api/health` 应正常返回。回调地址 = 该域名 + `/api/wecom/callback`。
+1. **绑自定义域名到云托管**：云托管 → 自定义域名 → 绑定。用一个子域名（如 `roc.lyrison.com.cn`；
+   ⚠️ 别用 `pay.`/`bank.` 等词，腾讯免费证书对含这些词的域名不签发），关联服务 `roc`，开启 HTTPS，
+   上传该域名的 SSL 证书 + 私钥。**证书用腾讯云「SSL 证书 → 免费证书」免费签发（¥0，与域名注册商无关，
+   加一条 TXT 到你 DNS 做验证即可，现为 90 天有效期、到期免费重申）**，下载 Nginx 格式得 `.crt`/`.key`。
+   确定后按提示在你的 DNS 加一条 CNAME 指向云托管给的目标。解析生效后访问
+   `https://roc.lyrison.com.cn/api/health` 应正常返回。回调地址 = 该域名 + `/api/wecom/callback`。
 2. **企微生成 Token / EncodingAESKey**：企微管理后台 → 应用管理 → 你的自建应用 → 接收消息 →
    「设置API接收」→ 两个「随机获取」分别生成 **Token** 和 **EncodingAESKey**（先别点保存，复制出来）。
 3. **回填云托管环境变量并重部署**：
    - `WECOM_CALLBACK_TOKEN` = 上一步的 Token
    - `WECOM_CALLBACK_AES_KEY` = 上一步的 EncodingAESKey（43 位）
-   - 重部署后访问 `https://pay.lyrison.com.cn/api/health`，确认 `"wecomCallback": true`（回调已就绪）。
+   - 重部署后访问 `https://roc.lyrison.com.cn/api/health`，确认 `"wecomCallback": true`（回调已就绪）。
 4. **企微保存回调URL**：URL 填第 1 步的回调地址 → 保存。此时才会做主体校验 + 发验证请求；
    主体一致且后端验签正确即保存成功。
 5. **配企业可信IP**：输入框解锁后，填入**云托管出口IP**（服务详情里的出口IP，和微信支付白名单同一个，
