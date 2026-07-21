@@ -107,6 +107,10 @@ export const config = {
       contactSecret, // 「客户联系」Secret，用于拉客户/群发
       agentId: optional('WECOM_AGENT_ID'), // 自建应用 AgentId（群发发送者等场景用）
       appSecret: optional('WECOM_APP_SECRET'), // 自建应用 Secret（可选）
+      // 「接收消息服务器URL」回调：仅用于解锁「企业可信IP」白名单配置
+      // 在企微「自建应用 → 接收消息」点「随机获取」生成，两处必须与企微后台一致
+      callbackToken: optional('WECOM_CALLBACK_TOKEN'),
+      callbackAesKey: optional('WECOM_CALLBACK_AES_KEY'),
     };
   })(),
 

@@ -9,6 +9,7 @@ import { createTransferBill, queryTransferByOutBillNo } from './transfer-service
 import { wechatpay } from './wechat-pay.js';
 import { db } from './db.js';
 import { wecom } from './wecom.js';
+import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 
 const app = express();
 
@@ -82,8 +83,35 @@ function isSuperAdmin(openid) {
 // 健康检查（云托管探活）
 app.get('/', (_req, res) => res.status(200).send('ok'));
 app.get('/api/health', async (_req, res) => {
-  res.json({ ok: true, build: BUILD, time: new Date().toISOString(), db: await db.ping() });
+  res.json({
+    ok: true,
+    build: BUILD,
+    time: new Date().toISOString(),
+    db: await db.ping(),
+    wecom: wecom.wecomEnabled, // 企微客户联系是否已配置
+    wecomCallback: callbackEnabled, // 「接收消息服务器URL」回调是否就绪（配可信IP前先看它是否 true）
+  });
 });
+
+// 企业微信「接收消息服务器URL」回调
+//   仅为满足企微前置（配「企业可信IP」需先设可信域名或本回调）而实现。
+//   GET  = URL 验证：验签 + 解密 echostr，明文原样返回；
+//   POST = 事件回调：本系统不消费企微事件，回空 200（企微视为无需回复）。
+app.get('/api/wecom/callback', (req, res) => {
+  try {
+    const msg = verifyUrl({
+      msgSignature: req.query.msg_signature,
+      timestamp: req.query.timestamp,
+      nonce: req.query.nonce,
+      echostr: req.query.echostr,
+    });
+    res.type('text/plain').send(msg);
+  } catch (e) {
+    console.error('[wecom] 回调 URL 验证失败：', e.message);
+    res.status(401).send('');
+  }
+});
+app.post('/api/wecom/callback', (_req, res) => res.status(200).send(''));
 
 // 当前用户：帮员工拿到自己的 openid、判断是否管理员，并告知金额上下限（前端预校验用）
 app.get('/api/me', (req, res) => {

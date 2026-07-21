@@ -111,6 +111,7 @@
 | **`MYSQL_PASSWORD`** | **你设置的 root 密码** |
 | **`MYSQL_DATABASE`** | **rocpay** |
 
+> 企微（P2，接企微时才填，见 §12）：`WECOM_CORPID`、`WECOM_CONTACT_SECRET`、`WECOM_CALLBACK_TOKEN`、`WECOM_CALLBACK_AES_KEY`（后两个用于解锁「企业可信IP」，见 §12.4）、可选 `WECOM_AGENT_ID`。
 > 可选：`MYSQL_POOL_SIZE`（默认 5）、`DB_AUTO_MIGRATE`（默认 true）、`REWARD_TTL_HOURS`（默认 72）、`MAX_AMOUNT_YUAN`（默认 5000）、`MIN_AMOUNT_YUAN`（默认 0.1，见 §11）。
 > 私钥推荐用 `WECHATPAY_PRIVATE_KEY_BASE64`（`base64 -w0 apiclient_key.pem`），比多行 PEM 稳。
 > `PORT` 不用填（Dockerfile 已设 3000）；但部署页「端口」字段一定要填 3000。
@@ -276,5 +277,30 @@ WECHATPAY_SCENE_REPORT_INFOS=[{"info_type":"岗位类型","info_content":"推广
 `POST /api/rewards/batch` 逐人金额定向发放 ·
 `POST /api/deliver` 企微群发通知 ·
 `GET|POST /api/claim/mine` 客户身份领取（防领错）
+
+### 12.4 企业可信IP 配置（解锁企微服务端接口）★
+
+企微规定：读通讯录/客户联系数据的服务端接口，调用方 IP 必须在「企业可信IP」白名单里，
+否则报 `errcode 60020`。这个 IP = **云托管服务的公网出口IP**（和微信支付白名单用的是同一个）。
+
+企微后台配「企业可信IP」前，会要求先设「可信域名」或「接收消息服务器URL」二选一。
+本项目走**接收消息服务器URL**（后端已内置回调端点，无需再写代码）。按序操作：
+
+1. **云托管服务开「公网访问」**：服务 → 设置 → 开启公网访问，记下默认公网域名（形如
+   `https://<服务名>-xxx.<环境>.run.tcloudbase.com`）。回调地址 = 该域名 + `/api/wecom/callback`。
+2. **企微生成 Token / EncodingAESKey**：企微管理后台 → 应用管理 → 你的自建应用 → 接收消息 →
+   「设置API接收」→ 两个「随机获取」分别生成 **Token** 和 **EncodingAESKey**（先别点保存，复制出来）。
+3. **回填云托管环境变量并重部署**：
+   - `WECOM_CALLBACK_TOKEN` = 上一步的 Token
+   - `WECOM_CALLBACK_AES_KEY` = 上一步的 EncodingAESKey（43 位）
+   - 重部署后访问 `https://你的域名/api/health`，确认 `"wecomCallback": true`（表示回调已就绪）。
+4. **企微保存回调URL**：回到第 2 步页面，URL 填第 1 步的回调地址 → 保存。企微会即时验证，
+   通过即表示我们的端点验签/解密正确。
+5. **配企业可信IP**：此时「企业可信IP」输入框已解锁，填入**云托管出口IP**（服务详情里的出口IP，
+   多个用英文 `;` 分隔）→ 确定。
+6. 至此企微服务端接口全部放行，`/api/customers/sync`、unionid 定向、群发即可真机联调。
+
+> 顺序很关键：**先第 3 步（环境变量 + 重部署）再第 4 步（企微保存）**，否则企微验证时后端还没配好 Token，验证会失败。
+> 若不想开公网/配回调，也可改用「可信域名」：给后端加一个返回企微校验文件的路由即可，但需域名归属校验，通常不如回调省事。
 
 > 微信支付客服 95017 ｜ 商家转账文档 https://pay.weixin.qq.com/doc/v3/merchant/4012716434
