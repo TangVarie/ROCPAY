@@ -56,6 +56,7 @@
   padding: 16rpx 12rpx;
 }
 .textbtn:active { opacity: 0.6; }
+.prow .textbtn { padding-right: 0; } /* 面板标题行的文字按钮与右缘对齐 */
 .textbtn-plain { color: var(--text-light); }
 .textbtn-danger { color: var(--danger); }
 .center-self { text-align: center; margin-top: 8rpx; }
@@ -147,8 +148,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.frow-amt { width: 150rpx; flex: none; padding: 16rpx 14rpx; text-align: center; font-size: 28rpx; }
-.frow-note { width: 190rpx; flex: none; padding: 16rpx 18rpx; font-size: 26rpx; }
+.frow-amt { width: 150rpx; flex: none; height: 76rpx; line-height: 76rpx; padding: 0 16rpx; text-align: center; font-size: 28rpx; }
+.frow-note { width: 190rpx; flex: none; height: 76rpx; line-height: 76rpx; padding: 0 18rpx; font-size: 26rpx; }
 .frow-del { flex: none; font-size: 24rpx; color: var(--text-faint); padding: 16rpx 8rpx; }
 .frow-del:active { color: var(--danger); }
 .submitbtn { margin-top: 28rpx; }
@@ -166,12 +167,14 @@
 .banner-line { font-size: 24rpx; margin-top: 6rpx; }
 .reward-ok { margin: 24rpx 0 20rpx; }
 
-/* 群发文案 */
+/* 群发文案（textarea 多行：解除单行 input 的固定高度） */
 .notify-ta {
   width: 100%;
+  height: auto;
   min-height: 120rpx;
-  margin: 20rpx 0 24rpx;
   line-height: 1.6;
+  padding: 22rpx 26rpx;
+  margin: 20rpx 0 24rpx;
 }
 
 /* 表单 */
@@ -222,7 +225,7 @@
 }
 .staff:last-of-type::after { display: none; }
 .staff-l { flex: 1; min-width: 0; }
-.staff-name { font-size: 29rpx; font-weight: 500; display: flex; align-items: center; gap: 12rpx; }
+.staff-name { font-size: 29rpx; font-weight: 500; display: flex; align-items: center; gap: 12rpx; flex-wrap: wrap; }
 .staff-oid { font-size: 22rpx; word-break: break-all; margin-top: 4rpx; }
 
 /* 状态页（空/提示） */

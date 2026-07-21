@@ -134,24 +134,32 @@ page {
   align-items: center;
   font-size: 22rpx;
   font-weight: 600;
-  padding: 4rpx 14rpx;
+  line-height: 1;
+  padding: 8rpx 14rpx;
   border-radius: 8rpx;
   background: var(--fill);
   color: var(--text);
+  flex-shrink: 0;       /* flex 行内不许被挤压折行 */
+  white-space: nowrap;
 }
 .badge-success { background: rgba(0, 181, 120, 0.1); color: var(--success-deep); }
 .badge-warning { background: rgba(255, 143, 31, 0.1); color: var(--warning-deep); }
 .badge-danger { background: rgba(217, 43, 60, 0.1); color: var(--danger-dark); }
 .badge-blue { background: rgba(35, 94, 142, 0.1); color: var(--primary); }
 
-/* ---- 输入 ---- */
+/* ---- 输入 ----
+   小程序 input 是原生组件：必须给固定 height（并配 line-height），
+   只给 padding 会按默认高度渲染，出现"被压扁/文字切顶"的错位。 */
 .input {
   background: var(--fill);
   border-radius: 24rpx;
-  padding: 22rpx 26rpx;
+  height: 84rpx;
+  line-height: 84rpx;
+  padding: 0 26rpx;
   font-size: 28rpx;
   color: var(--text-dark);
   box-sizing: border-box;
+  min-width: 0; /* 在 flex 行里允许正确收缩而不是溢出 */
 }
 
 /* ---- 错误文字 ---- */
