@@ -1,67 +1,183 @@
 <view class="page">
 
-  <!-- 管理员工作台 -->
   <block wx:if="{{isAdmin}}">
+    <!-- 头部 -->
     <view class="wshead">
       <view>
-        <view class="title">奖励工作台</view>
-        <view class="subtitle">发放客户奖励 · 实时对账</view>
+        <view class="title">芭梧奖励 · 工作台</view>
+        <view class="subtitle">选客户 · 定向发放 · 实时对账</view>
       </view>
       <text class="pill ok" wx:if="{{roleLabel}}">{{roleLabel}}</text>
     </view>
 
-    <!-- 分段 Tab -->
+    <!-- Tab -->
     <view class="tabs">
       <view class="tab {{tab==='send'?'on':''}}" data-tab="send" bindtap="switchTab">发放</view>
       <view class="tab {{tab==='records'?'on':''}}" data-tab="records" bindtap="switchTab">记录</view>
       <view class="tab {{tab==='staff'?'on':''}}" data-tab="staff" bindtap="switchTab" wx:if="{{isSuper}}">员工</view>
     </view>
 
-    <!-- 面板：发放 -->
-    <view class="card" wx:if="{{tab==='send'}}">
-      <view class="field">
-        <text class="flabel">金额(元)</text>
-        <input class="finput" type="digit" placeholder="≥{{minAmountYuan}}，如 8.88" value="{{amountYuan}}" bindinput="onAmount" />
-      </view>
-      <view class="field">
-        <text class="flabel">备注</text>
-        <input class="finput" placeholder="用户可见，如 老客户回馈" value="{{remark}}" bindinput="onRemark" />
-      </view>
-      <view class="field">
-        <text class="flabel">姓名</text>
-        <input class="finput" placeholder="选填，≥2000元必填真实姓名" value="{{name}}" bindinput="onName" />
+    <!-- ================= 发放 ================= -->
+    <block wx:if="{{tab==='send'}}">
+      <!-- 模式切换 -->
+      <view class="modes">
+        <view class="mode {{sendMode==='target'?'on':''}}" data-m="target" bindtap="switchSendMode">
+          <text class="mode-t">定向发放</text><text class="mode-s">选客户 · 发不错人</text>
+        </view>
+        <view class="mode {{sendMode==='quick'?'on':''}}" data-m="quick" bindtap="switchSendMode">
+          <text class="mode-t">链接快发</text><text class="mode-s">生成卡片转发</text>
+        </view>
       </view>
 
-      <button class="btn-primary block" bindtap="onGenerate" loading="{{loading}}">生成奖励</button>
-      <view class="err" wx:if="{{error}}">{{error}}</view>
+      <!-- ===== 定向发放 ===== -->
+      <block wx:if="{{sendMode==='target'}}">
 
-      <block wx:if="{{reward}}">
-        <view class="hr"></view>
-        <view class="done-banner">
-          <text class="done-emoji">✅</text>
-          <view>
-            <view class="done-t">已生成 ¥{{reward.amountYuan}}</view>
-            <view class="faint">{{reward.remark || '客户奖励'}}</view>
+        <!-- 步骤1 · 选客户 -->
+        <view class="card" wx:if="{{step==='pick'}}">
+          <view class="rowline">
+            <view class="ctitle">选择客户</view>
+            <view class="sync {{syncing?'dim':''}}" bindtap="syncCustomers">{{syncing?'同步中…':'⟳ 从企微同步'}}</view>
+          </view>
+
+          <view class="searchbar">
+            <input class="searchinput" placeholder="搜备注名，如：李部长" value="{{custQ}}"
+                   bindinput="onCustQ" confirm-type="search" bindconfirm="searchCustomers" />
+            <view class="searchbtn" bindtap="searchCustomers">搜索</view>
+          </view>
+
+          <block wx:if="{{custList.length}}">
+            <view class="cust {{selectedMap[item.external_userid]?'sel':''}}"
+                  wx:for="{{custList}}" wx:key="external_userid"
+                  data-eu="{{item.external_userid}}" data-label="{{item.label}}" bindtap="toggleCust">
+              <view class="cust-check">{{selectedMap[item.external_userid]?'✓':''}}</view>
+              <view class="cust-l">
+                <view class="cust-name">{{item.label}}</view>
+                <view class="faint" wx:if="{{item.sub}}">{{item.sub}}</view>
+              </view>
+              <text class="pill {{item.opened?'ok':''}}">{{item.opened?'开过小程序':'未开过'}}</text>
+            </view>
+          </block>
+          <view class="empty-mini" wx:elif="{{custLoaded}}">
+            <text class="big-emoji">🌿</text>
+            <view class="muted center">还没有客户档案</view>
+            <view class="faint center">{{wecomOn ? '点右上「从企微同步」拉取客户' : '连接企微后可一键同步客户（见部署文档）'}}</view>
+          </view>
+
+          <view class="err" wx:if="{{sendErr}}">{{sendErr}}</view>
+
+          <view class="stickybar" wx:if="{{selected.length}}">
+            <view class="muted">已选 {{selected.length}} 人</view>
+            <view class="rowbtns">
+              <view class="linkbtn" bindtap="clearSelected">清空</view>
+              <button class="btn-primary nextbtn" bindtap="goFill">下一步：填金额</button>
+            </view>
           </view>
         </view>
-        <button class="btn-coral block" open-type="share">转发给客户领取</button>
-        <view class="faint tapline">把卡片发到与客户的微信/企微聊天里，客户点开即可领取</view>
-      </block>
-    </view>
 
-    <!-- 面板：记录 -->
-    <view wx:if="{{tab==='records'}}">
+        <!-- 步骤2 · 逐人金额 -->
+        <view class="card" wx:if="{{step==='fill'}}">
+          <view class="rowline">
+            <view class="ctitle">每人金额与备注</view>
+            <view class="linkbtn" bindtap="backPick">← 重选客户</view>
+          </view>
+
+          <view class="fillall">
+            <input class="fa-amt" type="digit" placeholder="统一金额" value="{{fillAmount}}" bindinput="onFillAmount" />
+            <input class="fa-note" placeholder="统一备注(客户可见)" value="{{fillNote}}" bindinput="onFillNote" />
+            <view class="fa-apply" bindtap="applyFill">填充</view>
+          </view>
+          <view class="faint">先统一填充，再单独微调某个人；金额 {{minAmountYuan}}~{{maxAmountYuan}} 元</view>
+
+          <view class="frow" wx:for="{{selected}}" wx:key="external_userid">
+            <view class="frow-name">{{item.label}}</view>
+            <input class="frow-amt" type="digit" placeholder="金额" value="{{item.amountYuan}}"
+                   data-i="{{index}}" bindinput="onRowAmount" />
+            <input class="frow-note" placeholder="备注" value="{{item.note}}"
+                   data-i="{{index}}" bindinput="onRowNote" />
+            <view class="frow-del" data-i="{{index}}" bindtap="removeRow">✕</view>
+          </view>
+
+          <view class="err" wx:if="{{sendErr}}">{{sendErr}}</view>
+          <button class="btn-accent block" bindtap="submitBatch" loading="{{loading}}">确认发放 {{selected.length}} 笔</button>
+        </view>
+
+        <!-- 步骤3 · 结果 + 通知 -->
+        <block wx:if="{{step==='result' && batchResult}}">
+          <view class="card">
+            <view class="done-banner">
+              <text class="done-emoji">🎉</text>
+              <view>
+                <view class="done-t">已创建 {{batchResult.createdCount}} 笔定向奖励</view>
+                <view class="faint">客户打开小程序即可看到属于自己的奖励</view>
+              </view>
+            </view>
+            <block wx:if="{{batchResult.errors.length}}">
+              <view class="hr"></view>
+              <view class="err">{{batchResult.errors.length}} 笔未创建：</view>
+              <view class="faint" wx:for="{{batchResult.errors}}" wx:key="i">· {{item.label}}：{{item.error}}</view>
+            </block>
+          </view>
+
+          <view class="card">
+            <view class="ctitle">通知客户来领</view>
+            <block wx:if="{{wecomOn}}">
+              <textarea class="notify-ta" value="{{notifyText}}" bindinput="onNotifyText" maxlength="200" auto-height />
+              <button class="btn-primary block" bindtap="sendNotify" loading="{{notifying}}"
+                      disabled="{{notifyDone}}">{{notifyDone?'已创建群发，去企微点发送':'企微群发通知'}}</button>
+              <view class="faint tapline">创建后，员工在企微「群发助手」点一次发送即可送达</view>
+            </block>
+            <block wx:else>
+              <view class="muted">未连接企微。可直接把小程序转发到客户聊天：</view>
+            </block>
+            <button class="btn-ghost block" open-type="share">转发领取入口给客户</button>
+            <view class="linkbtn center-self" bindtap="newBatch">再发一批 →</view>
+          </view>
+        </block>
+      </block>
+
+      <!-- ===== 链接快发 ===== -->
+      <view class="card" wx:if="{{sendMode==='quick'}}">
+        <view class="faint tapline" style="margin-top:0">生成不记名领取卡片，转发给任何人领取（适合企微外的临时发放）</view>
+        <view class="field">
+          <text class="flabel">金额(元)</text>
+          <input class="finput" type="digit" placeholder="≥{{minAmountYuan}}，如 8.88" value="{{amountYuan}}" bindinput="onAmount" />
+        </view>
+        <view class="field">
+          <text class="flabel">备注</text>
+          <input class="finput" placeholder="客户可见，如 老客户回馈" value="{{remark}}" bindinput="onRemark" />
+        </view>
+        <view class="field">
+          <text class="flabel">姓名</text>
+          <input class="finput" placeholder="选填，≥2000元必填真实姓名" value="{{name}}" bindinput="onName" />
+        </view>
+        <button class="btn-primary block" bindtap="onGenerate" loading="{{loading}}">生成奖励</button>
+        <view class="err" wx:if="{{error}}">{{error}}</view>
+        <block wx:if="{{reward}}">
+          <view class="hr"></view>
+          <view class="done-banner">
+            <text class="done-emoji">✅</text>
+            <view>
+              <view class="done-t">已生成 ¥{{reward.amountYuan}}</view>
+              <view class="faint">{{reward.remark || '客户奖励'}}</view>
+            </view>
+          </view>
+          <button class="btn-accent block" open-type="share">转发给客户领取</button>
+        </block>
+      </view>
+    </block>
+
+    <!-- ================= 记录 ================= -->
+    <block wx:if="{{tab==='records'}}">
       <view class="statrow" wx:if="{{stats}}">
         <view class="stat"><text class="sv">{{stats.total}}</text><text class="sl">发放</text></view>
         <view class="stat"><text class="sv green">{{stats.success_count}}</text><text class="sl">已到账</text></view>
         <view class="stat"><text class="sv gold">{{stats.pending_count}}</text><text class="sl">待确认</text></view>
         <view class="stat"><text class="sv">¥{{stats.total_fen ? (stats.total_fen/100) : 0}}</text><text class="sl">总额</text></view>
       </view>
-
       <view class="card list" wx:if="{{records.length}}">
         <view class="rec" wx:for="{{records}}" wx:key="rid">
           <view class="rec-l">
-            <text class="rec-amt">¥{{item.yuan}}</text>
+            <view class="rec-top"><text class="rec-amt">¥{{item.yuan}}</text><text class="rec-who" wx:if="{{item.who}}">→ {{item.who}}</text></view>
             <text class="rec-remark">{{item.remark || '客户奖励'}}</text>
           </view>
           <view class="rec-r">
@@ -71,16 +187,16 @@
         </view>
       </view>
       <view class="card empty-mini" wx:else>
-        <text class="empty-emoji">📋</text>
+        <text class="big-emoji">🪵</text>
         <view class="muted center">还没有发放记录</view>
       </view>
-    </view>
+    </block>
 
-    <!-- 面板：员工（仅超管） -->
-    <view wx:if="{{tab==='staff' && isSuper}}">
+    <!-- ================= 员工 ================= -->
+    <block wx:if="{{tab==='staff' && isSuper}}">
       <view class="card">
         <view class="ctitle">添加发放员</view>
-        <view class="faint tapline" style="margin-top:0">让员工在小程序里打开本页，复制他的 openid 发你，粘贴到这里即可</view>
+        <view class="faint tapline" style="margin-top:0">让员工打开本小程序复制他的 openid 发你，粘贴到这里</view>
         <view class="field top">
           <text class="flabel">openid</text>
           <input class="finput" placeholder="粘贴员工 openid" value="{{newOpenid}}" bindinput="onNewOpenid" />
@@ -99,13 +215,11 @@
         <button class="btn-primary block" bindtap="addStaff" loading="{{staffLoading}}">添加</button>
         <view class="err" wx:if="{{staffMsg}}">{{staffMsg}}</view>
       </view>
-
       <view class="card list">
         <view class="ctitle">员工列表（{{admins.length}}）</view>
         <view class="staff" wx:for="{{admins}}" wx:key="openid">
           <view class="staff-l" data-v="{{item.openid}}" bindtap="copyText">
-            <view class="staff-name">
-              {{item.name}}
+            <view class="staff-name">{{item.name}}
               <text class="pill {{item.isSuper?'ok':''}}">{{item.roleText}}</text>
               <text class="me-tag" wx:if="{{item.isMe}}">我</text>
             </view>
@@ -114,12 +228,12 @@
           <text class="rm" wx:if="{{!item.isMe}}" data-openid="{{item.openid}}" bindtap="removeStaff">移除</text>
         </view>
       </view>
-    </view>
+    </block>
   </block>
 
   <!-- 非管理员 -->
   <view class="card empty" wx:else>
-    <text class="empty-emoji">🙋</text>
+    <text class="big-emoji">🙋</text>
     <view class="empty-title">你还不是发放员</view>
     <view class="muted center">把下面的 openid 发给管理员，加入后即可发奖</view>
     <view class="openid-box" data-v="{{openid}}" bindtap="copyText">

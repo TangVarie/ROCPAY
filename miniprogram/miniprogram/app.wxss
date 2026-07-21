@@ -1,29 +1,44 @@
-/* ============ ROCPAY 设计系统 · 活泼友好 × 专业工作台 ============ */
+/* ============================================================
+   BYWOOD 设计系统 · 芭梧
+   暖木质感：亚麻纸底 × 胡桃墨 × 松林绿(主操作) × 柿橙(奖励高光)
+   平易近人，但保有工作台的秩序感
+   ============================================================ */
 page {
-  /* 品牌绿(微信熟悉感) + 暖橙(奖励/红包的雀跃) */
-  --green: #07c160;
-  --green-d: #05a850;
-  --green-l: #e7f8ef;
-  --coral: #ff6a3d;
-  --coral-d: #f2511f;
-  --coral-l: #fff1eb;
-  --gold: #f5a623;
-  --ink: #1d2531;
-  --ink-2: #59636f;
-  --ink-3: #98a1ad;
-  --bg: #f3f5f8;
-  --card: #ffffff;
-  --line: #edf0f4;
-  --line-2: #e2e7ee;
-  --ok: #07c160;
-  --warn: #f5a623;
-  --fail: #fa5151;
-  --radius: 28rpx;
-  --radius-sm: 18rpx;
-  --shadow: 0 10rpx 34rpx rgba(29, 37, 49, 0.06);
-  --shadow-lift: 0 14rpx 40rpx rgba(29, 37, 49, 0.1);
+  /* 底色与纸感 */
+  --paper: #f6f1e7;        /* 亚麻纸底 */
+  --card: #fffdf8;         /* 暖白卡片 */
+  --linen: #efe7d8;        /* 亚麻块(输入框/轨道) */
+  --line: #eadfce;         /* 木纹浅线 */
+  --line-2: #dccdb4;       /* 木纹深线 */
 
-  background: var(--bg);
+  /* 墨色 */
+  --ink: #2b2118;          /* 胡桃墨 */
+  --ink-2: #6b5d4f;        /* 次级 */
+  --ink-3: #9c8f80;        /* 弱化 */
+
+  /* 松林绿 · 主操作 */
+  --pine: #2e7d5b;
+  --pine-d: #256349;
+  --pine-l: #e2efe7;
+
+  /* 柿橙 · 奖励/红包高光 */
+  --persim: #e8552f;
+  --persim-d: #cf4520;
+  --persim-l: #fdeee7;
+
+  /* 状态 */
+  --ok: #2e7d5b;
+  --warn-t: #9a6b00;
+  --warn-bg: #f7ecd7;
+  --fail-t: #b3402a;
+  --fail-bg: #f8e3dd;
+
+  --radius: 30rpx;
+  --radius-sm: 18rpx;
+  --shadow: 0 8rpx 30rpx rgba(90, 62, 20, 0.08);
+  --shadow-lift: 0 14rpx 40rpx rgba(90, 62, 20, 0.13);
+
+  background: var(--paper);
   color: var(--ink);
   font-size: 30rpx;
   font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
@@ -40,6 +55,7 @@ page {
 /* 卡片 */
 .card {
   background: var(--card);
+  border: 1rpx solid var(--line);
   border-radius: var(--radius);
   padding: 40rpx 36rpx;
   box-shadow: var(--shadow);
@@ -48,36 +64,39 @@ page {
 
 /* 按钮 */
 .btn-primary,
+.btn-accent,
 .btn-ghost {
   border-radius: 999rpx;
   font-size: 32rpx;
-  font-weight: 600;
-  height: 92rpx;
-  line-height: 92rpx;
+  font-weight: 650;
+  height: 94rpx;
+  line-height: 94rpx;
   border: none;
   transition: transform 0.1s ease, opacity 0.15s ease;
 }
 .btn-primary {
-  background: linear-gradient(135deg, #14c96b, #06a94f);
+  background: linear-gradient(140deg, #379268, var(--pine-d));
   color: #fff;
-  box-shadow: 0 10rpx 24rpx rgba(7, 193, 96, 0.28);
+  box-shadow: 0 10rpx 26rpx rgba(46, 125, 91, 0.28);
 }
-.btn-primary:active { transform: scale(0.97); }
-.btn-primary[disabled] {
-  background: #bfe6cf;
+.btn-accent {
+  background: linear-gradient(140deg, #f2683b, var(--persim-d));
   color: #fff;
-  box-shadow: none;
+  box-shadow: 0 10rpx 26rpx rgba(232, 85, 47, 0.28);
 }
 .btn-ghost {
-  background: var(--green-l);
-  color: var(--green-d);
+  background: var(--pine-l);
+  color: var(--pine-d);
 }
+.btn-primary:active, .btn-accent:active { transform: scale(0.97); }
 .btn-ghost:active { opacity: 0.8; }
+.btn-primary[disabled] { background: #b9d3c6; color: #fff; box-shadow: none; }
+.btn-accent[disabled] { background: #edb9a6; color: #fff; box-shadow: none; }
 
-/* 文本工具 */
+/* 文本 */
 .muted { color: var(--ink-2); font-size: 26rpx; }
 .faint { color: var(--ink-3); font-size: 24rpx; }
-.title { font-size: 38rpx; font-weight: 700; letter-spacing: -0.5rpx; }
+.title { font-size: 38rpx; font-weight: 750; letter-spacing: -0.5rpx; }
 .subtitle { color: var(--ink-2); font-size: 27rpx; margin-top: 6rpx; }
 
 /* 状态徽章 */
@@ -86,15 +105,18 @@ page {
   align-items: center;
   gap: 6rpx;
   font-size: 22rpx;
-  font-weight: 600;
+  font-weight: 650;
   padding: 6rpx 16rpx;
   border-radius: 999rpx;
-  background: var(--line);
+  background: var(--linen);
   color: var(--ink-2);
 }
-.pill.ok { background: var(--green-l); color: var(--green-d); }
-.pill.warn { background: #fff5e3; color: #c67e00; }
-.pill.fail { background: #ffeceb; color: var(--fail); }
+.pill.ok { background: var(--pine-l); color: var(--pine-d); }
+.pill.warn { background: var(--warn-bg); color: var(--warn-t); }
+.pill.fail { background: var(--fail-bg); color: var(--fail-t); }
 
 /* 分隔线 */
 .hr { height: 1rpx; background: var(--line); margin: 32rpx 0; }
+
+/* 通用错误提示 */
+.err { color: var(--fail-t); margin-top: 20rpx; font-size: 27rpx; }

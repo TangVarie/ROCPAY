@@ -1,57 +1,60 @@
 <view class="page">
 
-  <!-- 收到奖励：红包/礼物质感 -->
-  <block wx:if="{{hasToken}}">
+  <!-- 识别中 -->
+  <view class="card center-card" wx:if="{{mode==='loading'}}">
+    <text class="big-emoji">🌱</text>
+    <view class="muted center">正在为你查看奖励…</view>
+  </view>
+
+  <!-- 礼盒：链接领取 or 定向领取 -->
+  <block wx:if="{{mode==='token' || mode==='mine'}}">
     <view class="gift {{status==='ok' ? 'done' : ''}}">
       <view class="gift-head">
         <text class="gift-emoji">{{ status==='ok' ? '🎉' : '🧧' }}</text>
-        <text class="gift-hi">{{ status==='ok' ? '奖励已到账' : '你收到一笔奖励' }}</text>
+        <text class="gift-hi">{{ status==='ok' ? '奖励已到账' : (mode==='mine' ? '有一笔属于你的奖励' : '你收到一笔奖励') }}</text>
       </view>
 
       <view class="gift-amount">
-        <text class="sign">¥</text><text class="num">{{amt || '--'}}</text>
+        <text class="sign">¥</text><text class="num">{{ mode==='mine' ? (mineAmt || '--') : (amt || '--') }}</text>
       </view>
-      <view class="gift-remark" wx:if="{{remark}}">{{remark}}</view>
+      <view class="gift-remark" wx:if="{{mode==='mine' ? mineRemark : remark}}">{{ mode==='mine' ? mineRemark : remark }}</view>
 
       <button
         class="claim-btn"
-        bindtap="onClaim"
+        bindtap="{{ mode==='mine' ? 'onClaimMine' : 'onClaimToken' }}"
         loading="{{status==='loading'}}"
         disabled="{{status==='loading' || status==='ok'}}"
       >{{ status==='ok' ? '已到账微信零钱' : '领取到微信零钱' }}</button>
 
       <view class="tip tip-{{status}}" wx:if="{{message}}">{{message}}</view>
-      <view class="fineprint">点击领取后会弹出微信官方「确认收款」页，确认即到账</view>
+      <view class="fineprint">点击领取会弹出微信官方「确认收款」，确认即到账</view>
+    </view>
+
+    <view class="card slim" wx:if="{{mode==='mine' && claimedCount > 0 && status!=='ok'}}">
+      <view class="muted center">本次已领取 {{claimedCount}} 笔 🎊 还有新的奖励在上面</view>
     </view>
   </block>
 
-  <!-- 无领取链接 -->
-  <block wx:else>
-    <view class="card empty">
-      <block wx:if="{{isAdmin}}">
-        <text class="empty-emoji">💼</text>
-        <view class="empty-title">管理员，你好</view>
-        <view class="muted center gap">进入工作台发放客户奖励</view>
-        <button class="btn-primary" bindtap="goAdmin">去发放奖励</button>
-      </block>
-
-      <block wx:else>
-        <text class="empty-emoji">🎁</text>
-        <view class="empty-title">请通过收到的「领取链接」领奖</view>
-        <view class="muted center">从员工发来的卡片点进来即可领取</view>
-
-        <view class="hr"></view>
-
-        <view class="join">
-          <view class="join-title">想成为发放员？</view>
-          <view class="faint center-left">把下面这串 openid 发给管理员，加入后即可发奖</view>
-          <view class="openid-box" bindtap="copyOpenid">
-            <text class="openid-text">{{ openid || '（请在微信小程序内打开）' }}</text>
-            <text class="copy-badge" wx:if="{{openid}}">复制</text>
-          </view>
-        </view>
-      </block>
-    </view>
-  </block>
+  <!-- 没有奖励 -->
+  <view class="card center-card" wx:if="{{mode==='empty'}}">
+    <block wx:if="{{isAdmin}}">
+      <text class="big-emoji">🪵</text>
+      <view class="empty-title">管理员，你好</view>
+      <view class="muted center gap-b">进入工作台发放客户奖励</view>
+      <button class="btn-primary wfull" bindtap="goAdmin">进入工作台</button>
+    </block>
+    <block wx:else>
+      <text class="big-emoji">🎁</text>
+      <view class="empty-title">暂时没有你的奖励</view>
+      <view class="muted center">收到员工发来的奖励后，打开这里即可领取</view>
+      <view class="hr"></view>
+      <view class="join-title">是本公司员工？</view>
+      <view class="faint center">把下面的 openid 发给管理员开通发放权限</view>
+      <view class="openid-box" bindtap="copyOpenid">
+        <text class="openid-text">{{ openid || '（请在微信小程序内打开）' }}</text>
+        <text class="copy-badge" wx:if="{{openid}}">复制</text>
+      </view>
+    </block>
+  </view>
 
 </view>

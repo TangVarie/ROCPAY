@@ -48,6 +48,12 @@ async function call(method, path, { query = {}, body } = {}) {
   return data;
 }
 
+/** 获取所有配置了「客户联系」的员工 userid（同步客户时自动发现，不用手填） */
+export async function getFollowUserList() {
+  const d = await call('GET', '/externalcontact/get_follow_user_list');
+  return d.follow_user || [];
+}
+
 /** 列出某员工名下客户的 external_userid */
 export async function listExternalUserids(followUserid) {
   const d = await call('GET', '/externalcontact/list', { query: { userid: followUserid } });
@@ -100,6 +106,7 @@ export function normalizeContact(item) {
 export const wecom = {
   wecomEnabled,
   getToken,
+  getFollowUserList,
   listExternalUserids,
   batchGetByUser,
   unionidToExternalUserid,

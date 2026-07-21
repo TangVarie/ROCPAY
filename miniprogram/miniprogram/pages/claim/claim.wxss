@@ -1,108 +1,88 @@
-/* ===== 领取页 · 红包/礼物质感 ===== */
+/* ===== 领取页 · BYWOOD 礼盒 ===== */
 .gift {
   position: relative;
   margin-top: 20rpx;
   border-radius: 40rpx;
-  padding: 72rpx 48rpx 56rpx;
+  padding: 76rpx 48rpx 56rpx;
   text-align: center;
   color: #fff;
   overflow: hidden;
-  background: linear-gradient(160deg, #ff7a4d 0%, #f2511f 62%, #e0410f 100%);
-  box-shadow: 0 24rpx 60rpx rgba(242, 81, 31, 0.34);
+  background: linear-gradient(155deg, #f2683b 0%, #e8552f 55%, #cf4520 100%);
+  box-shadow: 0 24rpx 60rpx rgba(207, 69, 32, 0.32);
 }
 .gift.done {
-  background: linear-gradient(160deg, #22cf76 0%, #06a94f 100%);
-  box-shadow: 0 24rpx 60rpx rgba(7, 169, 79, 0.32);
+  background: linear-gradient(155deg, #379268 0%, #2e7d5b 55%, #256349 100%);
+  box-shadow: 0 24rpx 60rpx rgba(46, 125, 91, 0.3);
 }
-.gift-head {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14rpx;
+/* 纸纹高光 */
+.gift::before {
+  content: "";
+  position: absolute;
+  top: -140rpx; left: -60rpx;
+  width: 460rpx; height: 460rpx;
+  background: radial-gradient(closest-side, rgba(255,255,255,0.16), transparent);
+  pointer-events: none;
 }
-.gift-emoji { font-size: 76rpx; line-height: 1; }
-.gift-hi { font-size: 30rpx; opacity: 0.92; letter-spacing: 1rpx; }
+.gift-head { display: flex; flex-direction: column; align-items: center; gap: 14rpx; }
+.gift-emoji { font-size: 78rpx; line-height: 1; }
+.gift-hi { font-size: 30rpx; opacity: 0.94; letter-spacing: 1rpx; }
 .gift-amount {
-  margin: 30rpx 0 8rpx;
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
+  margin: 28rpx 0 8rpx;
+  display: flex; align-items: baseline; justify-content: center;
   font-weight: 800;
 }
 .gift-amount .sign { font-size: 52rpx; margin-right: 6rpx; }
-.gift-amount .num { font-size: 128rpx; line-height: 1; letter-spacing: -2rpx; }
+.gift-amount .num { font-size: 130rpx; line-height: 1; letter-spacing: -2rpx; }
 .gift-remark {
   font-size: 28rpx;
-  opacity: 0.94;
   background: rgba(255, 255, 255, 0.18);
   display: inline-block;
-  padding: 8rpx 24rpx;
+  padding: 8rpx 26rpx;
   border-radius: 999rpx;
   margin-top: 8rpx;
 }
 .claim-btn {
   margin-top: 52rpx;
-  height: 100rpx;
-  line-height: 100rpx;
+  height: 102rpx; line-height: 102rpx;
   border-radius: 999rpx;
-  font-size: 34rpx;
-  font-weight: 700;
+  font-size: 34rpx; font-weight: 750;
   border: none;
-  background: #fff;
-  color: #e0410f;
-  box-shadow: 0 12rpx 30rpx rgba(0, 0, 0, 0.14);
+  background: #fffdf8;
+  color: #cf4520;
+  box-shadow: 0 12rpx 30rpx rgba(43, 33, 24, 0.16);
 }
-.gift.done .claim-btn { color: #06a94f; }
+.gift.done .claim-btn { color: #256349; }
 .claim-btn:active { transform: scale(0.97); }
-.claim-btn[disabled] { background: rgba(255, 255, 255, 0.72); color: rgba(224, 65, 15, 0.6); box-shadow: none; }
-.gift.done .claim-btn[disabled] { color: #06a94f; background: #fff; }
-.tip {
-  margin-top: 28rpx;
-  font-size: 27rpx;
-  min-height: 34rpx;
-}
-.tip-fail { color: #fff3ef; font-weight: 600; }
-.tip-ok { color: #fff; font-weight: 600; }
-.fineprint {
-  margin-top: 20rpx;
-  font-size: 23rpx;
-  opacity: 0.8;
-  line-height: 1.5;
-}
+.claim-btn[disabled] { background: rgba(255, 253, 248, 0.75); color: rgba(207, 69, 32, 0.55); box-shadow: none; }
+.gift.done .claim-btn[disabled] { color: #256349; background: #fffdf8; }
+.tip { margin-top: 28rpx; font-size: 27rpx; min-height: 34rpx; font-weight: 600; }
+.tip-fail, .tip-ok { color: #fff6ef; }
+.fineprint { margin-top: 18rpx; font-size: 23rpx; opacity: 0.82; line-height: 1.5; }
 
-/* ===== 空态 / 加入 ===== */
-.empty { text-align: center; }
-.empty-emoji { font-size: 88rpx; display: block; margin-bottom: 12rpx; }
-.empty-title { font-size: 34rpx; font-weight: 700; margin-bottom: 8rpx; }
+/* ===== 空态 / 通用 ===== */
+.center-card { text-align: center; padding-top: 64rpx; padding-bottom: 56rpx; }
+.big-emoji { font-size: 92rpx; display: block; margin-bottom: 16rpx; }
+.empty-title { font-size: 34rpx; font-weight: 750; margin-bottom: 8rpx; }
 .center { text-align: center; }
-.center-left { text-align: center; }
-.gap { margin: 8rpx 0 40rpx; }
-.join { text-align: center; }
-.join-title { font-size: 30rpx; font-weight: 700; margin-bottom: 8rpx; }
+.gap-b { margin-bottom: 40rpx; }
+.wfull { width: 100%; }
+.slim { margin-top: 24rpx; padding: 26rpx 32rpx; }
+.join-title { font-size: 30rpx; font-weight: 700; margin-bottom: 6rpx; }
 .openid-box {
-  margin-top: 20rpx;
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  background: var(--bg);
+  margin-top: 22rpx;
+  display: flex; align-items: center; gap: 16rpx;
+  background: var(--linen);
   border: 2rpx dashed var(--line-2);
   border-radius: var(--radius-sm);
   padding: 24rpx 26rpx;
 }
 .openid-text {
-  flex: 1;
-  word-break: break-all;
-  text-align: left;
-  font-size: 25rpx;
-  color: var(--ink-2);
+  flex: 1; word-break: break-all; text-align: left;
+  font-size: 25rpx; color: var(--ink-2);
   font-family: Menlo, Consolas, monospace;
 }
 .copy-badge {
-  flex: none;
-  font-size: 24rpx;
-  font-weight: 600;
-  color: var(--green-d);
-  background: var(--green-l);
-  padding: 8rpx 20rpx;
-  border-radius: 999rpx;
+  flex: none; font-size: 24rpx; font-weight: 650;
+  color: var(--pine-d); background: var(--pine-l);
+  padding: 8rpx 20rpx; border-radius: 999rpx;
 }

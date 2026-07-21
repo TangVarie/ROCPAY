@@ -421,11 +421,13 @@ export async function listRewards({ limit = 50, offset = 0 } = {}) {
   const off = Math.max(parseInt(offset, 10) || 0, 0);
   const [rows] = await pool.query(
     `SELECT r.rid, r.amount_fen, r.remark, r.created_by, r.status,
-            r.created_at, r.expires_at,
+            r.created_at, r.expires_at, r.target_external_userid,
+            c.remark AS target_remark, c.name AS target_name,
             t.claimer_openid, t.transfer_bill_no, t.state AS transfer_state,
             t.updated_at AS transfer_updated_at
        FROM rewards r
        LEFT JOIN transfers t ON t.out_bill_no = r.rid
+       LEFT JOIN customers c ON c.external_userid = r.target_external_userid
       ORDER BY r.created_at DESC
       LIMIT ${lim} OFFSET ${off}`
   );
@@ -554,6 +556,16 @@ export async function searchCustomers({ q = '', followUserid = '', limit = 50, o
   return rows.map((r) => ({ ...r, opened: !!r.opened }));
 }
 
+/** 按 unionid 查客户（只读）。企微同步后本地就有 unionid，领取时优先走库、不必调企微。 */
+export async function findCustomerByUnionid(unionid) {
+  if (!pool || !unionid) return null;
+  const [rows] = await pool.query(
+    `SELECT external_userid FROM customers WHERE unionid=:unionid LIMIT 1`,
+    { unionid }
+  );
+  return rows.length ? rows[0].external_userid : null;
+}
+
 /** 客户开小程序后：用 unionid 回填 openid，并返回其 external_userid（定向桥的落地点） */
 export async function bindCustomerByUnionid(unionid, openid) {
   if (!pool || !unionid) return null;
@@ -616,6 +628,7 @@ export const db = {
   countEnabledSupers,
   upsertCustomer,
   searchCustomers,
+  findCustomerByUnionid,
   bindCustomerByUnionid,
   bindCustomerOpenid,
   findPendingRewardForTarget,

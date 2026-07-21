@@ -13,7 +13,7 @@ import { wecom } from './wecom.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p2-scaffold';
+const BUILD = 'p2-bywood';
 
 // 落库辅助：尽力而为，任何写库失败只记日志，绝不阻断发钱/领钱链路
 function persist(action, fn) {
@@ -96,6 +96,8 @@ app.get('/api/me', (req, res) => {
     role: role || 'none',
     minAmountYuan: config.app.minAmountYuan,
     maxAmountYuan: config.app.maxAmountYuan,
+    wecom: wecom.wecomEnabled, // 企微是否已连接（前端据此提示）
+    db: db.dbEnabled,
   });
 });
 
@@ -254,12 +256,17 @@ app.post('/api/customers/sync', async (req, res) => {
   if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
   if (!wecom.wecomEnabled) return res.status(503).json({ error: '未配置企微（WECOM_CORPID/WECOM_CONTACT_SECRET）' });
-  const userids = Array.isArray((req.body || {}).userids) ? req.body.userids.filter(Boolean) : [];
-  if (!userids.length) return res.status(400).json({ error: '请在 body.userids 传要同步的企微员工 userid 列表' });
   try {
+    // 不传 userids 时，自动发现所有配置了「客户联系」的员工，全量同步
+    let userids = Array.isArray((req.body || {}).userids) ? req.body.userids.filter(Boolean) : [];
+    if (!userids.length) userids = await wecom.getFollowUserList();
+    if (!userids.length) {
+      return res.status(400).json({ error: '企微里没有配置「客户联系」的员工（请在企微后台把负责客户的员工加入客户联系使用范围）' });
+    }
     let synced = 0;
     for (const uid of userids) {
       let cursor = '';
+      let guard = 0;
       do {
         const d = await wecom.batchGetByUser([uid], cursor, 100);
         for (const item of d.external_contact_list || []) {
@@ -270,9 +277,31 @@ app.post('/api/customers/sync', async (req, res) => {
           }
         }
         cursor = d.next_cursor || '';
-      } while (cursor);
+      } while (cursor && ++guard < 200);
     }
-    res.json({ ok: true, synced });
+    res.json({ ok: true, synced, staff: userids.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 企微群发通知：给选中的客户发一条文案（员工需在企微「群发助手」点一次发送）
+app.post('/api/deliver', async (req, res) => {
+  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  if (!wecom.wecomEnabled) return res.status(503).json({ error: '未配置企微，无法群发（可让员工手动转发小程序给客户）' });
+  const externalUserids = Array.isArray((req.body || {}).externalUserids)
+    ? req.body.externalUserids.filter(Boolean)
+    : [];
+  if (!externalUserids.length) return res.status(400).json({ error: '请选择要通知的客户' });
+  const text = String((req.body || {}).text || '').trim() ||
+    '你有一笔奖励待领取，请打开我们的小程序查看～';
+  try {
+    const r = await wecom.addMsgTemplate({
+      chat_type: 'single',
+      external_userid: externalUserids,
+      text: { content: text.slice(0, 600) },
+    });
+    res.json({ ok: true, msgid: r.msgid || '', failCount: (r.fail_list || []).length, failList: r.fail_list || [] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -391,10 +420,15 @@ app.post('/api/claim/mine', async (req, res) => {
   }
 });
 
-// unionid → external_userid（定向身份桥）；成功则回填 openid 到客户档案
+// unionid → external_userid（定向身份桥）。
+// 优先查本地 customers（企微同步后就有 unionid，快且不依赖企微在线）；
+// 查不到再调企微转换接口。命中后回填 openid 到客户档案。
 async function resolveCustomer(unionid, openid) {
-  if (!unionid || !wecom.wecomEnabled) return null;
-  const externalUserid = await wecom.unionidToExternalUserid(unionid, openid);
+  if (!unionid) return null;
+  let externalUserid = await db.findCustomerByUnionid(unionid).catch(() => null);
+  if (!externalUserid && wecom.wecomEnabled) {
+    externalUserid = await wecom.unionidToExternalUserid(unionid, openid).catch(() => null);
+  }
   if (externalUserid) await db.bindCustomerByUnionid(unionid, openid).catch(() => {});
   return externalUserid;
 }
