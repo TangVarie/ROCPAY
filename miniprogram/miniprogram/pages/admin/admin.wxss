@@ -205,6 +205,8 @@
 .bal-label { font-size: 24rpx; color: rgba(255, 255, 255, 0.85); }
 .bal-refresh { font-size: 24rpx; color: rgba(255, 255, 255, 0.9); padding: 8rpx 4rpx 8rpx 24rpx; }
 .bal-refresh:active { opacity: 0.6; }
+.bal-actions { display: flex; align-items: center; }
+.bal-actions .bal-refresh { padding: 8rpx 0 8rpx 28rpx; } /* 充值/校准两个动作并排 */
 .bal-num { font-size: 80rpx; font-weight: 700; color: #ffffff; line-height: 1.15; margin-top: 10rpx; }
 .bal-sub { font-size: 22rpx; color: rgba(255, 255, 255, 0.8); margin-top: 8rpx; }
 .bal-low { color: #ffb0b0; font-weight: 700; } /* 剩余告罄/超支：浅红提醒 */

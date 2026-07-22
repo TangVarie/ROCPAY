@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS customers (
   KEY idx_customers_follow (follow_userid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='企微客户缓存+身份映射';
 
--- 通用键值设置（如打款周期清零点 payout_period_start / 本期充值额 payout_period_topup_fen）
+-- 通用键值设置（如可发额度锚点 quota_base_fen / 锚点已发放 quota_base_paid_fen）
 CREATE TABLE IF NOT EXISTS settings (
   k          VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '设置键',
   v          TEXT         NULL COMMENT '设置值',

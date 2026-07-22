@@ -208,36 +208,63 @@ app.get('/api/balance', async (req, res) => {
   }
 });
 
-// 打款周期台账（自家账本，绕开微信余额权限）：本期已发放 + 剩余(充值额−已发放)。
-// 让打款员工一眼看清"本期还能发多少"；充值后点"新一期"清零重新计。管理员/发放员均可见可清零。
+// 可发额度台账（自家账本，绕开微信余额权限）——「运行式余额」模型：
+//   剩余 = 锚点剩余(quota_base_fen) − 自锚点起已发放(allTimePaid − quota_base_paid_fen)
+//   充值时新剩余 = 当前剩余 + 充值额（携带上期结余，解决"还剩一点又充值"）
+//   校准时新剩余 = 直接设为实际余额（与商户平台核对时用）
+// 每次充值/校准都重新锚定(把"自锚点已发放"归零)。管理员/发放员均可见可操作。
+async function computeQuota() {
+  const allTime = await db.getPeriodStats(null); // 全部已发放(已划走+在途冻结)
+  const baseRaw = await db.getSetting('quota_base_fen', null);
+  const hasQuota = baseRaw != null;
+  const baseFen = Number(baseRaw) || 0;
+  const anchorPaidFen = Number(await db.getSetting('quota_base_paid_fen', '0')) || 0;
+  const paidSinceFen = allTime.paidFen - anchorPaidFen; // 自上次充值/校准起已发放
+  const remainingFen = baseFen - paidSinceFen;
+  return {
+    hasQuota,
+    remainingYuan: hasQuota ? remainingFen / 100 : null,
+    paidSinceYuan: hasQuota ? Math.max(0, paidSinceFen) / 100 : null,
+    allTimePaidYuan: allTime.paidFen / 100,
+    allTimePaidCount: allTime.paidCount,
+  };
+}
+
 app.get('/api/period', async (req, res) => {
   if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
   try {
-    const start = await db.getSetting('payout_period_start', null);
-    const topupFen = Number(await db.getSetting('payout_period_topup_fen', '0')) || 0;
-    const { paidFen, paidCount } = await db.getPeriodStats(start);
-    res.json({
-      periodStart: start,
-      topupYuan: topupFen / 100,
-      paidYuan: paidFen / 100,
-      paidCount,
-      remainingYuan: topupFen > 0 ? (topupFen - paidFen) / 100 : null,
-    });
+    res.json(await computeQuota());
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// 开始新一期：清零"本期已发放"（记录清零时间点），并可填本次充值额度（元）以便自动算剩余。
-app.post('/api/period/reset', async (req, res) => {
+// 调整额度：mode='add' 充值(累加,携带结余) | mode='set' 校准(设为实际余额)。金额单位元。
+app.post('/api/period/adjust', async (req, res) => {
   if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
-  const topupYuan = Number((req.body || {}).topupYuan);
-  const topupFen = topupYuan > 0 ? Math.round(topupYuan * 100) : 0;
+  const body = req.body || {};
+  const mode = body.mode === 'set' ? 'set' : 'add';
+  const yuan = Number(body.yuan);
+  if (!(yuan >= 0)) return res.status(400).json({ error: '请输入正确金额' });
+  const amtFen = Math.round(yuan * 100);
   try {
-    await db.resetPayoutPeriod(topupFen);
-    res.json({ ok: true });
+    const allTime = await db.getPeriodStats(null);
+    let newBaseFen;
+    if (mode === 'set') {
+      newBaseFen = amtFen; // 校准：剩余直接设为实际余额
+    } else {
+      // 充值：新剩余 = 当前剩余 + 充值额（携带上期结余）
+      const baseRaw = await db.getSetting('quota_base_fen', null);
+      const baseFen = Number(baseRaw) || 0;
+      const anchorPaidFen = Number(await db.getSetting('quota_base_paid_fen', '0')) || 0;
+      const remainingNow = baseRaw != null ? baseFen - (allTime.paidFen - anchorPaidFen) : 0;
+      newBaseFen = Math.round(remainingNow) + amtFen;
+    }
+    await db.setSetting('quota_base_fen', String(newBaseFen));
+    await db.setSetting('quota_base_paid_fen', String(allTime.paidFen)); // 重新锚定
+    res.json(await computeQuota());
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -151,15 +151,23 @@
 
     <!-- ================= 记录 ================= -->
     <block wx:if="{{tab==='records'}}">
-      <!-- 本期额度台账：充值后点「新一期」清零，员工看着已发放往上走、剩余往下走（发放员/管理员都可用） -->
+      <!-- 可发额度（运行式余额）：充值累加携带结余；员工看着剩余往下走（发放员/管理员都可用） -->
       <view class="block block-blue bal" wx:if="{{period}}">
         <view class="bal-top">
-          <text class="bal-label">本期已发放 · {{period.paidCount}} 笔</text>
-          <text class="bal-refresh" bindtap="resetPeriod">新一期 / 清零</text>
+          <text class="bal-label">可发额度 · 剩余</text>
+          <view class="bal-actions">
+            <text class="bal-refresh" data-mode="add" bindtap="adjustQuota">充值</text>
+            <text class="bal-refresh" data-mode="set" bindtap="adjustQuota">校准</text>
+          </view>
         </view>
-        <view class="bal-num num">¥{{period.paidYuan}}</view>
-        <view class="bal-sub" wx:if="{{period.hasRemaining}}">充值 ¥{{period.topupYuan}} · 剩余 <text class="{{period.low ? 'bal-low' : ''}}">¥{{period.remainingYuan}}</text></view>
-        <view class="bal-sub" wx:else>点「新一期」填入本次充值额，即可自动算剩余</view>
+        <block wx:if="{{period.hasQuota}}">
+          <view class="bal-num num {{period.low ? 'bal-low' : ''}}">¥{{period.remainingYuan}}</view>
+          <view class="bal-sub">自上次充值已发放 ¥{{period.paidSinceYuan}}{{period.low ? ' · 额度已用尽，请充值' : ''}}</view>
+        </block>
+        <block wx:else>
+          <view class="bal-num num">— —</view>
+          <view class="bal-sub">点「充值」记入账户余额，之后自动算剩余</view>
+        </block>
       </view>
 
       <!-- 实时可用余额（微信商户余额，需开通接口权限；开通后自动亮） -->

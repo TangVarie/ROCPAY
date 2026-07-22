@@ -42,7 +42,7 @@ Page({
     balance: null, // { availableYuan, pendingYuan, hasPending }
     balanceErr: '',
     balanceLoading: false,
-    period: null, // 本期额度台账 { paidYuan, paidCount, topupYuan, hasRemaining, remainingYuan, low }
+    period: null, // 可发额度（运行式余额）{ hasQuota, remainingYuan, paidSinceYuan, low }
 
     // ---- 员工 ----
     admins: [],
@@ -290,42 +290,44 @@ Page({
       );
   },
 
-  // 本期额度台账：本期已发放 + 剩余(充值额−已发放)
+  // 可发额度（运行式余额）：剩余 + 自上次充值已发放
   loadPeriod() {
     call('/api/period', 'GET')
-      .then((res) => {
-        if (!res || res.error || typeof res.paidYuan !== 'number') return this.setData({ period: null });
-        const hasTopup = typeof res.topupYuan === 'number' && res.topupYuan > 0;
-        const rem = typeof res.remainingYuan === 'number' ? res.remainingYuan : null;
-        this.setData({
-          period: {
-            paidYuan: (Number(res.paidYuan) || 0).toFixed(2),
-            paidCount: res.paidCount || 0,
-            topupYuan: hasTopup ? Number(res.topupYuan).toFixed(2) : '',
-            hasRemaining: rem != null,
-            remainingYuan: rem != null ? rem.toFixed(2) : '',
-            low: rem != null && rem <= 0, // 剩余告罄/超支
-          },
-        });
-      })
+      .then((res) => this.applyPeriod(res))
       .catch(() => this.setData({ period: null }));
   },
-  // 开始新一期：清零本期已发放，可填本次充值额度
-  resetPeriod() {
+  applyPeriod(res) {
+    if (!res || res.error || typeof res.hasQuota !== 'boolean') return this.setData({ period: null });
+    if (!res.hasQuota) return this.setData({ period: { hasQuota: false } });
+    const rem = Number(res.remainingYuan) || 0;
+    this.setData({
+      period: {
+        hasQuota: true,
+        remainingYuan: rem.toFixed(2),
+        paidSinceYuan: (Number(res.paidSinceYuan) || 0).toFixed(2),
+        low: rem <= 0, // 剩余告罄/超支
+      },
+    });
+  },
+  // 充值（累加，携带上期结余）/ 校准（把剩余设为账户实际余额）
+  adjustQuota(e) {
+    const mode = e.currentTarget.dataset.mode === 'set' ? 'set' : 'add';
+    const isSet = mode === 'set';
     wx.showModal({
-      title: '开始新一期',
+      title: isSet ? '校准余额' : '充值',
       editable: true,
       content: '',
-      placeholderText: '本次充值金额(元)，可留空',
-      confirmText: '清零',
+      placeholderText: isSet ? '账户实际剩余(元)' : '本次充值金额(元)',
+      confirmText: isSet ? '设为剩余' : '加进额度',
       success: (r) => {
         if (!r.confirm) return;
-        const topupYuan = Number(r.content) || 0;
-        call('/api/period/reset', 'POST', { topupYuan })
+        const yuan = Number(r.content);
+        if (!(yuan >= 0)) return wx.showToast({ title: '请输入正确金额', icon: 'none' });
+        call('/api/period/adjust', 'POST', { mode, yuan })
           .then((res) => {
             if (res && res.error) return wx.showToast({ title: res.error, icon: 'none' });
-            wx.showToast({ title: '已开始新一期', icon: 'success' });
-            this.loadPeriod();
+            wx.showToast({ title: isSet ? '已校准' : '已充值', icon: 'success' });
+            this.applyPeriod(res);
           })
           .catch(() => wx.showToast({ title: '网络错误', icon: 'none' }));
       },

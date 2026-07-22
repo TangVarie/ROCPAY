@@ -494,16 +494,6 @@ export async function getPeriodStats(since) {
   return { paidFen: Number(rows[0].paid_fen), paidCount: Number(rows[0].paid_count) };
 }
 
-/** 开始新一期：清零点用 DB 的 NOW()（避免应用与数据库时区不一致），并记录本次充值额度(分) */
-export async function resetPayoutPeriod(topupFen = 0) {
-  if (!pool) throw new Error('未开启数据库');
-  await pool.execute(
-    `INSERT INTO settings (k, v) VALUES ('payout_period_start', DATE_FORMAT(NOW(),'%Y-%m-%d %H:%i:%s'))
-     ON DUPLICATE KEY UPDATE v=VALUES(v)`
-  );
-  await setSetting('payout_period_topup_fen', String(Math.max(0, Math.round(Number(topupFen) || 0))));
-}
-
 // ---------------- 员工/管理员 ----------------
 
 /** 返回全部管理员，用于内存缓存 */
@@ -674,7 +664,6 @@ export const db = {
   getSetting,
   setSetting,
   getPeriodStats,
-  resetPayoutPeriod,
   loadAdmins,
   upsertAdmin,
   setAdminEnabled,
