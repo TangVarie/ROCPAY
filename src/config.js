@@ -78,6 +78,10 @@ export const config = {
     // 余额查询账户类型：BASIC 基本账户 / OPERATION 运营账户 / FEES 手续费账户。
     // 「商家转账」从哪个账户出资就查哪个（多数直连商户为 BASIC，部分从 OPERATION 出资）。
     balanceAccountType: optional('WECHATPAY_BALANCE_ACCOUNT_TYPE', 'BASIC').toUpperCase(),
+    // 微信支付「安全医生」域名验证：把下载到的 verify_xxx.html 的【文件名】和【文件内容】分别填这两个变量，
+    // 后端会在 https://你的域名/verify_xxx.html 原样返回，用于证明域名归属。换文件不用改代码。
+    verifyFile: optional('WECHATPAY_VERIFY_FILE'),
+    verifyContent: optional('WECHATPAY_VERIFY_CONTENT'),
     // 平台验签/加密：微信支付公钥模式（可选），留空则自动下载平台证书
     publicKeyId: optional('WECHATPAY_PUBLIC_KEY_ID'),
     publicKeyPem: readPemEnv('WECHATPAY_PUBLIC_KEY'),

@@ -39,6 +39,16 @@ app.use(
   })
 );
 
+// 微信支付「安全医生」域名验证：在域名根目录原样返回下载到的 verify_xxx.html，证明域名归属。
+// 文件名+内容用环境变量配置（WECHATPAY_VERIFY_FILE / WECHATPAY_VERIFY_CONTENT），换文件不改代码。
+app.use((req, res, next) => {
+  const vf = config.wechatpay.verifyFile;
+  if (vf && req.method === 'GET' && req.path === '/' + vf) {
+    return res.type('html').send(config.wechatpay.verifyContent || '');
+  }
+  next();
+});
+
 // 云托管注入 x-wx-openid；本地调试可用 DEV_OPENID 环境变量顶替
 function getOpenid(req) {
   return req.headers['x-wx-openid'] || process.env.DEV_OPENID || '';
