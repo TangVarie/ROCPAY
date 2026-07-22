@@ -42,6 +42,7 @@ Page({
     balance: null, // { availableYuan, pendingYuan, hasPending }
     balanceErr: '',
     balanceLoading: false,
+    period: null, // 本期额度台账 { paidYuan, paidCount, topupYuan, hasRemaining, remainingYuan, low }
 
     // ---- 员工 ----
     admins: [],
@@ -69,6 +70,7 @@ Page({
           this.loadCustomers();
           this.loadRecords();
           this.loadBalance();
+          this.loadPeriod();
         }
         if (isSuper) this.loadAdmins();
       })
@@ -78,7 +80,7 @@ Page({
   switchTab(e) {
     const tab = e.currentTarget.dataset.tab;
     this.setData({ tab });
-    if (tab === 'records') { this.loadRecords(); this.loadBalance(); }
+    if (tab === 'records') { this.loadRecords(); this.loadBalance(); this.loadPeriod(); }
     if (tab === 'staff') this.loadAdmins();
   },
   switchSendMode(e) {
@@ -286,6 +288,48 @@ Page({
       .catch((e) =>
         this.setData({ balanceLoading: false, balanceErr: '余额获取失败：' + (e.errMsg || e.message || '') })
       );
+  },
+
+  // 本期额度台账：本期已发放 + 剩余(充值额−已发放)
+  loadPeriod() {
+    call('/api/period', 'GET')
+      .then((res) => {
+        if (!res || res.error || typeof res.paidYuan !== 'number') return this.setData({ period: null });
+        const hasTopup = typeof res.topupYuan === 'number' && res.topupYuan > 0;
+        const rem = typeof res.remainingYuan === 'number' ? res.remainingYuan : null;
+        this.setData({
+          period: {
+            paidYuan: (Number(res.paidYuan) || 0).toFixed(2),
+            paidCount: res.paidCount || 0,
+            topupYuan: hasTopup ? Number(res.topupYuan).toFixed(2) : '',
+            hasRemaining: rem != null,
+            remainingYuan: rem != null ? rem.toFixed(2) : '',
+            low: rem != null && rem <= 0, // 剩余告罄/超支
+          },
+        });
+      })
+      .catch(() => this.setData({ period: null }));
+  },
+  // 开始新一期：清零本期已发放，可填本次充值额度
+  resetPeriod() {
+    wx.showModal({
+      title: '开始新一期',
+      editable: true,
+      content: '',
+      placeholderText: '本次充值金额(元)，可留空',
+      confirmText: '清零',
+      success: (r) => {
+        if (!r.confirm) return;
+        const topupYuan = Number(r.content) || 0;
+        call('/api/period/reset', 'POST', { topupYuan })
+          .then((res) => {
+            if (res && res.error) return wx.showToast({ title: res.error, icon: 'none' });
+            wx.showToast({ title: '已开始新一期', icon: 'success' });
+            this.loadPeriod();
+          })
+          .catch(() => wx.showToast({ title: '网络错误', icon: 'none' }));
+      },
+    });
   },
 
   loadRecords() {

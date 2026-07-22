@@ -88,3 +88,10 @@ CREATE TABLE IF NOT EXISTS customers (
   KEY idx_customers_openid (openid),
   KEY idx_customers_follow (follow_userid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='企微客户缓存+身份映射';
+
+-- 通用键值设置（如打款周期清零点 payout_period_start / 本期充值额 payout_period_topup_fen）
+CREATE TABLE IF NOT EXISTS settings (
+  k          VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '设置键',
+  v          TEXT         NULL COMMENT '设置值',
+  updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通用键值设置(如打款周期)';

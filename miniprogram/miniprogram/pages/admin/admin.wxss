@@ -207,6 +207,7 @@
 .bal-refresh:active { opacity: 0.6; }
 .bal-num { font-size: 80rpx; font-weight: 700; color: #ffffff; line-height: 1.15; margin-top: 10rpx; }
 .bal-sub { font-size: 22rpx; color: rgba(255, 255, 255, 0.8); margin-top: 8rpx; }
+.bal-low { color: #ffb0b0; font-weight: 700; } /* 剩余告罄/超支：浅红提醒 */
 .bal-err {
   display: flex;
   align-items: center;

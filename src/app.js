@@ -208,6 +208,41 @@ app.get('/api/balance', async (req, res) => {
   }
 });
 
+// 打款周期台账（自家账本，绕开微信余额权限）：本期已发放 + 剩余(充值额−已发放)。
+// 让打款员工一眼看清"本期还能发多少"；充值后点"新一期"清零重新计。管理员/发放员均可见可清零。
+app.get('/api/period', async (req, res) => {
+  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  try {
+    const start = await db.getSetting('payout_period_start', null);
+    const topupFen = Number(await db.getSetting('payout_period_topup_fen', '0')) || 0;
+    const { paidFen, paidCount } = await db.getPeriodStats(start);
+    res.json({
+      periodStart: start,
+      topupYuan: topupFen / 100,
+      paidYuan: paidFen / 100,
+      paidCount,
+      remainingYuan: topupFen > 0 ? (topupFen - paidFen) / 100 : null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 开始新一期：清零"本期已发放"（记录清零时间点），并可填本次充值额度（元）以便自动算剩余。
+app.post('/api/period/reset', async (req, res) => {
+  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  const topupYuan = Number((req.body || {}).topupYuan);
+  const topupFen = topupYuan > 0 ? Math.round(topupYuan * 100) : 0;
+  try {
+    await db.resetPayoutPeriod(topupFen);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // 【员工】生成奖励，返回领取 token（前端据此拼领取链接/二维码）
 app.post('/api/rewards', (req, res) => {
   const openid = getOpenid(req);

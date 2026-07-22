@@ -125,6 +125,12 @@ const DDL = [
      KEY idx_customers_openid (openid),
      KEY idx_customers_follow (follow_userid)
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='企微客户缓存+身份映射'`,
+
+  `CREATE TABLE IF NOT EXISTS settings (
+     k          VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '设置键',
+     v          TEXT         NULL COMMENT '设置值',
+     updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通用键值设置(如打款周期清零点)'`,
 ];
 
 /**
@@ -454,6 +460,50 @@ export async function getStats() {
   };
 }
 
+// ---------------- 通用设置(键值) & 打款周期台账 ----------------
+
+/** 读一个设置项，无则返回默认值 */
+export async function getSetting(key, def = null) {
+  if (!pool) return def;
+  const [rows] = await pool.execute(`SELECT v FROM settings WHERE k=:k`, { k: key });
+  return rows.length ? rows[0].v : def;
+}
+
+/** 写一个设置项（幂等 upsert） */
+export async function setSetting(key, value) {
+  if (!pool) throw new Error('未开启数据库');
+  await pool.execute(
+    `INSERT INTO settings (k, v) VALUES (:k, :v)
+     ON DUPLICATE KEY UPDATE v=VALUES(v)`,
+    { k: key, v: value == null ? null : String(value) }
+  );
+}
+
+/**
+ * 本期已发放：自 since 起、钱已划走或在途冻结（status IN CLAIMED/SUCCESS）的金额与笔数。
+ * 这部分才是真正消耗商户余额的；CREATED（未领取）不计。since 为空表示统计全部。
+ */
+export async function getPeriodStats(since) {
+  if (!pool) return { paidFen: 0, paidCount: 0 };
+  const [rows] = await pool.execute(
+    `SELECT COALESCE(SUM(amount_fen),0) AS paid_fen, COUNT(*) AS paid_count
+       FROM rewards
+      WHERE status IN ('CLAIMED','SUCCESS') AND created_at >= :since`,
+    { since: since || '1970-01-01 00:00:00' }
+  );
+  return { paidFen: Number(rows[0].paid_fen), paidCount: Number(rows[0].paid_count) };
+}
+
+/** 开始新一期：清零点用 DB 的 NOW()（避免应用与数据库时区不一致），并记录本次充值额度(分) */
+export async function resetPayoutPeriod(topupFen = 0) {
+  if (!pool) throw new Error('未开启数据库');
+  await pool.execute(
+    `INSERT INTO settings (k, v) VALUES ('payout_period_start', DATE_FORMAT(NOW(),'%Y-%m-%d %H:%i:%s'))
+     ON DUPLICATE KEY UPDATE v=VALUES(v)`
+  );
+  await setSetting('payout_period_topup_fen', String(Math.max(0, Math.round(Number(topupFen) || 0))));
+}
+
 // ---------------- 员工/管理员 ----------------
 
 /** 返回全部管理员，用于内存缓存 */
@@ -621,6 +671,10 @@ export const db = {
   saveNotifyEvent,
   listRewards,
   getStats,
+  getSetting,
+  setSetting,
+  getPeriodStats,
+  resetPayoutPeriod,
   loadAdmins,
   upsertAdmin,
   setAdminEnabled,
