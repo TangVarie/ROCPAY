@@ -39,7 +39,11 @@ app.use(
   })
 );
 
-// 微信支付「安全医生」域名验证：在域名根目录原样返回下载到的 verify_xxx.html，证明域名归属。
+// 静态文件：public/ 下的文件在域名根目录直接可访问（如安全医生验证文件 verify_xxx.html）。
+// 放在最前、优先于下面的环境变量兜底：已提交的文件为准，避免环境变量填错时被旧值覆盖。
+app.use(express.static(fileURLToPath(new URL('../public', import.meta.url))));
+
+// 微信支付「安全医生」域名验证（备用）：在域名根目录原样返回 verify_xxx.html，证明域名归属。
 // 文件名+内容用环境变量配置（WECHATPAY_VERIFY_FILE / WECHATPAY_VERIFY_CONTENT），换文件不改代码。
 app.use((req, res, next) => {
   const vf = config.wechatpay.verifyFile;
