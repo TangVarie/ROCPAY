@@ -39,6 +39,9 @@ Page({
     // ---- 记录 ----
     records: [],
     stats: null,
+    balance: null, // { availableYuan, pendingYuan, hasPending }
+    balanceErr: '',
+    balanceLoading: false,
 
     // ---- 员工 ----
     admins: [],
@@ -65,6 +68,7 @@ Page({
         if (me.isAdmin) {
           this.loadCustomers();
           this.loadRecords();
+          this.loadBalance();
         }
         if (isSuper) this.loadAdmins();
       })
@@ -74,7 +78,7 @@ Page({
   switchTab(e) {
     const tab = e.currentTarget.dataset.tab;
     this.setData({ tab });
-    if (tab === 'records') this.loadRecords();
+    if (tab === 'records') { this.loadRecords(); this.loadBalance(); }
     if (tab === 'staff') this.loadAdmins();
   },
   switchSendMode(e) {
@@ -194,7 +198,7 @@ Page({
             errors: (res.errors || []).map((er) => ({ ...er, label: labelOf[er.target] || er.target || '' })),
             targets,
           },
-          notifyText: '你有一笔奖励待领取，打开【芭梧奖励】小程序即可领取～',
+          notifyText: '你有一笔奖励待领取，打开【梨响ROC】小程序即可领取～',
           notifyDone: false,
         });
         this.loadRecords();
@@ -260,6 +264,30 @@ Page({
   },
 
   // ============ 记录 ============
+  loadBalance() {
+    if (this.data.balanceLoading) return;
+    this.setData({ balanceLoading: true });
+    call('/api/balance', 'GET')
+      .then((res) => {
+        this.setData({ balanceLoading: false });
+        if (!res || res.error || typeof res.availableYuan !== 'number') {
+          return this.setData({ balance: null, balanceErr: (res && res.error) || '暂时取不到余额' });
+        }
+        const pending = Number(res.pendingYuan) || 0;
+        this.setData({
+          balance: {
+            availableYuan: (Number(res.availableYuan) || 0).toFixed(2),
+            pendingYuan: pending.toFixed(2),
+            hasPending: pending > 0,
+          },
+          balanceErr: '',
+        });
+      })
+      .catch((e) =>
+        this.setData({ balanceLoading: false, balanceErr: '余额获取失败：' + (e.errMsg || e.message || '') })
+      );
+  },
+
   loadRecords() {
     call('/api/rewards?limit=40', 'GET')
       .then((res) => {

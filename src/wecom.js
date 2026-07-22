@@ -83,6 +83,31 @@ export async function addMsgTemplate(template) {
   return call('POST', '/externalcontact/add_msg_template', { body: template });
 }
 
+/** 上传临时图片素材，返回 media_id（企微临时素材 3 天过期） */
+export async function uploadImageMedia(buffer, filename = 'cover.png') {
+  const token = await getToken();
+  const form = new FormData();
+  form.append('media', new Blob([buffer], { type: 'image/png' }), filename);
+  const res = await fetch(`${BASE}/media/upload?access_token=${encodeURIComponent(token)}&type=image`, {
+    method: 'POST',
+    body: form,
+  });
+  const data = await res.json();
+  if (data.errcode) throw new Error(`企微 media/upload 失败：${data.errcode} ${data.errmsg}`);
+  return data.media_id;
+}
+
+// 卡片封面 media_id 缓存：临时素材 3 天过期，这里缓存 2 天留足余量，避免每次群发都重传
+let coverCache = { mediaId: '', exp: 0 };
+/** 取群发卡片封面的 media_id：缓存优先，过期则用传入的图片 buffer 重新上传 */
+export async function getCardCoverMediaId(buffer) {
+  const now = Date.now();
+  if (coverCache.mediaId && now < coverCache.exp) return coverCache.mediaId;
+  const mediaId = await uploadImageMedia(buffer, 'reward-cover.png');
+  coverCache = { mediaId, exp: now + 2 * 24 * 3600 * 1000 };
+  return mediaId;
+}
+
 /**
  * 把企微 batch/get_by_user 的一条记录规整成我们 customers 表的形状。
  * 输入：{ external_contact, follow_info }
@@ -111,6 +136,8 @@ export const wecom = {
   batchGetByUser,
   unionidToExternalUserid,
   addMsgTemplate,
+  uploadImageMedia,
+  getCardCoverMediaId,
   normalizeContact,
 };
 

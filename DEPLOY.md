@@ -275,8 +275,12 @@ WECHATPAY_SCENE_REPORT_INFOS=[{"info_type":"岗位类型","info_content":"推广
 `GET /api/customers?q=备注名` 搜客户 ·
 `POST /api/customers/sync` 企微同步（自动发现员工）·
 `POST /api/rewards/batch` 逐人金额定向发放 ·
-`POST /api/deliver` 企微群发通知 ·
+`POST /api/deliver` 企微群发通知（带**小程序卡片**，客户点开直达领取页，无需搜索小程序名；封面上传失败自动降级为纯文字）·
+`GET /api/balance` 商户实时可用余额（管理员/发放员可见，元）·
 `GET|POST /api/claim/mine` 客户身份领取（防领错）
+
+> **群发卡片**：`/api/deliver` 会自动上传封面（`assets/reward-cover.png`，由 `scripts/make-cover.mjs` 生成）拿 `pic_media_id`，附一张跳 `pages/claim/claim.html` 的小程序卡片。要求小程序 AppID 已关联企微。
+> **实时余额**：`/api/balance` 走微信支付 V3 直连商户端点 `/v3/merchant/fund/balance/BASIC`，金额分转元；工作台「记录」页顶部展示，配合「累计发放」看清发了多少/还剩多少。
 
 ### 12.4 企业可信IP 配置（解锁企微服务端接口）★
 

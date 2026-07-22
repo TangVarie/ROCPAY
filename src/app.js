@@ -3,6 +3,8 @@
 //  小程序通过 wx.cloud.callContainer 调用，云托管会自动注入 x-wx-openid
 // ============================================================
 import express from 'express';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { createRewardToken, verifyRewardToken, newRid } from './reward-token.js';
 import { createTransferBill, queryTransferByOutBillNo } from './transfer-service.js';
@@ -15,6 +17,9 @@ const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
 const BUILD = 'p2-bywood';
+
+// 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
+const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
 
 // 落库辅助：尽力而为，任何写库失败只记日志，绝不阻断发钱/领钱链路
 function persist(action, fn) {
@@ -146,6 +151,25 @@ app.get('/api/diagnose', async (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 商户实时可用余额（管理员/发放员均可见）：配合"累计发放"一眼看清发了多少、还剩多少可发。
+// 走微信支付 V3 直连商户端点 /v3/merchant/fund/balance/{account_type}，account_type=BASIC；
+// available_amount/pending_amount 单位是分(int64)，前端按元展示（务必 /100，否则 100 倍误差）。
+app.get('/api/balance', async (req, res) => {
+  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  try {
+    const { status, data } = await wechatpay.request('GET', '/v3/merchant/fund/balance/BASIC');
+    if (status !== 200) {
+      return res.status(502).json({ error: data.message || data.code || `HTTP ${status}` });
+    }
+    res.json({
+      availableYuan: (Number(data.available_amount) || 0) / 100,
+      pendingYuan: (Number(data.pending_amount) || 0) / 100,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -324,12 +348,39 @@ app.post('/api/deliver', async (req, res) => {
   const text = String((req.body || {}).text || '').trim() ||
     '你有一笔奖励待领取，请打开我们的小程序查看～';
   try {
-    const r = await wecom.addMsgTemplate({
+    const body = {
       chat_type: 'single',
       external_userid: externalUserids,
       text: { content: text.slice(0, 600) },
+    };
+    // 带上小程序卡片：客户点开卡片直达领取页（按 unionid 认出本人、显示他那一笔），
+    // 不用再让客户去搜索小程序名字。封面上传失败则自动降级为纯文字群发，不阻断。
+    let withCard = false;
+    try {
+      const picMediaId = await wecom.getCardCoverMediaId(readFileSync(CARD_COVER));
+      body.attachments = [
+        {
+          msgtype: 'miniprogram',
+          miniprogram: {
+            title: String((req.body || {}).cardTitle || '梨响ROC · 奖励待领取').slice(0, 64),
+            pic_media_id: picMediaId,
+            appid: config.wechatpay.appid, // = 小程序 AppID，须已关联到企微
+            page: 'pages/claim/claim.html', // 企微卡片 page 必须带 .html，否则打开报"页面不存在"
+          },
+        },
+      ];
+      withCard = true;
+    } catch (e) {
+      console.error('[wecom] 群发卡片封面上传失败，降级为纯文字：', e.code || e.message);
+    }
+    const r = await wecom.addMsgTemplate(body);
+    res.json({
+      ok: true,
+      msgid: r.msgid || '',
+      withCard,
+      failCount: (r.fail_list || []).length,
+      failList: r.fail_list || [],
     });
-    res.json({ ok: true, msgid: r.msgid || '', failCount: (r.fail_list || []).length, failList: r.fail_list || [] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

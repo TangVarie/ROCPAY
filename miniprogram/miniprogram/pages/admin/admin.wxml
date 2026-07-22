@@ -151,6 +151,20 @@
 
     <!-- ================= 记录 ================= -->
     <block wx:if="{{tab==='records'}}">
+      <!-- 实时可用余额：一眼看清"还剩多少可发"（发放员 / 管理员都可见） -->
+      <view class="block block-blue bal" wx:if="{{balance}}">
+        <view class="bal-top">
+          <text class="bal-label">可用余额 · 实时</text>
+          <text class="bal-refresh" bindtap="loadBalance">{{balanceLoading ? '刷新中…' : '刷新'}}</text>
+        </view>
+        <view class="bal-num num">¥{{balance.availableYuan}}</view>
+        <view class="bal-sub" wx:if="{{balance.hasPending}}">待结算 ¥{{balance.pendingYuan}}（暂不可用）</view>
+      </view>
+      <view class="bal-err" wx:elif="{{balanceErr}}">
+        <text class="t-light">{{balanceErr}}</text>
+        <text class="bal-err-retry" bindtap="loadBalance">重试</text>
+      </view>
+
       <!-- 数据色块：蓝主块 + 浅调对（不三块同色排排坐） -->
       <view class="statrow" wx:if="{{stats}}">
         <view class="block block-blue stat-main">

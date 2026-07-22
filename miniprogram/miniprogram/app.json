@@ -1,7 +1,7 @@
 {
   "pages": ["pages/claim/claim", "pages/admin/admin"],
   "window": {
-    "navigationBarTitleText": "芭梧奖励",
+    "navigationBarTitleText": "梨响ROC",
     "navigationBarBackgroundColor": "#fafafb",
     "navigationBarTextStyle": "black",
     "backgroundColor": "#fafafb"
