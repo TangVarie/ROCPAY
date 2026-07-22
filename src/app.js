@@ -159,20 +159,33 @@ app.get('/api/diagnose', async (req, res) => {
 // available_amount/pending_amount 单位是分(int64)，前端按元展示（务必 /100，否则 100 倍误差）。
 app.get('/api/balance', async (req, res) => {
   if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  // 账户类型：默认取配置；?account= 可临时探测（BASIC/OPERATION/FEES），省得改环境变量重部署
+  const ALLOWED = ['BASIC', 'OPERATION', 'FEES'];
+  const q = String(req.query.account || '').toUpperCase();
+  const accountType = ALLOWED.includes(q)
+    ? q
+    : ALLOWED.includes(config.wechatpay.balanceAccountType)
+    ? config.wechatpay.balanceAccountType
+    : 'BASIC';
   try {
-    const { status, data } = await wechatpay.request('GET', '/v3/merchant/fund/balance/BASIC');
+    const { status, data } = await wechatpay.request('GET', `/v3/merchant/fund/balance/${accountType}`);
     if (status !== 200) {
       const raw = data.message || data.code || `HTTP ${status}`;
-      // 商户号未开通该接口权限：给运营一句可操作的人话，别甩微信原文
+      // 未开通接口权限 / 账户类型不存在：都给运营一句可操作的人话，别甩微信原文
       const noAuth = data.code === 'NO_AUTH' || /没有.*权限|无.*权限|not.*permission/i.test(raw);
+      const badType = data.code === 'INVALID_REQUEST' && /账户|account/i.test(raw);
       return res.status(502).json({
         code: data.code || '',
+        accountType,
         error: noAuth
-          ? '实时余额接口未开通：请商户平台超管在「产品中心 → 申请开通」里申请余额查询权限，审核通过后此处自动显示（不影响发放与台账）'
+          ? '实时余额接口未开通：请商户平台超管在「产品中心 → 申请开通」搜"余额"申请余额查询权限，通过后此处自动显示（不影响发放与台账）'
+          : badType
+          ? `商户号没有 ${accountType} 账户：换个账户类型（设 WECHATPAY_BALANCE_ACCOUNT_TYPE=OPERATION 或 BASIC，或临时 URL 带 ?account=OPERATION 探测）`
           : raw,
       });
     }
     res.json({
+      accountType,
       availableYuan: (Number(data.available_amount) || 0) / 100,
       pendingYuan: (Number(data.pending_amount) || 0) / 100,
     });

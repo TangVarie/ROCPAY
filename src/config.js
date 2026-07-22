@@ -75,6 +75,9 @@ export const config = {
       }
     })(),
     notifyUrl: optional('WECHATPAY_NOTIFY_URL'), // 商家转账回调，形如 https://xxx/api/notify
+    // 余额查询账户类型：BASIC 基本账户 / OPERATION 运营账户 / FEES 手续费账户。
+    // 「商家转账」从哪个账户出资就查哪个（多数直连商户为 BASIC，部分从 OPERATION 出资）。
+    balanceAccountType: optional('WECHATPAY_BALANCE_ACCOUNT_TYPE', 'BASIC').toUpperCase(),
     // 平台验签/加密：微信支付公钥模式（可选），留空则自动下载平台证书
     publicKeyId: optional('WECHATPAY_PUBLIC_KEY_ID'),
     publicKeyPem: readPemEnv('WECHATPAY_PUBLIC_KEY'),
