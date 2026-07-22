@@ -13,6 +13,7 @@ function rawCall(path, method, data) {
       method: method || 'GET',
       header: { 'X-WX-SERVICE': SERVICE, 'content-type': 'application/json' },
       data: data || {},
+      timeout: 15000, // 单次调用超时，防止某次卡住后把整条串行队列一直堵住
       success: (r) => resolve(r.data),
       fail: reject,
     });
@@ -21,12 +22,22 @@ function rawCall(path, method, data) {
 
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
+// JS 层兜底超时：即便 callContainer 回调因异常永不触发，也让队列能继续推进
+function withTimeout(p, ms) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('timeout')), ms);
+    p.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); }
+    );
+  });
+}
+
 let queue = Promise.resolve();
 
 function call(path, method, data) {
-  const task = queue.then(() =>
-    rawCall(path, method, data).catch(() => sleep(400).then(() => rawCall(path, method, data)))
-  );
+  const attempt = () => withTimeout(rawCall(path, method, data), 16000);
+  const task = queue.then(() => attempt().catch(() => sleep(400).then(attempt)));
   // 队列只关心"轮到下一个"，不吞真实结果/错误
   queue = task.catch(() => {});
   return task;

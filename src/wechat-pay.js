@@ -93,11 +93,20 @@ export async function request(method, urlPath, body = null, opts = {}) {
   // 请求里带了加密字段时，必须告诉微信用的是哪个证书/公钥
   if (opts.serial) headers['Wechatpay-Serial'] = opts.serial;
 
-  const res = await fetch(BASE_URL + urlPath, {
-    method,
-    headers,
-    body: bodyStr || undefined,
-  });
+  // 加超时：微信支付/网络黑洞时，转账、查单、验签、余额等调用不会无限挂起（默认 10s）
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), opts.timeoutMs || 10000);
+  let res;
+  try {
+    res = await fetch(BASE_URL + urlPath, {
+      method,
+      headers,
+      body: bodyStr || undefined,
+      signal: ac.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 
   const text = await res.text();
   let data = {};

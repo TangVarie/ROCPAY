@@ -173,6 +173,7 @@ Page({
   },
 
   submitBatch() {
+    if (this.data.loading) return; // 防连点：重复提交会生成重复奖励（重复打款）
     const { selected, minAmountYuan, maxAmountYuan } = this.data;
     for (let i = 0; i < selected.length; i++) {
       const yuan = Number(selected[i].amountYuan);
@@ -236,6 +237,7 @@ Page({
   onRemark(e) { this.setData({ remark: e.detail.value }); },
   onName(e) { this.setData({ name: e.detail.value }); },
   onGenerate() {
+    if (this.data.loading) return; // 防连点
     const yuan = Number(this.data.amountYuan);
     if (!(yuan > 0)) return this.setData({ error: '请输入正确金额' });
     if (yuan < this.data.minAmountYuan)
@@ -321,8 +323,12 @@ Page({
       confirmText: isSet ? '设为剩余' : '加进额度',
       success: (r) => {
         if (!r.confirm) return;
-        const yuan = Number(r.content);
-        if (!(yuan >= 0)) return wx.showToast({ title: '请输入正确金额', icon: 'none' });
+        const raw = (r.content || '').trim(); // 空/纯空格不能当 0 静默提交
+        if (raw === '') return wx.showToast({ title: '请输入金额', icon: 'none' });
+        const yuan = Number(raw);
+        if (Number.isNaN(yuan) || yuan < 0 || (!isSet && yuan <= 0)) {
+          return wx.showToast({ title: '请输入正确金额', icon: 'none' });
+        }
         call('/api/period/adjust', 'POST', { mode, yuan })
           .then((res) => {
             if (res && res.error) return wx.showToast({ title: res.error, icon: 'none' });

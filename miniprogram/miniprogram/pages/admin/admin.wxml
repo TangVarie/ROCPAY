@@ -95,7 +95,7 @@
           </view>
 
           <view class="err" wx:if="{{sendErr}}">{{sendErr}}</view>
-          <button class="btn btn-blue btn-block submitbtn" bindtap="submitBatch" loading="{{loading}}">确认发放 {{selected.length}} 笔</button>
+          <button class="btn btn-blue btn-block submitbtn" bindtap="submitBatch" loading="{{loading}}" disabled="{{loading}}">确认发放 {{selected.length}} 笔</button>
           <view class="psub t-faint center">创建后需客户在小程序内确认收款，未领取不扣款</view>
         </view>
 
@@ -138,7 +138,7 @@
           <text class="flabel">姓名</text>
           <input class="input finput" placeholder="选填，2000元及以上必填" placeholder-class="ph" value="{{name}}" bindinput="onName" />
         </view>
-        <button class="btn btn-blue btn-block" bindtap="onGenerate" loading="{{loading}}">生成奖励</button>
+        <button class="btn btn-blue btn-block" bindtap="onGenerate" loading="{{loading}}" disabled="{{loading}}">生成奖励</button>
         <view class="err" wx:if="{{error}}">{{error}}</view>
         <block wx:if="{{reward}}">
           <view class="banner banner-success reward-ok">

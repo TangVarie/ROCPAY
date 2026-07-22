@@ -3,6 +3,7 @@
 //  小程序通过 wx.cloud.callContainer 调用，云托管会自动注入 x-wx-openid
 // ============================================================
 import express from 'express';
+import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
@@ -20,6 +21,27 @@ const BUILD = 'p2-bywood';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
+// 封面图只读一次（懒加载缓存），避免每次群发都同步读盘阻塞事件循环
+let cardCoverBuf = null;
+function cardCover() {
+  if (!cardCoverBuf) cardCoverBuf = readFileSync(CARD_COVER);
+  return cardCoverBuf;
+}
+// 恒定时间比较 ?key=（避免计时侧信道）；密钥未配置或为空一律拒绝
+function keyMatches(provided) {
+  const secret = config.app.rewardTokenSecret;
+  if (!secret || !provided) return false;
+  const a = Buffer.from(String(provided));
+  const b = Buffer.from(secret);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+// 收款人姓名规则（与 createTransferBill 一致）：在"生成"时就拦截，别拖到客户领取才炸
+function nameRuleError(yuan, name) {
+  const hasName = !!(name && String(name).trim());
+  if (yuan >= 2000 && !hasName) return '金额 ≥ 2000 元必须填写收款人真实姓名';
+  if (yuan < 0.3 && hasName) return '金额 < 0.3 元不支持填写收款人姓名';
+  return null;
+}
 
 // 落库辅助：尽力而为，任何写库失败只记日志，绝不阻断发钱/领钱链路
 function persist(action, fn) {
@@ -53,13 +75,41 @@ app.use((req, res, next) => {
   next();
 });
 
-// 云托管注入 x-wx-openid；本地调试可用 DEV_OPENID 环境变量顶替
-function getOpenid(req) {
-  return req.headers['x-wx-openid'] || process.env.DEV_OPENID || '';
+// ---- 公网域名防护 ----
+// 公网自定义域名（企微/安全医生回调用）与小程序内网 callContainer 是同一个 Express。
+// callContainer 由平台注入可信的 x-wx-openid；公网请求不会。为防有人在公网伪造 x-wx-openid
+// 冒充管理员：① 公网只放行回调/健康/验证等无需身份的路径；② 公网一律不信任 x-wx-* 身份头。
+// 在环境变量 WX_PUBLIC_HOSTS 填你的公网域名（逗号分隔，如 roc.bywood.com.cn）后生效。
+const PUBLIC_HOSTS = (process.env.WX_PUBLIC_HOSTS || '')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+const ALLOW_DEV_AUTH = process.env.ALLOW_DEV_AUTH === '1'; // 仅本地调试置 1；生产绝不设
+function viaPublicDomain(req) {
+  if (!PUBLIC_HOSTS.length) return false;
+  return PUBLIC_HOSTS.includes(String(req.headers.host || '').split(':')[0].toLowerCase());
 }
-// 云托管在「小程序已绑定开放平台」时注入 x-wx-unionid（P2 定向用）
+// 公网域名仅放行这些无需身份的路径；其余（/api/rewards、/api/period… 等管理/领取接口）一律 404
+app.use((req, res, next) => {
+  if (!viaPublicDomain(req)) return next();
+  const p = req.path;
+  const ok =
+    p === '/' ||
+    p === '/api/health' ||
+    p === '/api/notify' ||
+    p === '/api/wecom/callback' ||
+    p.startsWith('/verify_');
+  return ok ? next() : res.status(404).send('Not found');
+});
+
+// 身份来源：callContainer 注入的 x-wx-openid（公网不信任）。DEV_* 仅在 ALLOW_DEV_AUTH=1 时用于本地调试。
+function getOpenid(req) {
+  if (viaPublicDomain(req)) return '';
+  return req.headers['x-wx-openid'] || (ALLOW_DEV_AUTH ? process.env.DEV_OPENID : '') || '';
+}
 function getUnionid(req) {
-  return req.headers['x-wx-unionid'] || process.env.DEV_UNIONID || '';
+  if (viaPublicDomain(req)) return '';
+  return req.headers['x-wx-unionid'] || (ALLOW_DEV_AUTH ? process.env.DEV_UNIONID : '') || '';
 }
 // ---- 管理员/员工：DB 缓存 + 引导超管（ADMIN_OPENIDS 里的人始终是超管）----
 const bootstrapSupers = new Set(config.app.adminOpenids);
@@ -98,6 +148,15 @@ function isAdmin(openid) {
 function isSuperAdmin(openid) {
   return adminRole(openid) === 'super';
 }
+
+// 冷启动：首个 API 请求到达而管理员缓存尚未载入（adminCacheAt===0）时，先同步载入一次，
+// 避免仅存在于 DB（非 ADMIN_OPENIDS）的管理员在扩容瞬间被误判 403。
+app.use(async (req, res, next) => {
+  if (db.dbEnabled && adminCacheAt === 0 && req.path.startsWith('/api/')) {
+    await refreshAdmins().catch(() => {});
+  }
+  next();
+});
 
 // 健康检查（云托管探活）
 app.get('/', (_req, res) => res.status(200).send('ok'));
@@ -151,7 +210,7 @@ app.get('/api/me', (req, res) => {
 // 部署自检：验证 商户号/证书/私钥/APIv3密钥/出口IP白名单 是否全部有效
 // 部署后用浏览器访问 https://你的域名/api/diagnose?key=<REWARD_TOKEN_SECRET>
 app.get('/api/diagnose', async (req, res) => {
-  if (!config.app.rewardTokenSecret || req.query.key !== config.app.rewardTokenSecret) {
+  if (!keyMatches(req.query.key)) {
     return res.status(403).json({ error: 'forbidden：请带上正确的 ?key=REWARD_TOKEN_SECRET' });
   }
   try {
@@ -284,6 +343,8 @@ app.post('/api/rewards', (req, res) => {
   if (yuan > config.app.maxAmountYuan) {
     return res.status(400).json({ error: `金额超过上限 ${config.app.maxAmountYuan} 元` });
   }
+  const nameErr = nameRuleError(yuan, name);
+  if (nameErr) return res.status(400).json({ error: nameErr });
   const fen = Math.round(yuan * 100);
   try {
     const { token, rid, exp } = createRewardToken({ fen, remark, name });
@@ -300,7 +361,7 @@ app.post('/api/rewards', (req, res) => {
 // 两种鉴权：① 小程序内 x-wx-openid 命中管理员；或 ② 浏览器带 ?key=REWARD_TOKEN_SECRET（对账用）。
 app.get('/api/rewards', async (req, res) => {
   const byOpenid = isAdmin(getOpenid(req));
-  const byKey = !!config.app.rewardTokenSecret && req.query.key === config.app.rewardTokenSecret;
+  const byKey = keyMatches(req.query.key);
   if (!byOpenid && !byKey) {
     return res.status(403).json({ error: '无权限：小程序内管理员访问，或浏览器带 ?key=REWARD_TOKEN_SECRET' });
   }
@@ -454,7 +515,7 @@ app.post('/api/deliver', async (req, res) => {
     // 不用再让客户去搜索小程序名字。封面上传失败则自动降级为纯文字群发，不阻断。
     let withCard = false;
     try {
-      const picMediaId = await wecom.getCardCoverMediaId(readFileSync(CARD_COVER));
+      const picMediaId = await wecom.getCardCoverMediaId(cardCover());
       body.attachments = [
         {
           msgtype: 'miniprogram',
@@ -515,6 +576,11 @@ app.post('/api/rewards/batch', async (req, res) => {
       errors.push({ i, target, error: `金额不能大于 ${config.app.maxAmountYuan} 元` });
       continue;
     }
+    const itNameErr = nameRuleError(yuan, it.name);
+    if (itNameErr) {
+      errors.push({ i, target, error: itNameErr });
+      continue;
+    }
     const rid = newRid();
     const exp = Math.floor(Date.now() / 1000) + config.app.rewardTtlHours * 3600;
     try {
@@ -542,8 +608,9 @@ app.get('/api/claim/mine', async (req, res) => {
   if (!openid) return res.status(401).json({ error: '请在微信小程序内打开' });
   if (!db.dbEnabled) return res.json({ reward: null, reason: 'no_db' });
   try {
-    // 首页自动探测：只查本地库（快、不阻塞）；企微在线转换留给 POST 领取时兜底，避免每次开首页都等企微
-    const externalUserid = unionid ? await db.findCustomerByUnionid(unionid).catch(() => null) : null;
+    // 首页自动探测：本地库优先（快），未命中再走企微在线转换兜底（已带 6s 超时，不会拖死）。
+    // 否则"同步时未拿到 unionid / 未同步"的定向客户会一直看不到属于自己的奖励。
+    const externalUserid = await resolveCustomer(unionid, openid);
     if (!externalUserid) return res.json({ reward: null, reason: unionid ? 'not_a_customer' : 'no_unionid' });
     const r = await db.findPendingRewardForTarget(externalUserid);
     if (!r) return res.json({ reward: null, reason: 'no_pending' });
@@ -666,8 +733,11 @@ app.post('/api/claim', async (req, res) => {
   }
 });
 
-// 查询转账单状态（对账/排查）
+// 查询转账单状态（对账/排查）——管理员或对账 ?key=；含收款人 openid/金额，不可匿名访问
 app.get('/api/transfers/:outBillNo', async (req, res) => {
+  if (!isAdmin(getOpenid(req)) && !keyMatches(req.query.key)) {
+    return res.status(403).json({ error: '无权限：小程序内管理员访问，或带 ?key=REWARD_TOKEN_SECRET' });
+  }
   try {
     const data = await queryTransferByOutBillNo(req.params.outBillNo);
     // 顺手用最新状态回写库（对账自愈；带 openid+金额，行缺失也能补齐）

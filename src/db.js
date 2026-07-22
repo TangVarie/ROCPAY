@@ -247,8 +247,10 @@ const TERMINAL_SQL = TERMINAL_STATES.map((s) => `'${s}'`).join(','); // 常量�
 const isTerminal = (s) => TERMINAL_STATES.includes(String(s || '').toUpperCase());
 // 状态回写守卫：新状态非空，且（新状态是终态 或 当前不是终态）时才覆盖，否则保留原值。
 // 既防止「空状态清空已有状态」，也防止「终态被回退成非终态」。
+// 额外：SUCCESS 一旦写入即"钉死"，不被任何后续状态覆盖（与 rewards.status 的 SUCCESS 保护一致，
+// 避免已到账的转账在乱序/重放事件里被翻成失败，误导后台对账、诱发重发）。
 const STATE_GUARD = (newExpr) =>
-  `IF(:state_nonempty = 1 AND (:new_terminal = 1 OR state NOT IN (${TERMINAL_SQL})), ${newExpr}, state)`;
+  `IF(:state_nonempty = 1 AND state <> 'SUCCESS' AND (:new_terminal = 1 OR state NOT IN (${TERMINAL_SQL})), ${newExpr}, state)`;
 
 // 截断到列长度，避免超长字符串触发 MySQL 严格模式 'Data too long' 导致整行落库失败
 function clip(s, n) {

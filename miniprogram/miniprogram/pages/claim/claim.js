@@ -95,13 +95,23 @@ Page({
   // 链接领取（令牌）
   onClaimToken() {
     if (!this.data.token || this.data.status === 'loading') return;
+    // 确认页被手滑关掉后再点：直接重开确认，别再 POST（转账已发起，重开即可）
+    if (this._pendingTransfer) {
+      this.setData({ status: 'loading', message: '' });
+      return this._confirmTransfer(this._pendingTransfer, () => {
+        this._pendingTransfer = null;
+        this.setData({ status: 'ok', message: '已到账微信零钱' });
+      });
+    }
     this.setData({ status: 'loading', message: '' });
     call('/api/claim', 'POST', { token: this.data.token })
       .then((res) => {
         if (res && res.error) return this.setData({ status: 'fail', message: res.error });
-        this._confirmTransfer(res, () =>
-          this.setData({ status: 'ok', message: '已到账微信零钱' })
-        );
+        this._pendingTransfer = res;
+        this._confirmTransfer(res, () => {
+          this._pendingTransfer = null;
+          this.setData({ status: 'ok', message: '已到账微信零钱' });
+        });
       })
       .catch((e) =>
         this.setData({ status: 'fail', message: '网络错误：' + (e.errMsg || e.message || '') })
@@ -111,19 +121,45 @@ Page({
   // 定向领取（身份识别，无需链接）
   onClaimMine() {
     if (this.data.status === 'loading') return;
+    // 确认页被手滑关掉后再点：直接重开确认（那笔已 CLAIMED，再 POST 会 404）
+    if (this._pendingTransfer) {
+      this.setData({ status: 'loading', message: '' });
+      return this._confirmTransfer(this._pendingTransfer, () => this._afterMineOk());
+    }
     this.setData({ status: 'loading', message: '' });
     call('/api/claim/mine', 'POST', {})
       .then((res) => {
         if (res && res.error) return this.setData({ status: 'fail', message: res.error });
-        this._confirmTransfer(res, () => {
-          const n = this.data.claimedCount + 1;
-          this.setData({ status: 'ok', message: '已到账微信零钱', claimedCount: n });
-          // 可能还有下一笔，稍后自动再查
-          setTimeout(() => this.checkMine(), 1200);
-        });
+        this._pendingTransfer = res;
+        this._confirmTransfer(res, () => this._afterMineOk());
       })
       .catch((e) =>
         this.setData({ status: 'fail', message: '网络错误：' + (e.errMsg || e.message || '') })
       );
+  },
+
+  _afterMineOk() {
+    this._pendingTransfer = null;
+    const n = this.data.claimedCount + 1;
+    this.setData({ status: 'ok', message: '已到账微信零钱', claimedCount: n });
+    // 可能还有下一笔：安静地查，绝不用 loading/empty 盖掉"已到账"画面
+    setTimeout(() => this.checkMineQuiet(), 1500);
+  },
+
+  // 安静查下一笔：只有真的还有奖励才切回领取态，否则保持"已到账"提示不动
+  checkMineQuiet() {
+    call('/api/claim/mine', 'GET')
+      .then((mine) => {
+        if (mine && mine.reward) {
+          this.setData({
+            mode: 'mine',
+            mineAmt: Number(mine.reward.amountYuan).toFixed(2),
+            mineRemark: mine.reward.remark || '',
+            status: 'idle',
+            message: '',
+          });
+        }
+      })
+      .catch(() => {});
   },
 });

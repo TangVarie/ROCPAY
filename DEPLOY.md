@@ -112,6 +112,7 @@
 | **`MYSQL_DATABASE`** | **rocpay** |
 
 > 企微（P2，接企微时才填，见 §12）：`WECOM_CORPID`、`WECOM_CONTACT_SECRET`、`WECOM_CALLBACK_TOKEN`、`WECOM_CALLBACK_AES_KEY`（后两个用于解锁「企业可信IP」，见 §12.4）、可选 `WECOM_AGENT_ID`。
+> **安全（强烈建议）**：`WX_PUBLIC_HOSTS`=你的公网自定义域名（如 `roc.bywood.com.cn`，多个逗号分隔）。设了它，公网域名只放行回调/健康/验证路径、且不信任伪造的 x-wx-openid，防止有人从公网冒充管理员调 `/api/rewards` 等接口。小程序走内网 callContainer 不受影响（设完用体验版验一下发放正常即可）。`ALLOW_DEV_AUTH` 只在本地调试用 `DEV_OPENID` 时置 `1`，**生产环境绝不要设**。
 > 可选：`MYSQL_POOL_SIZE`（默认 5）、`DB_AUTO_MIGRATE`（默认 true）、`REWARD_TTL_HOURS`（默认 72）、`MAX_AMOUNT_YUAN`（默认 5000）、`MIN_AMOUNT_YUAN`（默认 0.1，见 §11）。
 > 余额台账：`WECHATPAY_BALANCE_ACCOUNT_TYPE`（默认 `BASIC`；若「商家转账」从运营账户出资则设 `OPERATION`）。余额查询是**独立接口权限**，需在商户平台「产品中心→申请开通」搜"余额"单独开通（与打款权限互不带通），未开通不影响发放与台账，只是余额块显示"未开通"。可临时用 `/api/balance?account=OPERATION` 探测你商户号有哪个账户。
 > 安全医生域名验证：商户平台「账户中心→安全中心→安全医生」下载 `verify_xxx.html` 后，把**文件名**填 `WECHATPAY_VERIFY_FILE`、**文件内容**填 `WECHATPAY_VERIFY_CONTENT`，重部署 → 访问 `https://<你的域名>/verify_xxx.html` 能返回内容即可点"开始验证"。诊断链接按 `https://<域名>/api/notify` 格式绑定；对接 API 的服务器 IP = 云托管出口IP（与打款白名单同一个）。
