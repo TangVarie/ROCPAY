@@ -15,6 +15,17 @@ export const wecomEnabled = config.wecom.enabled;
 
 let tokenCache = { token: '', exp: 0 };
 
+// 企微接口统一加超时（默认 6s）：防止企微慢/不通时，调用方（如客户开首页）无限等待
+async function fetchWT(url, opts = {}, ms = 6000) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ac.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 /** 获取并缓存 access_token（提前 5 分钟过期） */
 export async function getToken() {
   if (!wecomEnabled) throw new Error('企微未配置（需 WECOM_CORPID + WECOM_CONTACT_SECRET）');
@@ -23,7 +34,7 @@ export async function getToken() {
   const url = `${BASE}/gettoken?corpid=${encodeURIComponent(config.wecom.corpid)}&corpsecret=${encodeURIComponent(
     config.wecom.contactSecret
   )}`;
-  const res = await fetch(url);
+  const res = await fetchWT(url);
   const data = await res.json();
   if (data.errcode) throw new Error(`企微 gettoken 失败：${data.errcode} ${data.errmsg}`);
   tokenCache = { token: data.access_token, exp: now + (Number(data.expires_in || 7200) - 300) * 1000 };
@@ -33,7 +44,7 @@ export async function getToken() {
 async function call(method, path, { query = {}, body } = {}) {
   const token = await getToken();
   const qs = new URLSearchParams({ access_token: token, ...query }).toString();
-  const res = await fetch(`${BASE}${path}?${qs}`, {
+  const res = await fetchWT(`${BASE}${path}?${qs}`, {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : {},
     body: body ? JSON.stringify(body) : undefined,

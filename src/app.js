@@ -476,7 +476,8 @@ app.get('/api/claim/mine', async (req, res) => {
   if (!openid) return res.status(401).json({ error: '请在微信小程序内打开' });
   if (!db.dbEnabled) return res.json({ reward: null, reason: 'no_db' });
   try {
-    const externalUserid = await resolveCustomer(unionid, openid);
+    // 首页自动探测：只查本地库（快、不阻塞）；企微在线转换留给 POST 领取时兜底，避免每次开首页都等企微
+    const externalUserid = unionid ? await db.findCustomerByUnionid(unionid).catch(() => null) : null;
     if (!externalUserid) return res.json({ reward: null, reason: unionid ? 'not_a_customer' : 'no_unionid' });
     const r = await db.findPendingRewardForTarget(externalUserid);
     if (!r) return res.json({ reward: null, reason: 'no_pending' });
