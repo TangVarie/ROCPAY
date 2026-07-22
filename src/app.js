@@ -162,7 +162,15 @@ app.get('/api/balance', async (req, res) => {
   try {
     const { status, data } = await wechatpay.request('GET', '/v3/merchant/fund/balance/BASIC');
     if (status !== 200) {
-      return res.status(502).json({ error: data.message || data.code || `HTTP ${status}` });
+      const raw = data.message || data.code || `HTTP ${status}`;
+      // 商户号未开通该接口权限：给运营一句可操作的人话，别甩微信原文
+      const noAuth = data.code === 'NO_AUTH' || /没有.*权限|无.*权限|not.*permission/i.test(raw);
+      return res.status(502).json({
+        code: data.code || '',
+        error: noAuth
+          ? '实时余额接口未开通：请商户平台超管在「产品中心 → 申请开通」里申请余额查询权限，审核通过后此处自动显示（不影响发放与台账）'
+          : raw,
+      });
     }
     res.json({
       availableYuan: (Number(data.available_amount) || 0) / 100,
