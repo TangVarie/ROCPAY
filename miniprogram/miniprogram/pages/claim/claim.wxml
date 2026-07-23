@@ -47,6 +47,12 @@
       </view>
       <view class="lv-next t-faint" wx:if="{{profile.nextText}}">{{profile.nextText}}</view>
     </view>
+
+    <!-- 下半版面：品牌大字报（到账后用正红呼应奖励色） -->
+    <view class="wm-zone">
+      <view class="wm {{status==='ok' ? 'wm-red' : ''}} num">ROC</view>
+      <view class="wm-line">梨响 ROC · 奖励，说到做到</view>
+    </view>
   </block>
 
   <!-- 无奖励 -->
@@ -76,6 +82,13 @@
 
       <button class="btn btn-blue btn-block" bindtap="goAdmin">进入工作台</button>
       <view class="ah-tips t-faint">定向发放 · 台账对账 · 客户等级榜</view>
+
+      <!-- 下半版面：累计发放大字报（有内容的填充） -->
+      <view class="wm-zone" wx:if="{{adminHome && adminHome.totalAllYuan}}">
+        <view class="wm-label">累计发放</view>
+        <view class="wm wm-num num">¥{{adminHome.totalAllYuan}}</view>
+        <view class="wm-line">梨响 ROC · 奖励，说到做到</view>
+      </view>
     </block>
     <block wx:else>
       <view class="state">
@@ -100,6 +113,12 @@
           <text class="openid-text num">{{ openid || '请在微信小程序内打开' }}</text>
           <text class="openid-copy" wx:if="{{openid}}" bindtap="copyOpenid">复制</text>
         </view>
+      </view>
+
+      <!-- 下半版面：品牌大字报（编辑部式填充） -->
+      <view class="wm-zone">
+        <view class="wm num">ROC</view>
+        <view class="wm-line">梨响 ROC · 奖励，说到做到</view>
       </view>
     </block>
   </block>

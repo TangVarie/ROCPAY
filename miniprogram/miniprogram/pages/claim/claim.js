@@ -139,6 +139,18 @@ Page({
         });
       })
       .catch(() => {});
+    // 累计发放（大字报用，千分位整数）
+    call('/api/rewards?limit=1', 'GET')
+      .then((r) => {
+        if (!r || !r.stats) return;
+        const total = Math.round((r.stats.total_fen || 0) / 100);
+        this.setData({
+          adminHome: Object.assign({ hasQuota: false }, this.data.adminHome, {
+            totalAllYuan: String(total).replace(/\B(?=(\d{3})+(?!\d))/g, ','),
+          }),
+        });
+      })
+      .catch(() => {});
   },
 
   copyOpenid() {

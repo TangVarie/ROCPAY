@@ -195,6 +195,33 @@ page {
 .li-inbox { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-opacity='0.3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='22 12 16 12 14 15 10 15 8 12 2 12'/%3E%3Cpath d='M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/%3E%3C/svg%3E"); }
 .li-alert { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-opacity='0.3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='12' y1='8' x2='12' y2='12'/%3E%3Cline x1='12' y1='16' x2='12.01' y2='16'/%3E%3C/svg%3E"); }
 
+/* ---- 编辑部大字报水印：超大版面元素填充留白（极淡品牌色，不抢主体） ---- */
+.wm-zone { margin-top: 56rpx; overflow: hidden; }
+.wm-label {
+  font-size: 24rpx;
+  letter-spacing: 4rpx;
+  color: var(--text-faint);
+  margin-bottom: 4rpx;
+}
+.wm {
+  font-family: var(--font-num);
+  font-weight: 800;
+  font-size: 220rpx;
+  line-height: 1.05;
+  letter-spacing: -8rpx;
+  white-space: nowrap;
+  color: rgba(35, 94, 142, 0.07); /* 藏蓝极淡 */
+  margin-left: -6rpx; /* 轻微出血，版面感 */
+}
+.wm-num { font-size: 150rpx; letter-spacing: -4rpx; }
+.wm-red { color: rgba(217, 35, 43, 0.06); }
+.wm-line {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  letter-spacing: 6rpx;
+  color: var(--text-faint);
+}
+
 /* ---- 块级联入场（唯一允许的入场动效，有信息含义） ---- */
 @keyframes fadeUpIn {
   from { opacity: 0; transform: translateY(14rpx); }
