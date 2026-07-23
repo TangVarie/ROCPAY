@@ -233,11 +233,13 @@ function expToDate(exp) {
   return exp ? new Date(Number(exp) * 1000) : null;
 }
 
-// 转账状态 → 奖励状态（只在终态时回写 rewards.status）
+// 转账状态 → 奖励状态（只在终态时回写 rewards.status）。
+// 撤销(CANCELLED/CANCELING)单独立状态：台账要能看出"我们主动撤回、资金已回流"，和真失败区分开
 function rewardStatusOf(state) {
   const s = String(state || '').toUpperCase();
   if (s === 'SUCCESS') return 'SUCCESS';
-  if (s === 'FAIL' || s === 'CLOSED' || s === 'CANCELLED' || s === 'CANCELING') return 'FAIL';
+  if (s === 'CANCELLED' || s === 'CANCELING') return 'CANCELLED';
+  if (s === 'FAIL' || s === 'CLOSED') return 'FAIL';
   return null;
 }
 
@@ -423,11 +425,35 @@ export async function saveNotifyEvent({ eventType, outBillNo, transferBillNo, st
  * 【后台】最近发放记录（含转账状态）。limit/offset 已强制为安全整数。
  * 数据最小化：不返回 recipient_name（真实姓名·PII）；如需按单查姓名请单独走审计。
  */
-export async function listRewards({ limit = 50, offset = 0 } = {}) {
+// 台账筛选条件 → WHERE 子句（listRewards/getStats 共用，保证列表和汇总口径一致）
+//   status: all|created(待领取)|waiting(待确认)|success|failed(含失败/关闭/撤回)
+//   days:   只看近 N 天（0=全部）；target: 只看某个客户（单人资金往来）
+function rewardFilterSql({ status = 'all', days = 0, target = '' } = {}) {
+  const conds = [];
+  const params = {};
+  const st = String(status || 'all');
+  if (st === 'created') conds.push(`r.status = 'CREATED'`);
+  else if (st === 'waiting') conds.push(`r.status = 'CLAIMED'`);
+  else if (st === 'success') conds.push(`r.status = 'SUCCESS'`);
+  else if (st === 'failed') conds.push(`r.status IN ('FAIL','CLOSED','CANCELLED')`);
+  const d = parseInt(days, 10) || 0;
+  if (d > 0) {
+    conds.push(`r.created_at > DATE_SUB(NOW(), INTERVAL :days DAY)`);
+    params.days = d;
+  }
+  if (target) {
+    conds.push(`r.target_external_userid = :target`);
+    params.target = String(target);
+  }
+  return { where: conds.length ? `WHERE ${conds.join(' AND ')}` : '', params };
+}
+
+export async function listRewards({ limit = 50, offset = 0, status, days, target } = {}) {
   if (!pool) return [];
   const lim = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
   const off = Math.max(parseInt(offset, 10) || 0, 0);
-  const [rows] = await pool.query(
+  const { where, params } = rewardFilterSql({ status, days, target });
+  const [rows] = await pool.execute(
     `SELECT r.rid, r.amount_fen, r.remark, r.created_by, r.status,
             r.created_at, r.expires_at, r.target_external_userid,
             c.remark AS target_remark, c.name AS target_name,
@@ -438,26 +464,36 @@ export async function listRewards({ limit = 50, offset = 0 } = {}) {
        LEFT JOIN transfers t ON t.out_bill_no = r.rid
        LEFT JOIN customers c ON c.external_userid = r.target_external_userid
        LEFT JOIN admins a ON a.openid = r.created_by
+      ${where}
       ORDER BY r.created_at DESC
-      LIMIT ${lim} OFFSET ${off}`
+      LIMIT ${lim} OFFSET ${off}`,
+    params
   );
   return rows;
 }
 
 /** 【后台】汇总统计（空表也返回 0；数值统一为 number 类型） */
-export async function getStats() {
+// 汇总：支持与 listRewards 相同的筛选（期间资金消耗、单人资金往来都从这里出）
+export async function getStats(filters = {}) {
   if (!pool) return null;
-  const [[row]] = await pool.query(
+  const { where, params } = rewardFilterSql(filters);
+  const [[row]] = await pool.execute(
     `SELECT COUNT(*) AS total,
-            COALESCE(SUM(amount_fen),0) AS total_fen,
-            COALESCE(SUM(status='SUCCESS'),0) AS success_count,
-            COALESCE(SUM(status IN ('CREATED','CLAIMED')),0) AS pending_count,
-            COALESCE(SUM(status='FAIL'),0) AS fail_count
-       FROM rewards`
+            COALESCE(SUM(r.amount_fen),0) AS total_fen,
+            COALESCE(SUM(r.status IN ('CLAIMED','SUCCESS') ), 0) AS paid_count,
+            COALESCE(SUM(IF(r.status IN ('CLAIMED','SUCCESS'), r.amount_fen, 0)),0) AS paid_fen,
+            COALESCE(SUM(r.status='SUCCESS'),0) AS success_count,
+            COALESCE(SUM(r.status IN ('CREATED','CLAIMED')),0) AS pending_count,
+            COALESCE(SUM(r.status IN ('FAIL','CLOSED','CANCELLED')),0) AS fail_count
+       FROM rewards r
+      ${where}`,
+    params
   );
   return {
     total: Number(row.total),
     total_fen: Number(row.total_fen),
+    paid_count: Number(row.paid_count), // 实际动钱的笔数（已划走/在途）
+    paid_fen: Number(row.paid_fen), //     实际动钱的金额——期间资金消耗看这个
     success_count: Number(row.success_count),
     pending_count: Number(row.pending_count),
     fail_count: Number(row.fail_count),
@@ -701,6 +737,37 @@ export async function findPendingRewardForTarget(externalUserid) {
   return rows.length ? rows[0] : null;
 }
 
+/** 取一笔奖励的关键字段（撤回/领取拦截用） */
+export async function getReward(rid) {
+  if (!pool || !rid) return null;
+  const [rows] = await pool.execute(
+    `SELECT rid, amount_fen, remark, status, target_external_userid FROM rewards WHERE rid=:rid LIMIT 1`,
+    { rid }
+  );
+  return rows.length ? rows[0] : null;
+}
+
+/** 撤回一笔未领取(CREATED)的奖励：置 CANCELLED，客户随即不可再领。返回是否真的撤到了 */
+export async function revokeReward(rid) {
+  if (!pool) throw new Error('未开启数据库');
+  const [r] = await pool.execute(
+    `UPDATE rewards SET status='CANCELLED' WHERE rid=:rid AND status='CREATED'`,
+    { rid }
+  );
+  return r.affectedRows > 0;
+}
+
+/** 客户领取档案：合作次数/累计到账（等级体系的数据源，按领取人 openid 统计真实到账） */
+export async function getClaimerProfile(openid) {
+  if (!pool || !openid) return { count: 0, totalFen: 0 };
+  const [[row]] = await pool.execute(
+    `SELECT COUNT(*) AS n, COALESCE(SUM(amount_fen),0) AS fen
+       FROM transfers WHERE claimer_openid=:o AND state='SUCCESS'`,
+    { o: openid }
+  );
+  return { count: Number(row.n), totalFen: Number(row.fen) };
+}
+
 /** 查一笔奖励是否是定向的（供 token 领取时拦截，防止绕过定向） */
 export async function getRewardTarget(rid) {
   if (!pool || !rid) return null;
@@ -739,6 +806,9 @@ export const db = {
   bindCustomerOpenid,
   findPendingRewardForTarget,
   getRewardTarget,
+  getReward,
+  revokeReward,
+  getClaimerProfile,
 };
 
 export default db;

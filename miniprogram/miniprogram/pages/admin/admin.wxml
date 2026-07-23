@@ -180,12 +180,27 @@
         </block>
       </view>
 
-      <!-- 数据色块：可发额度是本页唯一蓝色 hero，累计降为浅调（不同色块摞排坐） -->
+      <!-- 台账筛选：状态 × 时间范围；点客户名可只看单人往来 -->
+      <view class="fchips">
+        <view class="fchip {{recFilter.status==='all'?'on':''}}" data-k="status" data-v="all" bindtap="pickRecFilter">全部</view>
+        <view class="fchip {{recFilter.status==='created'?'on':''}}" data-k="status" data-v="created" bindtap="pickRecFilter">待领取</view>
+        <view class="fchip {{recFilter.status==='waiting'?'on':''}}" data-k="status" data-v="waiting" bindtap="pickRecFilter">待确认</view>
+        <view class="fchip {{recFilter.status==='success'?'on':''}}" data-k="status" data-v="success" bindtap="pickRecFilter">已到账</view>
+        <view class="fchip {{recFilter.status==='failed'?'on':''}}" data-k="status" data-v="failed" bindtap="pickRecFilter">失败/撤回</view>
+      </view>
+      <view class="fchips">
+        <view class="fchip {{recFilter.days===0?'on':''}}" data-k="days" data-v="0" bindtap="pickRecFilter">全部时间</view>
+        <view class="fchip {{recFilter.days===7?'on':''}}" data-k="days" data-v="7" bindtap="pickRecFilter">近7天</view>
+        <view class="fchip {{recFilter.days===30?'on':''}}" data-k="days" data-v="30" bindtap="pickRecFilter">近30天</view>
+        <view class="fchip fchip-target on" wx:if="{{recFilter.target}}" bindtap="clearCustomerFilter">{{recFilter.targetLabel}} ✕</view>
+      </view>
+
+      <!-- 汇总（跟随筛选：范围内合计/动账，即期间或单人资金消耗） -->
       <view class="statrow" wx:if="{{stats}}">
         <view class="block tint-sky stat-main">
-          <view class="sm-label">累计发放</view>
+          <view class="sm-label">{{recFilter.target ? recFilter.targetLabel + ' · 往来合计' : '发放合计'}}</view>
           <view class="sm-num num">¥{{statsTotalYuan}}</view>
-          <view class="sm-sub">共 {{stats.total}} 笔</view>
+          <view class="sm-sub">共 {{stats.total}} 笔 · 实际动账 ¥{{statsPaidYuan}}</view>
         </view>
         <view class="stat-side">
           <view class="block tint-sky stat-mini">
@@ -205,15 +220,17 @@
           <view class="rec-l">
             <view class="rec-line1">
               <text class="rec-amt num t-dark">¥{{item.yuan}}</text>
-              <text class="rec-who t-light" wx:if="{{item.who}}">{{item.who}}</text>
+              <text class="rec-who t-light" wx:if="{{item.who}}" data-eu="{{item.eu}}" data-label="{{item.who}}" catchtap="filterByCustomer">{{item.who}}</text>
             </view>
             <view class="rec-remark t-light">{{item.sub}}</view>
           </view>
           <view class="rec-r">
             <text class="badge {{item.cls==='ok'?'badge-success':item.cls==='fail'?'badge-danger':'badge-warning'}}">{{item.statusText}}</text>
             <text class="rec-time t-faint num">{{item.createdAt}}</text>
+            <text class="rec-revoke" wx:if="{{item.canRevoke}}" data-rid="{{item.rid}}" data-yuan="{{item.yuan}}" data-who="{{item.who}}" catchtap="revokeReward">撤回</text>
           </view>
         </view>
+        <view class="loadmore textbtn" wx:if="{{recHasMore}}" bindtap="loadMoreRecords">{{recLoading ? '加载中…' : '加载更多'}}</view>
       </block>
       <view class="state" wx:else>
         <view class="li li-inbox state-icon"></view>

@@ -18,7 +18,8 @@
 
   <!-- 奖励色块：领取前红块 / 到账后蓝块，块内纯白 -->
   <block wx:if="{{mode==='token' || mode==='mine'}}">
-    <view class="reward-block {{status==='ok' ? 'block-blue' : 'block-red'}} block">
+    <view class="reward-block {{status==='ok' ? 'block-blue' : 'block-red'}} {{celebrate ? 'celebrate' : ''}} block">
+      <view class="rb-checkwrap" wx:if="{{status==='ok'}}"><view class="rb-check"></view></view>
       <view class="rb-label">{{ status==='ok' ? '已到账微信零钱' : (mode==='mine' ? '属于你的奖励' : '你收到一笔奖励') }}</view>
       <view class="rb-amount"><text class="rb-sign num">¥</text><text class="rb-num num">{{ mode==='mine' ? mineAmt : amtText }}</text></view>
       <view class="rb-remark" wx:if="{{mode==='mine' ? mineRemark : remark}}">{{ mode==='mine' ? mineRemark : remark }}</view>
@@ -36,6 +37,15 @@
 
     <view class="after-note" wx:if="{{mode==='mine' && claimedCount > 0 && status!=='ok'}}">
       本次已领取 {{claimedCount}} 笔，上面是新的一笔
+    </view>
+
+    <!-- 合作档案 · 等级（领取界面也能看到） -->
+    <view class="panel lvcard" wx:if="{{profile}}">
+      <view class="lv-line1">
+        <text class="badge badge-blue">LV{{profile.lv}} · {{profile.name}}</text>
+        <text class="lv-nums t-light num">合作 {{profile.count}} 次 · 累计 ¥{{profile.totalYuan}}</text>
+      </view>
+      <view class="lv-next t-faint" wx:if="{{profile.nextText}}">{{profile.nextText}}</view>
     </view>
   </block>
 
@@ -55,6 +65,16 @@
         <view class="state-t1">暂时没有你的奖励</view>
         <view class="state-t2">收到奖励后，打开这里即可领取</view>
       </view>
+
+      <!-- 合作档案 · 等级（没有奖励时开屏也能看到自己的记录池） -->
+      <view class="panel lvcard" wx:if="{{profile}}">
+        <view class="lv-line1">
+          <text class="badge badge-blue">LV{{profile.lv}} · {{profile.name}}</text>
+          <text class="lv-nums t-light num">合作 {{profile.count}} 次 · 累计 ¥{{profile.totalYuan}}</text>
+        </view>
+        <view class="lv-next t-faint" wx:if="{{profile.nextText}}">{{profile.nextText}}</view>
+      </view>
+
       <view class="panel join">
         <view class="join-t t-dark">是本公司员工？</view>
         <view class="join-s t-light">把下面的编号发给管理员，开通发放权限</view>

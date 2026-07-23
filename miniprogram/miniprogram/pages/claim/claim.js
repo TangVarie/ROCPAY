@@ -18,6 +18,8 @@ Page({
     status: 'idle', // idle | loading | ok | fail
     message: '',
     claimedCount: 0, // 本次会话已领取笔数（定向可能有多笔）
+    celebrate: false, // 到账仪式（画勾 + 呼吸 + 数字滚动）
+    profile: null, // 合作档案 { lv, name, count, totalYuan, nextText }
   },
 
   onLoad(options) {
@@ -32,10 +34,41 @@ Page({
         amtText: n > 0 ? n.toFixed(2) : '--',
         remark: options.remark ? decodeURIComponent(options.remark) : '',
       });
+      this.refreshProfile(); // 顺带拉合作档案（等级卡）
       return;
     }
     // 直接打开：识别身份，看有没有属于我的定向奖励
     this.checkMine();
+  },
+
+  // 合作档案（等级）：/api/me 里带回，静默失败不打扰主流程
+  _profileOf(me) {
+    const p = me && me.profile;
+    if (!p) return null;
+    const lv = p.level || { lv: 0, name: '初识', next: null };
+    let nextText = '';
+    if (lv.next) {
+      const parts = [];
+      if (lv.next.needCount > 0) parts.push(`再合作 ${lv.next.needCount} 次`);
+      if (lv.next.needYuan != null && lv.next.needYuan > 0) parts.push(`累计满 ¥${Math.ceil(Number(p.totalYuan) + lv.next.needYuan)}`);
+      if (parts.length) nextText = parts.join(' 或 ') + `，升级${lv.next.name}`;
+    }
+    return {
+      lv: lv.lv,
+      name: lv.name,
+      count: p.count || 0,
+      totalYuan: Number(p.totalYuan || 0).toFixed(2),
+      nextText,
+    };
+  },
+  refreshProfile() {
+    call('/api/me', 'GET')
+      .then((me) => {
+        if (me && me.openid) {
+          this.setData({ openid: me.openid, isAdmin: !!me.isAdmin, profile: this._profileOf(me) });
+        }
+      })
+      .catch(() => {});
   },
 
   checkMine() {
@@ -50,7 +83,7 @@ Page({
         this.setData({ mode: 'error', message: detail });
         return;
       }
-      const base = { isAdmin: !!me.isAdmin, openid: me.openid || '' };
+      const base = { isAdmin: !!me.isAdmin, openid: me.openid || '', profile: this._profileOf(me) };
       if (mine && mine.reward) {
         this.setData({
           ...base,
@@ -92,26 +125,42 @@ Page({
     });
   },
 
+  // 到账仪式：画勾+色块呼吸（CSS）+ 金额数字滚动到位（JS 更新展示值）
+  _celebrate(amtKey) {
+    const target = Number(this.data[amtKey]) || 0;
+    this.setData({ celebrate: true });
+    if (!(target > 0)) return;
+    if (this._countTimer) clearInterval(this._countTimer);
+    const t0 = Date.now();
+    const DUR = 700;
+    this._countTimer = setInterval(() => {
+      const p = Math.min(1, (Date.now() - t0) / DUR);
+      const eased = 1 - Math.pow(1 - p, 3); // ease-out
+      this.setData({ [amtKey]: (target * eased).toFixed(2) });
+      if (p >= 1) clearInterval(this._countTimer);
+    }, 33);
+  },
+  _tokenOk() {
+    this._pendingTransfer = null;
+    this.setData({ status: 'ok', message: '已到账微信零钱' });
+    this._celebrate('amtText');
+    setTimeout(() => this.refreshProfile(), 1200); // 到账后档案(合作次数/累计)自动 +1
+  },
+
   // 链接领取（令牌）
   onClaimToken() {
     if (!this.data.token || this.data.status === 'loading') return;
     // 确认页被手滑关掉后再点：直接重开确认，别再 POST（转账已发起，重开即可）
     if (this._pendingTransfer) {
       this.setData({ status: 'loading', message: '' });
-      return this._confirmTransfer(this._pendingTransfer, () => {
-        this._pendingTransfer = null;
-        this.setData({ status: 'ok', message: '已到账微信零钱' });
-      });
+      return this._confirmTransfer(this._pendingTransfer, () => this._tokenOk());
     }
     this.setData({ status: 'loading', message: '' });
     call('/api/claim', 'POST', { token: this.data.token })
       .then((res) => {
         if (res && res.error) return this.setData({ status: 'fail', message: res.error });
         this._pendingTransfer = res;
-        this._confirmTransfer(res, () => {
-          this._pendingTransfer = null;
-          this.setData({ status: 'ok', message: '已到账微信零钱' });
-        });
+        this._confirmTransfer(res, () => this._tokenOk());
       })
       .catch((e) =>
         this.setData({ status: 'fail', message: '网络错误：' + (e.errMsg || e.message || '') })
@@ -142,8 +191,12 @@ Page({
     this._pendingTransfer = null;
     const n = this.data.claimedCount + 1;
     this.setData({ status: 'ok', message: '已到账微信零钱', claimedCount: n });
-    // 可能还有下一笔：安静地查，绝不用 loading/empty 盖掉"已到账"画面
-    setTimeout(() => this.checkMineQuiet(), 1500);
+    this._celebrate('mineAmt');
+    // 可能还有下一笔：安静地查，绝不用 loading/empty 盖掉"已到账"画面；档案也顺带刷新
+    setTimeout(() => {
+      this.checkMineQuiet();
+      this.refreshProfile();
+    }, 1500);
   },
 
   // 安静查下一笔：只有真的还有奖励才切回领取态，否则保持"已到账"提示不动
@@ -157,6 +210,7 @@ Page({
             mineRemark: mine.reward.remark || '',
             status: 'idle',
             message: '',
+            celebrate: false, // 新的一笔回到领取态
           });
         }
       })

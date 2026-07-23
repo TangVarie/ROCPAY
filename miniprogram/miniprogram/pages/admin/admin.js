@@ -37,9 +37,14 @@ Page({
     loading: false,
     error: '',
 
-    // ---- 记录 ----
+    // ---- 记录（台账）----
     records: [],
     stats: null,
+    statsPaidYuan: '0.00',
+    recFilter: { status: 'all', days: 0, target: '', targetLabel: '' },
+    recOffset: 0,
+    recHasMore: false,
+    recLoading: false,
     period: null, // 可发额度（运行式余额）{ hasQuota, remainingYuan, paidSinceYuan, low }
 
     // ---- 员工 ----
@@ -344,33 +349,94 @@ Page({
     });
   },
 
-  loadRecords() {
-    call('/api/rewards?limit=40', 'GET')
+  // 台账：more=true 追加下一页，否则按当前筛选重查。列表与汇总同口径（stats 即筛选范围的消耗）
+  loadRecords(more) {
+    if (this.data.recLoading) return;
+    const LIMIT = 40;
+    const offset = more === true ? this.data.recOffset : 0;
+    const f = this.data.recFilter;
+    this.setData({ recLoading: true });
+    call(
+      `/api/rewards?limit=${LIMIT}&offset=${offset}&status=${f.status}&days=${f.days}&target=${encodeURIComponent(f.target)}`,
+      'GET'
+    )
       .then((res) => {
-        if (res && res.list) {
-          const map = { SUCCESS: '已到账', WAIT_USER_CONFIRM: '待确认', FAIL: '失败', CLOSED: '已关闭', CREATED: '待领取', CLAIMED: '待确认' };
-          const records = res.list.map((r) => {
-            const st = r.transfer_state || r.status || 'CREATED';
-            const by = r.created_by_name || '';
-            return {
-              rid: r.rid,
-              yuan: (r.amount_fen / 100).toFixed(2),
-              // 副行：备注 + 谁发的（多发放员团队对账/追责要看这个）
-              sub: (r.remark || '客户奖励') + (by ? ' · ' + by + ' 发放' : ''),
-              who: r.target_remark || r.target_name || (r.target_external_userid ? '定向客户' : ''),
-              statusText: map[st] || st,
-              cls: st === 'SUCCESS' ? 'ok' : st === 'FAIL' || st === 'CLOSED' ? 'fail' : 'warn',
-              createdAt: (r.created_at || '').replace('T', ' ').slice(5, 16),
-            };
-          });
-          this.setData({
-            records,
-            stats: res.stats || null,
-            statsTotalYuan: res.stats ? (res.stats.total_fen / 100).toFixed(2) : '0.00',
-          });
-        }
+        this.setData({ recLoading: false });
+        if (!res || !res.list) return;
+        const map = { SUCCESS: '已到账', WAIT_USER_CONFIRM: '待确认', FAIL: '失败', CLOSED: '已关闭', CANCELLED: '已撤回', CANCELING: '撤销中', CREATED: '待领取', CLAIMED: '待确认' };
+        const records = res.list.map((r) => {
+          const st = r.transfer_state || r.status || 'CREATED';
+          const by = r.created_by_name || '';
+          return {
+            rid: r.rid,
+            yuan: (r.amount_fen / 100).toFixed(2),
+            // 副行：备注 + 谁发的（多发放员团队对账/追责要看这个）
+            sub: (r.remark || '客户奖励') + (by ? ' · ' + by + ' 发放' : ''),
+            who: r.target_remark || r.target_name || (r.target_external_userid ? '定向客户' : ''),
+            eu: r.target_external_userid || '',
+            statusText: map[st] || st,
+            cls:
+              st === 'SUCCESS'
+                ? 'ok'
+                : st === 'FAIL' || st === 'CLOSED' || st === 'CANCELLED' || st === 'CANCELING'
+                ? 'fail'
+                : 'warn',
+            // 只有还没到账的能撤：未领取直接作废；已领待确认向微信撤销资金回流
+            canRevoke: r.status === 'CREATED' || r.status === 'CLAIMED',
+            createdAt: (r.created_at || '').replace('T', ' ').slice(5, 16),
+          };
+        });
+        this.setData({
+          records: more === true ? this.data.records.concat(records) : records,
+          recOffset: offset + records.length,
+          recHasMore: records.length === LIMIT,
+          stats: res.stats || null,
+          statsTotalYuan: res.stats ? (res.stats.total_fen / 100).toFixed(2) : '0.00',
+          statsPaidYuan: res.stats ? ((res.stats.paid_fen || 0) / 100).toFixed(2) : '0.00',
+        });
       })
-      .catch(() => {});
+      .catch(() => this.setData({ recLoading: false }));
+  },
+  loadMoreRecords() { this.loadRecords(true); },
+  pickRecFilter(e) {
+    const { k, v } = e.currentTarget.dataset;
+    const f = Object.assign({}, this.data.recFilter);
+    if (k === 'days') f.days = Number(v) || 0;
+    else f.status = v;
+    this.setData({ recFilter: f });
+    this.loadRecords();
+  },
+  // 点记录里的客户名 → 只看这个人的资金往来（stats 同步变成单人汇总）
+  filterByCustomer(e) {
+    const { eu, label } = e.currentTarget.dataset;
+    if (!eu) return;
+    this.setData({ recFilter: Object.assign({}, this.data.recFilter, { target: eu, targetLabel: label || '该客户' }) });
+    this.loadRecords();
+  },
+  clearCustomerFilter() {
+    this.setData({ recFilter: Object.assign({}, this.data.recFilter, { target: '', targetLabel: '' }) });
+    this.loadRecords();
+  },
+  // 撤回：未领取→作废；已领待确认→向微信撤销转账，冻结资金退回商户余额
+  revokeReward(e) {
+    const { rid, yuan, who } = e.currentTarget.dataset;
+    wx.showModal({
+      title: '撤回这笔奖励',
+      content: `¥${yuan}${who ? ' · ' + who : ''}\n撤回后客户不可再领取；已发起待确认的转账将向微信撤销，资金退回商户余额。`,
+      confirmText: '撤回',
+      confirmColor: '#b8293c',
+      success: (r) => {
+        if (!r.confirm) return;
+        call('/api/rewards/revoke', 'POST', { rid })
+          .then((res) => {
+            if (res && res.error) return wx.showToast({ title: res.error, icon: 'none' });
+            wx.showToast({ title: '已撤回', icon: 'success' });
+            this.loadRecords();
+            this.loadPeriod();
+          })
+          .catch(() => wx.showToast({ title: '网络错误', icon: 'none' }));
+      },
+    });
   },
 
   // ============ 员工 ============

@@ -81,6 +81,22 @@ export async function createTransferBill({ outBillNo, openid, amountFen, remark,
   return data; // { out_bill_no, transfer_bill_no, state, package_info, create_time }
 }
 
+/**
+ * 撤销一笔「待用户确认」的转账（WAIT_USER_CONFIRM 状态可撤）。
+ * 撤销后微信侧进入 CANCELING/CANCELLED，冻结资金解冻回流商户余额。
+ */
+export async function cancelTransferByOutBillNo(outBillNo) {
+  const path = `/v3/fund-app/mch-transfer/transfer-bills/out-bill-no/${encodeURIComponent(outBillNo)}/cancel`;
+  const { status, data } = await wechatpay.request('POST', path);
+  if (status !== 200) {
+    const err = new Error(`撤销转账失败: HTTP ${status} ${data.code || ''} ${data.message || ''}`);
+    err.status = status;
+    err.data = data;
+    throw err;
+  }
+  return data; // { out_bill_no, transfer_bill_no, state: 'CANCELING'|'CANCELLED' }
+}
+
 /** 按商户单号查询转账单状态 */
 export async function queryTransferByOutBillNo(outBillNo) {
   const path = `/v3/fund-app/mch-transfer/transfer-bills/out-bill-no/${encodeURIComponent(outBillNo)}`;
