@@ -22,6 +22,7 @@
     <view class="tabs hairline-b">
       <view class="tab {{tab==='send'?'on':''}}" data-tab="send" bindtap="switchTab">发放</view>
       <view class="tab {{tab==='records'?'on':''}}" data-tab="records" bindtap="switchTab">记录</view>
+      <view class="tab {{tab==='rank'?'on':''}}" data-tab="rank" bindtap="switchTab">客户</view>
       <view class="tab {{tab==='staff'?'on':''}}" data-tab="staff" bindtap="switchTab" wx:if="{{isSuper}}">员工</view>
     </view>
 
@@ -200,7 +201,7 @@
         <view class="block tint-sky stat-main">
           <view class="sm-label">{{recFilter.target ? recFilter.targetLabel + ' · 往来合计' : '发放合计'}}</view>
           <view class="sm-num num">¥{{statsTotalYuan}}</view>
-          <view class="sm-sub">共 {{stats.total}} 笔 · 实际动账 ¥{{statsPaidYuan}}</view>
+          <view class="sm-sub">共 {{stats.total}} 笔 · 实际动账 ¥{{statsPaidYuan}}{{stats.cancelled_count > 0 ? ' · 撤回 ' + stats.cancelled_count + ' 笔' : ''}}</view>
         </view>
         <view class="stat-side">
           <view class="block tint-sky stat-mini">
@@ -236,6 +237,33 @@
         <view class="li li-inbox state-icon"></view>
         <view class="state-t1">还没有发放记录</view>
         <view class="state-t2">发出的每一笔都会在这里可查</view>
+      </view>
+    </block>
+
+    <!-- ================= 客户（等级总榜） ================= -->
+    <block wx:if="{{tab==='rank'}}">
+      <view class="panel rank-head">
+        <view class="ptitle t-dark">客户等级榜</view>
+        <view class="psub t-light">按真实到账排序 · 点任意一行查看该客户的资金往来</view>
+      </view>
+      <block wx:if="{{rank.length}}">
+        <view class="rk hairline-b" wx:for="{{rank}}" wx:key="rank"
+              data-eu="{{item.eu}}" data-label="{{item.name}}" bindtap="goCustomerLedger">
+          <text class="rk-no num {{item.rank<=3?'rk-top':''}}">{{item.rank}}</text>
+          <view class="rk-main">
+            <view class="rk-name t-dark">
+              <text class="rk-nm">{{item.name}}</text>
+              <text class="badge badge-blue">LV{{item.lv}} · {{item.lvName}}</text>
+            </view>
+            <view class="rk-sub t-light">合作 {{item.count}} 次</view>
+          </view>
+          <text class="rk-amt num t-dark">¥{{item.totalYuanText}}</text>
+        </view>
+      </block>
+      <view class="state" wx:else>
+        <view class="li li-users state-icon"></view>
+        <view class="state-t1">还没有客户领取记录</view>
+        <view class="state-t2">客户成功领取后，会按累计到账在这里排名定级</view>
       </view>
     </block>
 

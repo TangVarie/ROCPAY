@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p4-ledger-pro';
+const BUILD = 'p5-rank';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -327,6 +327,30 @@ app.post('/api/period/adjust', async (req, res) => {
     // 事务 + 行锁（db.adjustQuota）：两位管理员同时充值也不会丢任何一笔
     await db.adjustQuota({ mode, amountFen: amtFen });
     res.json(await computeQuota());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 【员工】客户等级总榜：按真实到账聚合排名 + 等级，运营看谁领得多/什么级别；前端点行跳该客户台账
+app.get('/api/leaderboard', async (req, res) => {
+  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  try {
+    const rows = await db.getLeaderboard(Number(req.query.limit) || 50);
+    const list = rows.map((r, i) => {
+      const lv = levelOf(Number(r.n), Number(r.fen));
+      return {
+        rank: i + 1,
+        name: r.remark || r.name || '客户' + String(r.claimer_openid || '').slice(-4),
+        eu: r.external_userid || '', // 有企微档案才可跳单人台账
+        count: Number(r.n),
+        totalYuan: Number(r.fen) / 100,
+        lv: lv.lv,
+        lvName: lv.name,
+      };
+    });
+    res.json({ list });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

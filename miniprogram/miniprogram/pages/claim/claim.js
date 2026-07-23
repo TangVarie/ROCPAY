@@ -20,6 +20,8 @@ Page({
     claimedCount: 0, // 本次会话已领取笔数（定向可能有多笔）
     celebrate: false, // 到账仪式（画勾 + 呼吸 + 数字滚动）
     profile: null, // 合作档案 { lv, name, count, totalYuan, nextText }
+    roleLabel: '', // 管理员角色名（操作端主页用）
+    adminHome: null, // 操作端主页仪表 { hasQuota, remainingYuan, low, todayCount, todayYuan }
   },
 
   onLoad(options) {
@@ -83,7 +85,13 @@ Page({
         this.setData({ mode: 'error', message: detail });
         return;
       }
-      const base = { isAdmin: !!me.isAdmin, openid: me.openid || '', profile: this._profileOf(me) };
+      const base = {
+        isAdmin: !!me.isAdmin,
+        openid: me.openid || '',
+        profile: this._profileOf(me),
+        roleLabel: me.role === 'super' ? '超级管理员' : me.role === 'operator' ? '发放员' : '',
+      };
+      if (me.isAdmin) this.loadAdminHome(); // 管理员进门：拉仪表数据（额度剩余 + 近24h发放）
       if (mine && mine.reward) {
         this.setData({
           ...base,
@@ -103,6 +111,34 @@ Page({
 
   goAdmin() {
     wx.navigateTo({ url: '/pages/admin/admin' });
+  },
+
+  // 操作端主页仪表：剩余额度 + 近24小时发放（静默失败不影响进工作台）
+  loadAdminHome() {
+    call('/api/period', 'GET')
+      .then((p) => {
+        if (!p || p.error) return;
+        const rem = Number(p.remainingYuan) || 0;
+        this.setData({
+          adminHome: Object.assign({}, this.data.adminHome, {
+            hasQuota: !!p.hasQuota,
+            remainingYuan: rem.toFixed(2),
+            low: p.hasQuota && rem <= 0,
+          }),
+        });
+      })
+      .catch(() => {});
+    call('/api/rewards?limit=1&days=1', 'GET')
+      .then((r) => {
+        if (!r || !r.stats) return;
+        this.setData({
+          adminHome: Object.assign({ hasQuota: false }, this.data.adminHome, {
+            todayCount: r.stats.total || 0,
+            todayYuan: ((r.stats.paid_fen || 0) / 100).toFixed(2),
+          }),
+        });
+      })
+      .catch(() => {});
   },
 
   copyOpenid() {

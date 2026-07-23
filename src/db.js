@@ -479,24 +479,26 @@ export async function getStats(filters = {}) {
   const { where, params } = rewardFilterSql(filters);
   const [[row]] = await pool.execute(
     `SELECT COUNT(*) AS total,
-            COALESCE(SUM(r.amount_fen),0) AS total_fen,
+            COALESCE(SUM(IF(r.status<>'CANCELLED', r.amount_fen, 0)),0) AS total_fen,
             COALESCE(SUM(r.status IN ('CLAIMED','SUCCESS') ), 0) AS paid_count,
             COALESCE(SUM(IF(r.status IN ('CLAIMED','SUCCESS'), r.amount_fen, 0)),0) AS paid_fen,
             COALESCE(SUM(r.status='SUCCESS'),0) AS success_count,
             COALESCE(SUM(r.status IN ('CREATED','CLAIMED')),0) AS pending_count,
-            COALESCE(SUM(r.status IN ('FAIL','CLOSED','CANCELLED')),0) AS fail_count
+            COALESCE(SUM(r.status IN ('FAIL','CLOSED','CANCELLED')),0) AS fail_count,
+            COALESCE(SUM(r.status='CANCELLED'),0) AS cancelled_count
        FROM rewards r
       ${where}`,
     params
   );
   return {
     total: Number(row.total),
-    total_fen: Number(row.total_fen),
+    total_fen: Number(row.total_fen), // 发放合计——不含已撤回（撤回=当没发过，撤回后合计立刻下降）
     paid_count: Number(row.paid_count), // 实际动钱的笔数（已划走/在途）
     paid_fen: Number(row.paid_fen), //     实际动钱的金额——期间资金消耗看这个
     success_count: Number(row.success_count),
     pending_count: Number(row.pending_count),
     fail_count: Number(row.fail_count),
+    cancelled_count: Number(row.cancelled_count),
   };
 }
 
@@ -519,16 +521,22 @@ export async function setSetting(key, value) {
   );
 }
 
+// 额度占用口径（getPeriodStats / adjustQuota 必须一致）：
+//   生成即占用 —— CREATED(未过期)+CLAIMED+SUCCESS 都算"已承诺的钱"；
+//   撤回(CANCELLED)/失败(FAIL/CLOSED)/过期未领 自动不再占用 → 可发额度自动回流。
+//   这样"发出去、撤回来"在额度上立刻对得上，符合运营心智。
+const QUOTA_CONSUMED_SQL = `(status IN ('CLAIMED','SUCCESS')
+   OR (status = 'CREATED' AND (expires_at IS NULL OR expires_at > NOW())))`;
+
 /**
- * 本期已发放：自 since 起、钱已划走或在途冻结（status IN CLAIMED/SUCCESS）的金额与笔数。
- * 这部分才是真正消耗商户余额的；CREATED（未领取）不计。since 为空表示统计全部。
+ * 本期占用：自 since 起、按上面口径"已承诺"的金额与笔数。since 为空表示统计全部。
  */
 export async function getPeriodStats(since) {
   if (!pool) return { paidFen: 0, paidCount: 0 };
   const [rows] = await pool.execute(
     `SELECT COALESCE(SUM(amount_fen),0) AS paid_fen, COUNT(*) AS paid_count
        FROM rewards
-      WHERE status IN ('CLAIMED','SUCCESS') AND created_at >= :since`,
+      WHERE ${QUOTA_CONSUMED_SQL} AND created_at >= :since`,
     { since: since || '1970-01-01 00:00:00' }
   );
   return { paidFen: Number(rows[0].paid_fen), paidCount: Number(rows[0].paid_count) };
@@ -550,7 +558,7 @@ export async function adjustQuota({ mode, amountFen }) {
     const map = {};
     for (const r of rows) map[r.k] = r.v;
     const [[paid]] = await conn.query(
-      `SELECT COALESCE(SUM(amount_fen),0) AS paid_fen FROM rewards WHERE status IN ('CLAIMED','SUCCESS')`
+      `SELECT COALESCE(SUM(amount_fen),0) AS paid_fen FROM rewards WHERE ${QUOTA_CONSUMED_SQL}`
     );
     const allPaidFen = Number(paid.paid_fen);
     let newBaseFen;
@@ -768,6 +776,24 @@ export async function getClaimerProfile(openid) {
   return { count: Number(row.n), totalFen: Number(row.fen) };
 }
 
+/** 客户等级总榜：按真实到账（SUCCESS）以领取人 openid 聚合，联客户档案取名字 */
+export async function getLeaderboard(limit = 50) {
+  if (!pool) return [];
+  const n = Math.max(1, Math.min(Number(limit) || 50, 200));
+  const [rows] = await pool.query(
+    `SELECT t.claimer_openid, COUNT(*) AS n, COALESCE(SUM(t.amount_fen),0) AS fen,
+            MAX(c.external_userid) AS external_userid,
+            MAX(c.remark) AS remark, MAX(c.name) AS name
+       FROM transfers t
+       LEFT JOIN customers c ON c.openid = t.claimer_openid
+      WHERE t.state = 'SUCCESS'
+      GROUP BY t.claimer_openid
+      ORDER BY fen DESC, n DESC
+      LIMIT ${n}`
+  );
+  return rows;
+}
+
 /** 查一笔奖励是否是定向的（供 token 领取时拦截，防止绕过定向） */
 export async function getRewardTarget(rid) {
   if (!pool || !rid) return null;
@@ -809,6 +835,7 @@ export const db = {
   getReward,
   revokeReward,
   getClaimerProfile,
+  getLeaderboard,
 };
 
 export default db;

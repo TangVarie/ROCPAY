@@ -45,6 +45,9 @@ Page({
     recOffset: 0,
     recHasMore: false,
     recLoading: false,
+
+    // ---- 客户榜 ----
+    rank: [],
     period: null, // 可发额度（运行式余额）{ hasQuota, remainingYuan, paidSinceYuan, low }
 
     // ---- 员工 ----
@@ -84,6 +87,7 @@ Page({
     const tab = e.currentTarget.dataset.tab;
     this.setData({ tab });
     if (tab === 'records') { this.loadRecords(); this.loadPeriod(); }
+    if (tab === 'rank') this.loadRank();
     if (tab === 'staff') this.loadAdmins();
   },
   switchSendMode(e) {
@@ -417,6 +421,30 @@ Page({
     this.setData({ recFilter: Object.assign({}, this.data.recFilter, { target: '', targetLabel: '' }) });
     this.loadRecords();
   },
+  // ============ 客户榜（等级总榜） ============
+  loadRank() {
+    call('/api/leaderboard?limit=50', 'GET')
+      .then((res) => {
+        if (res && res.list) {
+          this.setData({
+            rank: res.list.map((r) => Object.assign({}, r, { totalYuanText: (Number(r.totalYuan) || 0).toFixed(2) })),
+          });
+        }
+      })
+      .catch(() => {});
+  },
+  // 点榜单行 → 跳到记录页只看该客户的资金往来（单人台账）
+  goCustomerLedger(e) {
+    const { eu, label } = e.currentTarget.dataset;
+    if (!eu) return wx.showToast({ title: '该客户不在企微档案，暂无法跳转', icon: 'none' });
+    this.setData({
+      tab: 'records',
+      recFilter: Object.assign({}, this.data.recFilter, { target: eu, targetLabel: label || '该客户' }),
+    });
+    this.loadRecords();
+    this.loadPeriod();
+  },
+
   // 撤回：未领取→作废；已领待确认→向微信撤销转账，冻结资金退回商户余额
   revokeReward(e) {
     const { rid, yuan, who } = e.currentTarget.dataset;

@@ -67,7 +67,7 @@
 .searchbtn {
   flex: none;
   height: 84rpx;
-  line-height: 84rpx;
+
   padding: 0 36rpx;
   font-size: 27rpx;
   margin: 0;
@@ -115,7 +115,7 @@
 .pempty-icon { width: 80rpx; height: 80rpx; margin-bottom: 20rpx; }
 .pempty-t1 { font-size: 30rpx; font-weight: 600; }
 .pempty-t2 { font-size: 24rpx; margin-top: 6rpx; text-align: center; }
-.pempty-btn { margin-top: 32rpx; width: 300rpx; height: 80rpx; line-height: 80rpx; font-size: 27rpx; }
+.pempty-btn { margin-top: 32rpx; width: 300rpx; height: 80rpx; font-size: 27rpx; }
 
 /* 已选条 */
 .pickbar {
@@ -126,7 +126,7 @@
   justify-content: space-between;
 }
 .pickbar-r { display: flex; align-items: center; gap: 8rpx; }
-.pickbtn { height: 76rpx; line-height: 76rpx; padding: 0 36rpx; font-size: 27rpx; margin: 0; }
+.pickbtn { height: 76rpx; padding: 0 36rpx; font-size: 27rpx; margin: 0; }
 
 /* 统一填充：行内文字按钮与 84rpx 输入框等高，避免跨组件 center 对不齐 */
 .fillall { display: flex; align-items: center; gap: 14rpx; margin: 24rpx 0 8rpx; }
@@ -253,7 +253,9 @@
 .rec-l { flex: 1; min-width: 0; }
 .rec-line1 { display: flex; align-items: baseline; gap: 14rpx; }
 .rec-amt { font-size: 34rpx; font-weight: 600; }
-.rec-who { font-size: 25rpx; }
+/* 客户名 = 单人往来入口：主色示意可点，点击后台账只看这个人 */
+.rec-who { font-size: 25rpx; color: var(--primary); font-weight: 500; }
+.rec-who:active { opacity: 0.6; }
 .rec-remark { font-size: 23rpx; margin-top: 2rpx; }
 .rec-r { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 8rpx; }
 .rec-time { font-size: 22rpx; }
@@ -281,6 +283,17 @@
 .state-icon { margin-bottom: 28rpx; }
 .state-t1 { font-size: 34rpx; font-weight: 600; color: var(--text-dark); }
 .state-t2 { margin-top: 8rpx; font-size: 26rpx; color: var(--text-light); text-align: center; }
+
+/* ---- 客户等级总榜 ---- */
+.rank-head { margin-bottom: 8rpx; }
+.rk { display: flex; align-items: center; gap: 20rpx; padding: 26rpx 4rpx; }
+.rk:active { background: rgba(0, 0, 0, 0.04); }
+.rk-no { width: 56rpx; flex: none; font-size: 32rpx; font-weight: 700; color: var(--text-faint); text-align: center; }
+.rk-top { color: var(--primary); } /* 前三名主色 */
+.rk-main { flex: 1; min-width: 0; }
+.rk-name { display: flex; align-items: center; gap: 12rpx; flex-wrap: wrap; font-size: 29rpx; font-weight: 500; }
+.rk-sub { font-size: 22rpx; margin-top: 2rpx; }
+.rk-amt { flex: none; font-size: 30rpx; font-weight: 600; }
 
 /* openid（与领取页一致） */
 .openid-row {

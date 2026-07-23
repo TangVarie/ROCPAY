@@ -95,10 +95,15 @@ page {
 }
 .lede .em { color: var(--text-dark); font-weight: 600; }
 
-/* ---- 按钮：扁平硬边，禁 3D/渐变/阴影 ---- */
+/* ---- 按钮：扁平硬边，禁 3D/渐变/阴影 ----
+   垂直居中用 flex，不用 line-height=height（后者在部分真机上文字偏上/偏下，
+   就是"宽按钮文字总对不齐"的根源） */
 .btn {
   height: 92rpx;
-  line-height: 92rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: normal;
   border-radius: var(--r-control);
   font-size: 30rpx;
   font-weight: 600;

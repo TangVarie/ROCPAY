@@ -51,13 +51,31 @@
 
   <!-- 无奖励 -->
   <block wx:if="{{mode==='empty'}}">
+    <!-- 操作端主页：进门即仪表盘（额度剩余 + 近24h发放），不再是一句空话 -->
     <block wx:if="{{isAdmin}}">
-      <view class="state">
-        <view class="li li-users state-icon"></view>
-        <view class="state-t1">管理员，你好</view>
-        <view class="state-t2">进入工作台，把奖励发给对的人</view>
-        <button class="btn btn-blue state-btn" bindtap="goAdmin">进入工作台</button>
+      <view class="ahome-lede">
+        <view class="lede">你好，<text class="em">{{roleLabel || '管理员'}}</text>。今天把奖励<text class="em">发给对的人</text>。</view>
       </view>
+
+      <view class="block block-blue ah-hero" wx:if="{{adminHome && adminHome.hasQuota}}">
+        <view class="ah-label">可发额度 · 剩余</view>
+        <view class="ah-num num {{adminHome.low ? 'ah-low' : ''}}">¥{{adminHome.remainingYuan}}</view>
+        <view class="ah-sub" wx:if="{{adminHome.low}}">额度已用尽，进工作台充值</view>
+      </view>
+
+      <view class="ah-minis" wx:if="{{adminHome}}">
+        <view class="block tint-sky ah-mini">
+          <view class="ahm-label">近24小时发放</view>
+          <view class="ahm-num num t-dark">{{adminHome.todayCount || 0}} 笔</view>
+        </view>
+        <view class="block tint-blush ah-mini">
+          <view class="ahm-label">近24小时动账</view>
+          <view class="ahm-num num t-dark">¥{{adminHome.todayYuan || '0.00'}}</view>
+        </view>
+      </view>
+
+      <button class="btn btn-blue btn-block" bindtap="goAdmin">进入工作台</button>
+      <view class="ah-tips t-faint">定向发放 · 台账对账 · 客户等级榜</view>
     </block>
     <block wx:else>
       <view class="state">
