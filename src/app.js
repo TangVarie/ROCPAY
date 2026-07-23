@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p7-paging';
+const BUILD = 'p8-split';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -41,6 +41,22 @@ function nameRuleError(yuan, name) {
   if (yuan >= 2000 && !hasName) return '金额 ≥ 2000 元必须填写收款人真实姓名';
   if (yuan < 0.3 && hasName) return '金额 < 0.3 元不支持填写收款人姓名';
   return null;
+}
+
+// 大额自动拆单：总额(分)按单笔限额 cap 拆成多笔（200×6+160 这种），客户逐笔确认串行到账。
+// 余数小于起付线时，把最后一整笔和余数合并对半拆，保证每笔都在 [min, cap] 内
+function splitAmountFen(totalFen, capFen, minFen) {
+  if (totalFen <= capFen) return [totalFen];
+  const bills = [];
+  const k = Math.floor(totalFen / capFen);
+  const r = totalFen - k * capFen;
+  for (let i = 0; i < k; i++) bills.push(capFen);
+  if (r === 0) return bills;
+  if (r >= minFen) { bills.push(r); return bills; }
+  const last = bills.pop() + r; // cap < last < cap+min，对半后两笔都 ≥ min 且 ≤ cap
+  const a = Math.floor(last / 2);
+  bills.push(a, last - a);
+  return bills;
 }
 
 // 关键落库：同步等待 + 失败重试一次。用于"钱已划走"的记账（领取 CLAIMED），
@@ -258,6 +274,8 @@ app.get('/api/me', async (req, res) => {
     role: role || 'none',
     minAmountYuan: config.app.minAmountYuan,
     maxAmountYuan: config.app.maxAmountYuan,
+    splitCapYuan: config.app.splitCapYuan, // 单笔限额，超过自动拆单
+    perUserDailyCapYuan: config.app.perUserDailyCapYuan, // 单人单日上限（拆单也绕不过）
     wecom: wecom.wecomEnabled, // 企微是否已连接（前端据此提示）
     db: db.dbEnabled,
     profile,
@@ -394,6 +412,10 @@ app.post('/api/rewards', (req, res) => {
   }
   if (yuan > config.app.maxAmountYuan) {
     return res.status(400).json({ error: `金额超过上限 ${config.app.maxAmountYuan} 元` });
+  }
+  // 链接快发是单笔转账，超过微信单笔限额领取时必被拒——提前拦，大额走定向发放（自动拆单）
+  if (yuan > config.app.splitCapYuan) {
+    return res.status(400).json({ error: `单笔转账限额 ¥${config.app.splitCapYuan}，大额请用「定向发放」（自动拆成多笔）` });
   }
   const nameErr = nameRuleError(yuan, name);
   if (nameErr) return res.status(400).json({ error: nameErr });
@@ -615,8 +637,9 @@ app.post('/api/customers/sync', async (req, res) => {
 app.post('/api/deliver', async (req, res) => {
   if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
   if (!wecom.wecomEnabled) return res.status(503).json({ error: '未配置企微，无法群发（可让员工手动转发小程序给客户）' });
+  // 去重：拆单后同一客户会出现多次，群发每人只该收到一张卡片
   const externalUserids = Array.isArray((req.body || {}).externalUserids)
-    ? req.body.externalUserids.filter(Boolean)
+    ? [...new Set(req.body.externalUserids.filter(Boolean))]
     : [];
   if (!externalUserids.length) return res.status(400).json({ error: '请选择要通知的客户' });
   const text = String((req.body || {}).text || '').trim() ||
@@ -668,10 +691,18 @@ app.post('/api/rewards/batch', async (req, res) => {
 
   const items = Array.isArray((req.body || {}).items) ? req.body.items : [];
   if (!items.length) return res.status(400).json({ error: '没有要发放的项目' });
-  if (items.length > 200) return res.status(400).json({ error: '单次最多 200 笔' });
+  if (items.length > 200) return res.status(400).json({ error: '单次最多 200 人' });
 
-  const created = [];
+  // 大额自动拆单：单人金额超过微信单笔限额时拆成多笔（200×6+160），客户逐笔确认串行到账。
+  // 单人总额受微信「单日向单用户」上限约束——拆单绕不过这条线，直接前置拦截
+  const capFen = Math.round(config.app.splitCapYuan * 100);
+  const minFen = Math.round(config.app.minAmountYuan * 100);
+  const perUserCapYuan = Math.min(config.app.perUserDailyCapYuan, config.app.maxAmountYuan);
+
+  // 先整体校验并算出拆单计划，再落库——避免拆一半发现超限
+  const plans = [];
   const errors = [];
+  let totalBills = 0;
   for (let i = 0; i < items.length; i++) {
     const it = items[i] || {};
     const target = String(it.externalUserid || '').trim();
@@ -688,33 +719,57 @@ app.post('/api/rewards/batch', async (req, res) => {
       errors.push({ i, target, error: `金额不能小于 ${config.app.minAmountYuan} 元` });
       continue;
     }
-    if (yuan > config.app.maxAmountYuan) {
-      errors.push({ i, target, error: `金额不能大于 ${config.app.maxAmountYuan} 元` });
+    if (yuan > perUserCapYuan) {
+      errors.push({ i, target, error: `单人不能超过 ${perUserCapYuan} 元（微信单日向单用户转账上限，拆单也绕不过）` });
       continue;
     }
-    const itNameErr = nameRuleError(yuan, it.name);
+    const bills = splitAmountFen(Math.round(yuan * 100), capFen, minFen);
+    const itNameErr = nameRuleError(bills[0] / 100, it.name); // 拆后每笔 ≤ 单笔限额，按最大一笔校验姓名规则
     if (itNameErr) {
       errors.push({ i, target, error: itNameErr });
       continue;
     }
-    const rid = newRid();
-    const exp = Math.floor(Date.now() / 1000) + config.app.rewardTtlHours * 3600;
-    try {
-      await db.saveReward({
-        rid,
-        amountFen: Math.round(yuan * 100),
-        remark: it.remark,
-        name: it.name,
-        createdBy: openid,
-        exp,
-        targetExternalUserid: target,
-      });
-      created.push({ rid, externalUserid: target, amountYuan: yuan, remark: it.remark || '' });
-    } catch (e) {
-      errors.push({ i, target, error: '落库失败：' + (e.code || e.message) });
-    }
+    totalBills += bills.length;
+    plans.push({ i, target, yuan, bills, remark: it.remark, name: it.name });
   }
-  res.json({ createdCount: created.length, errorCount: errors.length, created, errors });
+  if (totalBills > 400) {
+    return res.status(400).json({ error: `本批拆单后共 ${totalBills} 笔，超过单次 400 笔上限，请分批发放` });
+  }
+
+  const created = [];
+  const people = []; // 每人汇总：{externalUserid, totalYuan, bills}
+  for (const p of plans) {
+    const exp = Math.floor(Date.now() / 1000) + config.app.rewardTtlHours * 3600;
+    let ok = 0;
+    for (const billFen of p.bills) {
+      const rid = newRid();
+      try {
+        await db.saveReward({
+          rid,
+          amountFen: billFen,
+          remark: p.remark,
+          name: p.name,
+          createdBy: openid,
+          exp,
+          targetExternalUserid: p.target,
+        });
+        created.push({ rid, externalUserid: p.target, amountYuan: billFen / 100, remark: p.remark || '' });
+        ok++;
+      } catch (e) {
+        errors.push({ i: p.i, target: p.target, error: `落库失败（已成功 ${ok}/${p.bills.length} 笔）：` + (e.code || e.message) });
+        break; // 这个人剩余的笔不再继续，已落库的仍有效可领
+      }
+    }
+    if (ok > 0) people.push({ externalUserid: p.target, totalYuan: p.yuan, bills: ok });
+  }
+  res.json({
+    createdCount: created.length, // 拆单后的总笔数
+    peopleCount: people.length,
+    errorCount: errors.length,
+    created,
+    people,
+    errors,
+  });
 });
 
 // 【客户】查我的定向奖励（身份匹配，防领错）
@@ -730,7 +785,12 @@ app.get('/api/claim/mine', async (req, res) => {
     if (!externalUserid) return res.json({ reward: null, reason: unionid ? 'not_a_customer' : 'no_unionid' });
     const r = await db.findPendingRewardForTarget(externalUserid);
     if (!r) return res.json({ reward: null, reason: 'no_pending' });
-    res.json({ reward: { rid: r.rid, amountYuan: r.amount_fen / 100, remark: r.remark } });
+    // 大额拆单后一人名下会挂多笔：带上待领汇总，前端显示"共 N 笔 · 合计 ¥X"并逐笔串行领取
+    const agg = await db.countPendingRewardsForTarget(externalUserid).catch(() => null);
+    res.json({
+      reward: { rid: r.rid, amountYuan: r.amount_fen / 100, remark: r.remark },
+      pending: agg ? { count: agg.n, totalYuan: agg.fen / 100 } : null,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

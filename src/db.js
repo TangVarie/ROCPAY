@@ -745,6 +745,19 @@ export async function findPendingRewardForTarget(externalUserid) {
   return rows.length ? rows[0] : null;
 }
 
+/** 某客户名下待领奖励汇总（大额拆单后一人多笔，前端显示"共 N 笔 · 合计"用） */
+export async function countPendingRewardsForTarget(externalUserid) {
+  if (!pool || !externalUserid) return { n: 0, fen: 0 };
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS n, COALESCE(SUM(amount_fen),0) AS fen
+       FROM rewards
+      WHERE target_external_userid = :t AND status = 'CREATED'
+        AND (expires_at IS NULL OR expires_at > NOW())`,
+    { t: externalUserid }
+  );
+  return { n: Number(rows[0].n), fen: Number(rows[0].fen) };
+}
+
 /** 取一笔奖励的关键字段（撤回/领取拦截用） */
 export async function getReward(rid) {
   if (!pool || !rid) return null;
@@ -861,6 +874,7 @@ export const db = {
   bindCustomerByUnionid,
   bindCustomerOpenid,
   findPendingRewardForTarget,
+  countPendingRewardsForTarget,
   getRewardTarget,
   getReward,
   revokeReward,

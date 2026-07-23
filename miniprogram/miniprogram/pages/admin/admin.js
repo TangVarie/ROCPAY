@@ -60,6 +60,10 @@ Page({
     rankLoading: false,
     period: null, // 可发额度（运行式余额）{ hasQuota, remainingYuan, paidSinceYuan, low }
 
+    // ---- 限额（/api/me 下发，兜底默认）----
+    splitCapYuan: 200, // 微信单笔转账限额，超过自动拆单
+    perUserCapYuan: 2000, // 微信单日向单用户上限（拆单也绕不过）
+
     // ---- 员工 ----
     admins: [],
     newOpenid: '',
@@ -82,6 +86,8 @@ Page({
           roleLabel: me.role === 'super' ? '超级管理员' : me.role === 'operator' ? '发放员' : '',
           minAmountYuan: me.minAmountYuan || 0.1,
           maxAmountYuan: me.maxAmountYuan || 5000,
+          splitCapYuan: me.splitCapYuan || 200,
+          perUserCapYuan: me.perUserDailyCapYuan || 2000,
         });
         if (me.isAdmin) {
           this.loadCustomers();
@@ -208,25 +214,40 @@ Page({
     this.setData({ selected });
   },
 
+  // 大额自动拆单（镜像后端逻辑，仅用于预览笔数）：总额按单笔限额拆，余数不够起付就并入最后一笔对半
+  _splitBillsCount(totalFen, capFen, minFen) {
+    if (totalFen <= capFen) return 1;
+    const k = Math.floor(totalFen / capFen);
+    const r = totalFen - k * capFen;
+    if (r === 0) return k;
+    return k + 1; // r ≥ min 追加一笔；r < min 时最后一整笔+余数对半，同样是 k+1 笔
+  },
+
   submitBatch() {
     if (this.data.loading) return; // 防连点：重复提交会生成重复奖励（重复打款）
-    const { selected, minAmountYuan, maxAmountYuan, period } = this.data;
+    const { selected, minAmountYuan, perUserCapYuan, splitCapYuan, period } = this.data;
     for (let i = 0; i < selected.length; i++) {
       const yuan = Number(selected[i].amountYuan);
       if (!(yuan > 0)) return this.setData({ sendErr: `「${selected[i].label}」还没填金额` });
       if (yuan < minAmountYuan) return this.setData({ sendErr: `「${selected[i].label}」金额不能小于 ${minAmountYuan} 元` });
-      if (yuan > maxAmountYuan) return this.setData({ sendErr: `「${selected[i].label}」金额不能大于 ${maxAmountYuan} 元` });
+      if (yuan > perUserCapYuan) return this.setData({ sendErr: `「${selected[i].label}」单人不能超过 ${perUserCapYuan} 元（微信单日向单用户上限，拆单也绕不过）` });
     }
-    // 真金白银出账前必须过目一次汇总：人数、合计、最大单笔；额度不够再多一句硬提醒
+    // 真金白银出账前必须过目一次汇总：人数、拆单后笔数、合计、最大单人；额度不够再多一句硬提醒
+    const capFen = Math.round(splitCapYuan * 100);
+    const minFen = Math.round(minAmountYuan * 100);
     let totalFen = 0;
     let maxFen = 0;
+    let totalBills = 0;
     selected.forEach((s) => {
       const f = Math.round(Number(s.amountYuan) * 100);
       totalFen += f;
       if (f > maxFen) maxFen = f;
+      totalBills += this._splitBillsCount(f, capFen, minFen);
     });
     const totalYuan = (totalFen / 100).toFixed(2);
-    let content = `共 ${selected.length} 人\n合计 ¥${totalYuan}\n最大单笔 ¥${(maxFen / 100).toFixed(2)}`;
+    let content = `共 ${selected.length} 人`;
+    if (totalBills > selected.length) content += ` · 拆成 ${totalBills} 笔（单笔≤¥${splitCapYuan}，客户逐笔确认）`;
+    content += `\n合计 ¥${totalYuan}\n最大单人 ¥${(maxFen / 100).toFixed(2)}`;
     if (period && period.hasQuota && Number(period.remainingYuan) < totalFen / 100) {
       content += `\n\n注意：可发额度仅剩 ¥${period.remainingYuan}，本次将超出，请先确认商户余额充足。`;
     }
@@ -250,13 +271,15 @@ Page({
       .then((res) => {
         this.setData({ loading: false });
         if (res && res.error) return this.setData({ sendErr: res.error });
-        const targets = (res.created || []).map((c) => c.externalUserid);
+        // 拆单后同一客户出现多笔 → 通知名单去重，每人只发一张卡片
+        const targets = [...new Set((res.created || []).map((c) => c.externalUserid))];
         const labelOf = {};
         selected.forEach((s) => (labelOf[s.external_userid] = s.label));
         this.setData({
           step: 'result',
           batchResult: {
-            createdCount: res.createdCount,
+            createdCount: res.createdCount, // 拆单后的总笔数
+            peopleCount: res.peopleCount || targets.length,
             errors: (res.errors || []).map((er) => ({ ...er, label: labelOf[er.target] || er.target || '' })),
             targets,
           },
@@ -301,8 +324,8 @@ Page({
     if (!(yuan > 0)) return this.setData({ error: '请输入正确金额' });
     if (yuan < this.data.minAmountYuan)
       return this.setData({ error: `金额不能小于 ${this.data.minAmountYuan} 元` });
-    if (yuan > this.data.maxAmountYuan)
-      return this.setData({ error: `金额不能大于 ${this.data.maxAmountYuan} 元` });
+    if (yuan > this.data.splitCapYuan)
+      return this.setData({ error: `链接快发是单笔转账，限额 ¥${this.data.splitCapYuan}；大额请用「定向发放」（自动拆成多笔）` });
     this.setData({ loading: true, error: '', reward: null });
     call('/api/rewards', 'POST', { amountYuan: yuan, remark: this.data.remark, name: this.data.name })
       .then((res) => {

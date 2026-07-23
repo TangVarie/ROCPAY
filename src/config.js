@@ -99,6 +99,11 @@ export const config = {
     maxAmountYuan: Number(optional('MAX_AMOUNT_YUAN', '5000')),
     // 单笔转账下限（元），前端/后端提前拦截，避免小于微信系统最低额被拒
     minAmountYuan: Number(optional('MIN_AMOUNT_YUAN', '0.1')),
+    // 微信商户「单笔转账限额」（元）。定向发放单人金额超过它时自动拆成多笔串行领取；
+    // 商户后台申请提额后改这个环境变量即可
+    splitCapYuan: Number(optional('SPLIT_CAP_YUAN', '200')),
+    // 微信「单日向单用户转账限额」（元）。单人一次发放总额的硬上限（拆单也绕不过微信这条线）
+    perUserDailyCapYuan: Number(optional('PER_USER_DAILY_CAP_YUAN', '2000')),
   },
 
   // 企业微信（P2·客户列表/群发/unionid定向）。留空则企微功能不启用，不影响现有链路。

@@ -23,6 +23,8 @@
       <view class="rb-label">{{ status==='ok' ? '已到账微信零钱' : (mode==='mine' ? '属于你的奖励' : '你收到一笔奖励') }}</view>
       <view class="rb-amount"><text class="rb-sign num">¥</text><text class="rb-num num">{{ mode==='mine' ? mineAmt : amtText }}</text></view>
       <view class="rb-remark" wx:if="{{mode==='mine' ? mineRemark : remark}}">{{ mode==='mine' ? mineRemark : remark }}</view>
+      <!-- 大额拆单：一人多笔串行领，先让客户看到全貌 -->
+      <view class="rb-multi" wx:if="{{mode==='mine' && minePendCount > 1 && status!=='ok'}}">共 {{minePendCount}} 笔 · 合计 ¥{{minePendYuan}}，领完本笔自动出下一笔</view>
 
       <button
         class="rb-btn {{status==='ok' ? 'rb-btn-blue' : ''}}"
@@ -36,7 +38,7 @@
     </view>
 
     <view class="after-note" wx:if="{{mode==='mine' && claimedCount > 0 && status!=='ok'}}">
-      本次已领取 {{claimedCount}} 笔，上面是新的一笔
+      本次已领取 {{claimedCount}} 笔，上面是新的一笔{{minePendCount > 1 ? '（还剩 ' + minePendCount + ' 笔）' : ''}}
     </view>
 
     <!-- 合作档案 · 等级（领取界面也能看到） -->

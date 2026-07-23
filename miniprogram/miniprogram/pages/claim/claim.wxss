@@ -27,6 +27,13 @@
   color: #ffffff;
   margin-top: 10rpx;
 }
+/* 大额拆单：共 N 笔 · 合计 提示（色块内白字弱化一档） */
+.rb-multi {
+  margin-top: 14rpx;
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.5;
+}
 .rb-btn {
   margin-top: 48rpx;
   height: 96rpx;

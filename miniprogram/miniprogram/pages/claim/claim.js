@@ -12,6 +12,8 @@ Page({
     // 定向领取（身份识别）
     mineAmt: '',
     mineRemark: '',
+    minePendCount: 0, // 名下待领笔数（大额拆单后 > 1）
+    minePendYuan: '', // 名下待领合计（两位小数字符串）
     // 通用
     isAdmin: false,
     openid: '',
@@ -95,6 +97,8 @@ Page({
           mode: 'mine',
           mineAmt: Number(mine.reward.amountYuan).toFixed(2),
           mineRemark: mine.reward.remark || '',
+          minePendCount: (mine.pending && mine.pending.count) || 1,
+          minePendYuan: mine.pending ? Number(mine.pending.totalYuan).toFixed(2) : '',
           status: 'idle',
           message: '',
         });
@@ -253,10 +257,14 @@ Page({
             mode: 'mine',
             mineAmt: Number(mine.reward.amountYuan).toFixed(2),
             mineRemark: mine.reward.remark || '',
+            minePendCount: (mine.pending && mine.pending.count) || 1,
+            minePendYuan: mine.pending ? Number(mine.pending.totalYuan).toFixed(2) : '',
             status: 'idle',
             message: '',
             celebrate: false, // 新的一笔回到领取态
           });
+        } else {
+          this.setData({ minePendCount: 0, minePendYuan: '' }); // 全部领完
         }
       })
       .catch(() => {});

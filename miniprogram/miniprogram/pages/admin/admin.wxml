@@ -89,7 +89,7 @@
             <view class="ptitle t-dark">每人金额与备注</view>
             <view class="textbtn" bindtap="backPick">重选客户</view>
           </view>
-          <view class="psub t-light">金额 {{minAmountYuan}}–{{maxAmountYuan}} 元；备注客户可见</view>
+          <view class="psub t-light">单人 {{minAmountYuan}}–{{perUserCapYuan}} 元；超过 ¥{{splitCapYuan}} 自动拆成多笔，客户逐笔确认收款；备注客户可见</view>
 
           <view class="fillall">
             <input class="input fa-amt num" type="digit" placeholder="统一金额" placeholder-class="ph" value="{{fillAmount}}" bindinput="onFillAmount" />
@@ -107,14 +107,14 @@
           </view>
 
           <view class="err" wx:if="{{sendErr}}">{{sendErr}}</view>
-          <button class="btn btn-blue btn-block submitbtn" bindtap="submitBatch" loading="{{loading}}" disabled="{{loading}}">确认发放 {{selected.length}} 笔</button>
+          <button class="btn btn-blue btn-block submitbtn" bindtap="submitBatch" loading="{{loading}}" disabled="{{loading}}">确认发放 {{selected.length}} 人</button>
           <view class="psub t-faint center">创建后需客户在小程序内确认收款，未领取不扣款</view>
         </view>
 
         <!-- 步骤3 · 结果 + 通知 -->
         <block wx:if="{{step==='result' && batchResult}}">
           <view class="banner banner-success">
-            <text class="t-dark">已创建 <text class="num">{{batchResult.createdCount}}</text> 笔定向奖励，客户打开小程序即可看到自己的奖励</text>
+            <text class="t-dark">已为 <text class="num">{{batchResult.peopleCount}}</text> 人创建 <text class="num">{{batchResult.createdCount}}</text> 笔定向奖励{{batchResult.createdCount > batchResult.peopleCount ? '（大额已自动拆单，客户逐笔确认）' : ''}}，客户打开小程序即可领取</text>
           </view>
           <view class="banner banner-danger" wx:if="{{batchResult.errors.length}}">
             <view class="t-dark">{{batchResult.errors.length}} 笔未创建：</view>
@@ -167,8 +167,8 @@
       <view class="block block-blue bal" wx:if="{{period}}">
         <view class="bal-top">
           <text class="bal-label">可发额度 · 剩余</text>
-          <!-- 资金额度增减 = 财务动作，仅超管可见可点（后端同样强制） -->
-          <view class="bal-actions" wx:if="{{isSuper}}">
+          <!-- 台账计算器，发放员/管理员都可记（后端同样只要求 isAdmin） -->
+          <view class="bal-actions">
             <text class="bal-refresh" data-mode="add" bindtap="adjustQuota">充值</text>
             <text class="bal-refresh" data-mode="set" bindtap="adjustQuota">校准</text>
           </view>
@@ -179,7 +179,7 @@
         </block>
         <block wx:else>
           <view class="bal-num num">— —</view>
-          <view class="bal-sub">{{isSuper ? '点「充值」记入账户余额，之后自动算剩余' : '超管充值后，这里显示还能发多少'}}</view>
+          <view class="bal-sub">点「充值」记入账户余额，之后自动算剩余</view>
         </block>
       </view>
 
