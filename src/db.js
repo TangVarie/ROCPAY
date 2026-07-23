@@ -96,15 +96,26 @@ const DDL = [
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='微信回调审计流水'`,
 
   `CREATE TABLE IF NOT EXISTS admins (
-     openid     VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '员工的小程序openid',
-     name       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注名(谁)',
-     role       VARCHAR(16)  NOT NULL DEFAULT 'operator' COMMENT 'super|operator',
-     enabled    TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否启用',
-     created_by VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '谁添加的',
-     created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-     updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+     openid       VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '员工的小程序openid',
+     name         VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注名(谁)',
+     role         VARCHAR(16)  NOT NULL DEFAULT 'operator' COMMENT 'super|operator',
+     enabled      TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否启用',
+     wecom_userid VARCHAR(64)  NULL COMMENT '员工的企微userid(群发sender映射)',
+     created_by   VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '谁添加的',
+     created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
      KEY idx_admins_role (role)
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='员工/管理员'`,
+
+  // 客户↔跟进员工 多对多。customers.follow_userid 只有一列，同一客户加了多个员工时
+  // 后同步的会覆盖先同步的；群发按 sender 分组必须知道完整的跟进关系，所以单独建表。
+  `CREATE TABLE IF NOT EXISTS customer_follows (
+     external_userid VARCHAR(64) NOT NULL COMMENT '企微外部联系人ID',
+     userid          VARCHAR(64) NOT NULL COMMENT '跟进员工的企微userid',
+     synced_at       DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+     PRIMARY KEY (external_userid, userid),
+     KEY idx_cf_userid (userid)
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='客户-跟进员工多对多(群发sender分组用)'`,
 
   `CREATE TABLE IF NOT EXISTS customers (
      external_userid VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '企微外部联系人ID',
@@ -185,6 +196,12 @@ export async function migrate() {
     'rewards',
     'target_external_userid',
     "target_external_userid VARCHAR(64) NULL COMMENT '定向目标企微客户(P2)' AFTER recipient_name"
+  );
+  // 老库补列：员工企微userid（群发 sender 映射）
+  await ensureColumn(
+    'admins',
+    'wecom_userid',
+    "wecom_userid VARCHAR(64) NULL COMMENT '员工的企微userid(群发sender映射)' AFTER enabled"
   );
   await seedSuperAdmins(config.app.adminOpenids);
 }
@@ -605,21 +622,28 @@ export async function listUnfinishedTransfers(limit = 20) {
 export async function loadAdmins() {
   if (!pool) return [];
   const [rows] = await pool.query(
-    `SELECT openid, name, role, enabled, created_by, created_at
+    `SELECT openid, name, role, enabled, wecom_userid, created_by, created_at
        FROM admins ORDER BY (role='super') DESC, created_at ASC`
   );
   return rows.map((r) => ({ ...r, enabled: !!r.enabled }));
 }
 
-/** 新增/更新一个员工 */
-export async function upsertAdmin({ openid, name, role, createdBy }) {
+/** 新增/更新一个员工。wecomUserid 不传则保留原值（COALESCE），避免普通编辑把映射冲掉。 */
+export async function upsertAdmin({ openid, name, role, createdBy, wecomUserid }) {
   if (!pool) throw new Error('未开启数据库');
   const r = role === 'super' ? 'super' : 'operator';
   await pool.execute(
-    `INSERT INTO admins (openid, name, role, enabled, created_by)
-     VALUES (:openid, :name, :role, 1, :created_by)
-     ON DUPLICATE KEY UPDATE name=VALUES(name), role=VALUES(role), enabled=1`,
-    { openid, name: clip(name || '', 64), role: r, created_by: createdBy || '' }
+    `INSERT INTO admins (openid, name, role, enabled, wecom_userid, created_by)
+     VALUES (:openid, :name, :role, 1, :wu, :created_by)
+     ON DUPLICATE KEY UPDATE name=VALUES(name), role=VALUES(role), enabled=1,
+       wecom_userid=COALESCE(VALUES(wecom_userid), wecom_userid)`,
+    {
+      openid,
+      name: clip(name || '', 64),
+      role: r,
+      wu: wecomUserid ? clip(wecomUserid, 64) : null,
+      created_by: createdBy || '',
+    }
   );
 }
 
@@ -672,6 +696,45 @@ export async function upsertCustomer(c) {
       unionid: c.unionid || null,
     }
   );
+  // 跟进关系是多对多（客户可能加了多个员工），customers.follow_userid 会被后同步的覆盖，
+  // 这里把每条 (客户, 跟进人) 都记入 customer_follows，群发按 sender 分组时用
+  if (c.followUserid) {
+    await pool.execute(
+      `INSERT INTO customer_follows (external_userid, userid)
+       VALUES (:eu, :uid)
+       ON DUPLICATE KEY UPDATE synced_at=CURRENT_TIMESTAMP`,
+      { eu: c.externalUserid, uid: c.followUserid }
+    );
+  }
+}
+
+/**
+ * 查一批客户的完整跟进人列表：external_userid -> [userid...]。
+ * customer_follows 还没数据的客户（改版后未重新同步）退回 customers.follow_userid 单值。
+ */
+export async function getFollowMap(eus = []) {
+  const map = new Map();
+  if (!pool || !eus.length) return map;
+  const ph = eus.map(() => '?').join(',');
+  const [rows] = await pool.query(
+    `SELECT external_userid, userid FROM customer_follows WHERE external_userid IN (${ph})`,
+    eus
+  );
+  for (const r of rows) {
+    if (!map.has(r.external_userid)) map.set(r.external_userid, []);
+    map.get(r.external_userid).push(r.userid);
+  }
+  const missing = eus.filter((eu) => !map.has(eu));
+  if (missing.length) {
+    const ph2 = missing.map(() => '?').join(',');
+    const [rows2] = await pool.query(
+      `SELECT external_userid, follow_userid FROM customers
+        WHERE external_userid IN (${ph2}) AND follow_userid IS NOT NULL`,
+      missing
+    );
+    for (const r of rows2) map.set(r.external_userid, [r.follow_userid]);
+  }
+  return map;
 }
 
 /** 搜索客户（按备注名/昵称 LIKE）。返回是否已开过小程序(opened)。 */
@@ -869,6 +932,7 @@ export const db = {
   deleteAdmin,
   countEnabledSupers,
   upsertCustomer,
+  getFollowMap,
   searchCustomers,
   findCustomerByUnionid,
   bindCustomerByUnionid,

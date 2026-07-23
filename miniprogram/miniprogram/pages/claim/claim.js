@@ -103,7 +103,15 @@ Page({
           message: '',
         });
       } else {
-        this.setData({ ...base, mode: 'empty' });
+        // 把"为什么没有奖励"讲清楚：身份没认出来（unionid 桥断了）和"确实没有待领"是两回事，
+        // 不区分的话，定向发了钱、客户却以为没发（后端返回的 reason 以前被直接丢弃）
+        const reasonText =
+          mine && mine.reason === 'not_a_customer'
+            ? '未匹配到你的客户档案：请先添加员工的企业微信为好友，或联系发放员工核对'
+            : mine && mine.reason === 'no_unionid'
+              ? '暂未能识别你的身份，请从员工发来的小程序卡片重新打开一次'
+              : '';
+        this.setData({ ...base, mode: 'empty', emptyReason: reasonText });
       }
     });
   },

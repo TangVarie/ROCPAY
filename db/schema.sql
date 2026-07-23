@@ -58,15 +58,26 @@ CREATE TABLE IF NOT EXISTS notify_events (
 
 -- 员工/管理员（ADMIN_OPENIDS 里的人启动时自动写成 super）
 CREATE TABLE IF NOT EXISTS admins (
-  openid     VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '员工的小程序openid',
-  name       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注名(谁)',
-  role       VARCHAR(16)  NOT NULL DEFAULT 'operator' COMMENT 'super|operator',
-  enabled    TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否启用',
-  created_by VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '谁添加的',
-  created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  openid       VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '员工的小程序openid',
+  name         VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注名(谁)',
+  role         VARCHAR(16)  NOT NULL DEFAULT 'operator' COMMENT 'super|operator',
+  enabled      TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否启用',
+  wecom_userid VARCHAR(64)  NULL COMMENT '员工的企微userid(群发sender映射)',
+  created_by   VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '谁添加的',
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_admins_role (role)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='员工/管理员';
+
+-- 客户↔跟进员工 多对多（customers.follow_userid 只有一列，多跟进时会互相覆盖；
+-- 群发按 sender 分组需要完整跟进关系，所以单独记一张表）
+CREATE TABLE IF NOT EXISTS customer_follows (
+  external_userid VARCHAR(64) NOT NULL COMMENT '企微外部联系人ID',
+  userid          VARCHAR(64) NOT NULL COMMENT '跟进员工的企微userid',
+  synced_at       DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (external_userid, userid),
+  KEY idx_cf_userid (userid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='客户-跟进员工多对多(群发sender分组用)';
 
 -- 企微客户缓存 + 身份映射（P2·按备注名搜索、unionid 定向桥）
 CREATE TABLE IF NOT EXISTS customers (

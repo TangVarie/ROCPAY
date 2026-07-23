@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p8-split';
+const BUILD = 'p9-groupsend';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -159,7 +159,8 @@ async function refreshAdmins() {
   try {
     const rows = await db.loadAdmins();
     const m = new Map();
-    for (const a of rows) m.set(a.openid, { role: a.role, enabled: a.enabled });
+    for (const a of rows)
+      m.set(a.openid, { role: a.role, enabled: a.enabled, wecomUserid: a.wecom_userid || '' });
     adminCache = m;
     adminCacheAt = Date.now();
   } catch (e) {
@@ -183,6 +184,13 @@ function isAdmin(openid) {
 }
 function isSuperAdmin(openid) {
   return adminRole(openid) === 'super';
+}
+/** 员工 openid → 企微userid 映射（员工管理里配置）。没配返回 ''。 */
+function adminWecomUserid(openid) {
+  if (!openid) return '';
+  ensureFreshAdmins();
+  const a = adminCache.get(openid);
+  return (a && a.enabled && a.wecomUserid) || '';
 }
 
 // 冷启动：首个 API 请求到达而管理员缓存尚未载入（adminCacheAt===0）时，先同步载入一次，
@@ -277,6 +285,7 @@ app.get('/api/me', async (req, res) => {
     splitCapYuan: config.app.splitCapYuan, // 单笔限额，超过自动拆单
     perUserDailyCapYuan: config.app.perUserDailyCapYuan, // 单人单日上限（拆单也绕不过）
     wecom: wecom.wecomEnabled, // 企微是否已连接（前端据此提示）
+    wecomUserid: adminWecomUserid(openid), // 本人的企微账号映射（''=未配置，群发任务会派给客户跟进人）
     db: db.dbEnabled,
     profile,
   });
@@ -521,8 +530,13 @@ app.post('/api/admins', async (req, res) => {
   const openid = String((req.body || {}).openid || '').trim();
   const name = String((req.body || {}).name || '').trim();
   const role = (req.body || {}).role === 'super' ? 'super' : 'operator';
+  // 员工的企微 userid（可选）：配置后该员工发起群发，任务会派给他自己
+  const wecomUserid = String((req.body || {}).wecomUserid || '').trim();
   if (!openid) return res.status(400).json({ error: '请填写员工的 openid' });
   if (!/^[A-Za-z0-9_-]{6,64}$/.test(openid)) return res.status(400).json({ error: 'openid 格式不对' });
+  if (wecomUserid && !/^[\w@.-]{1,64}$/.test(wecomUserid)) {
+    return res.status(400).json({ error: '企微账号（userid）格式不对' });
+  }
   try {
     // 若把最后一个超管降级为操作员，拦截
     if (role !== 'super') {
@@ -531,7 +545,7 @@ app.post('/api/admins', async (req, res) => {
         return res.status(400).json({ error: '不能把最后一个超级管理员降级' });
       }
     }
-    await db.upsertAdmin({ openid, name, role, createdBy: me });
+    await db.upsertAdmin({ openid, name, role, createdBy: me, wecomUserid });
     await refreshAdmins();
     res.json({ ok: true });
   } catch (e) {
@@ -633,9 +647,13 @@ app.post('/api/customers/sync', async (req, res) => {
   }
 });
 
-// 企微群发通知：给选中的客户发一条文案（员工需在企微「群发助手」点一次发送）
+// 企微群发通知：给选中的客户发一条文案（跟进员工需在企微确认发送）。
+// 企微硬性语义：不传 sender 时，任务派给客户跟进人里「最后聊过天」的那个，与谁点按钮无关——
+// 客户加了多个员工时任务会漂移（A 发起、任务落到 B）。所以这里按跟进关系分组、逐组带 sender：
+//   发起人跟进的客户 → 派给发起人；其他客户 → 派给各自跟进人；查不到跟进关系 → 交企微默认派发。
 app.post('/api/deliver', async (req, res) => {
-  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  const openid = getOpenid(req);
+  if (!isAdmin(openid)) return res.status(403).json({ error: '无权限' });
   if (!wecom.wecomEnabled) return res.status(503).json({ error: '未配置企微，无法群发（可让员工手动转发小程序给客户）' });
   // 去重：拆单后同一客户会出现多次，群发每人只该收到一张卡片
   const externalUserids = Array.isArray((req.body || {}).externalUserids)
@@ -645,9 +663,8 @@ app.post('/api/deliver', async (req, res) => {
   const text = String((req.body || {}).text || '').trim() ||
     '你有一笔奖励待领取，请打开我们的小程序查看～';
   try {
-    const body = {
+    const base = {
       chat_type: 'single',
-      external_userid: externalUserids,
       text: { content: text.slice(0, 600) },
     };
     // 带上小程序卡片：客户点开卡片直达领取页（按 unionid 认出本人、显示他那一笔），
@@ -655,7 +672,7 @@ app.post('/api/deliver', async (req, res) => {
     let withCard = false;
     try {
       const picMediaId = await wecom.getCardCoverMediaId(cardCover());
-      body.attachments = [
+      base.attachments = [
         {
           msgtype: 'miniprogram',
           miniprogram: {
@@ -670,15 +687,62 @@ app.post('/api/deliver', async (req, res) => {
     } catch (e) {
       console.error('[wecom] 群发卡片封面上传失败，降级为纯文字：', e.code || e.message);
     }
-    const r = await wecom.addMsgTemplate(body);
+
+    // 按 sender 分组。'' 组 = 查不到跟进关系，交企微默认派发（旧行为兜底）
+    const senderUid = adminWecomUserid(openid);
+    const followMap = db.dbEnabled
+      ? await db.getFollowMap(externalUserids).catch(() => new Map())
+      : new Map();
+    const groups = new Map();
+    for (const eu of externalUserids) {
+      const fus = followMap.get(eu) || [];
+      let s = '';
+      if (senderUid && fus.includes(senderUid)) s = senderUid; // 发起人自己跟进的 → 派给发起人
+      else if (fus.length) s = [...fus].sort()[0]; // 其他 → 固定取字典序第一个跟进人，派发确定可预期
+      if (!groups.has(s)) groups.set(s, []);
+      groups.get(s).push(eu);
+    }
+
+    const tasks = [];
+    const errors = [];
+    const failList = [];
+    for (const [s, list] of groups) {
+      const body = { ...base, external_userid: list };
+      if (s) body.sender = s;
+      try {
+        const r = await wecom.addMsgTemplate(body);
+        const fails = r.fail_list || [];
+        failList.push(...fails);
+        tasks.push({
+          sender: s, // '' = 企微默认派发
+          senderSelf: !!s && s === senderUid,
+          count: list.length,
+          failCount: fails.length,
+          msgid: r.msgid || '',
+        });
+        console.log(
+          `[wecom] 群发任务已创建 sender=${s || '(企微默认)'} 客户=${list.length} 失败=${fails.length} msgid=${r.msgid || ''}`
+        );
+      } catch (e) {
+        errors.push({ sender: s, count: list.length, error: e.message });
+        console.error(`[wecom] 群发任务创建失败 sender=${s || '(企微默认)'} 客户=${list.length}：`, e.message);
+      }
+    }
+    if (!tasks.length) {
+      return res.status(500).json({ error: '群发任务全部创建失败：' + ((errors[0] || {}).error || '未知错误') });
+    }
     res.json({
       ok: true,
-      msgid: r.msgid || '',
       withCard,
-      failCount: (r.fail_list || []).length,
-      failList: r.fail_list || [],
+      senderConfigured: !!senderUid, // 发起人是否已配置企微账号映射
+      tasks,
+      errors,
+      failCount: failList.length,
+      failList,
+      msgid: tasks[0].msgid, // 旧版小程序兼容字段
     });
   } catch (e) {
+    console.error('[wecom] /api/deliver 异常：', e.message);
     res.status(500).json({ error: e.message });
   }
 });
