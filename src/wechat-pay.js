@@ -175,6 +175,8 @@ export async function encryptSensitive(plaintext) {
 
 // 验签：校验回调/响应的 Wechatpay-Signature
 export async function verifySignature({ timestamp, nonce, body, signature, serial }) {
+  // 回调可能被误触/探测（缺 Wechatpay-* 头）：直接判不通过，不能让 Buffer.from(undefined) 崩栈
+  if (!timestamp || !nonce || !signature || !serial || body == null) return false;
   const publicKey = await getPlatformKey(serial);
   const message = `${timestamp}\n${nonce}\n${body}\n`;
   return crypto.verify(

@@ -31,6 +31,8 @@ Page({
     notifyText: '',
     notifying: false,
     notifyDone: false,
+    notifyResult: null, // {lines:[], failCount} 群发任务派发结果（派给谁、几人失败）
+    myWecomUserid: '', // 本人企微账号映射（''=未配置，群发任务派给客户跟进人）
     sendErr: '',
 
     // ---- 发放 · 链接快发（副）----
@@ -69,6 +71,7 @@ Page({
     newOpenid: '',
     newName: '',
     newRole: 'operator',
+    newWecomUserid: '', // 员工企微userid（配置后其群发任务派给本人）
     staffMsg: '',
     staffLoading: false,
   },
@@ -88,6 +91,7 @@ Page({
           maxAmountYuan: me.maxAmountYuan || 5000,
           splitCapYuan: me.splitCapYuan || 200,
           perUserCapYuan: me.perUserDailyCapYuan || 2000,
+          myWecomUserid: me.wecomUserid || '',
         });
         if (me.isAdmin) {
           this.loadCustomers();
@@ -300,10 +304,26 @@ Page({
       .then((res) => {
         this.setData({ notifying: false });
         if (res && res.error) return this.setData({ sendErr: res.error });
-        this.setData({ notifyDone: true });
+        // 任务按客户跟进人分组派发（企微规则：谁跟进谁发）。把"派给了谁"讲清楚，
+        // 不然任务落在别的员工那里，发起人以为群发没生效
+        const lines = [];
+        (res.tasks || []).forEach((t) => {
+          const okCount = t.count - (t.failCount || 0);
+          const who = t.senderSelf ? '你' : t.sender ? '员工 ' + t.sender : '按企微默认跟进人';
+          lines.push(who + '：' + okCount + ' 位客户' + (t.failCount ? '（' + t.failCount + ' 位未能创建）' : ''));
+        });
+        (res.errors || []).forEach((er) => {
+          lines.push((er.sender ? '员工 ' + er.sender : '默认组') + '：创建失败——' + er.error);
+        });
+        this.setData({
+          notifyDone: true,
+          notifyResult: { lines, failCount: res.failCount || 0 },
+        });
         wx.showModal({
-          title: '通知已创建',
-          content: '请相关员工打开企业微信「客户联系 → 群发助手」，点一次【发送】即可送达客户。',
+          title: '群发任务已创建',
+          content:
+            (lines.length ? lines.join('\n') + '\n\n' : '') +
+            '任务派给了对应跟进员工：请让他们留意企微「消息-客户联系」的提醒（或打开 工作台-群发助手），点一次【发送】即可送达客户。',
           showCancel: false,
         });
       })
@@ -311,7 +331,7 @@ Page({
   },
 
   newBatch() {
-    this.setData({ step: 'pick', selected: [], selectedMap: {}, batchResult: null, sendErr: '', notifyDone: false });
+    this.setData({ step: 'pick', selected: [], selectedMap: {}, batchResult: null, sendErr: '', notifyDone: false, notifyResult: null });
   },
 
   // ============ 链接快发（副） ============
@@ -540,6 +560,7 @@ Page({
             roleText: a.role === 'super' ? '超管' : '发放员',
             isSuper: a.role === 'super',
             isMe: a.openid === this.data.openid,
+            wecomUserid: a.wecom_userid || '',
           }));
           this.setData({ admins });
         }
@@ -548,16 +569,22 @@ Page({
   },
   onNewOpenid(e) { this.setData({ newOpenid: e.detail.value }); },
   onNewName(e) { this.setData({ newName: e.detail.value }); },
+  onNewWecomUserid(e) { this.setData({ newWecomUserid: e.detail.value }); },
   pickRole(e) { this.setData({ newRole: e.currentTarget.dataset.role }); },
   addStaff() {
     const openid = (this.data.newOpenid || '').trim();
     if (!openid) return this.setData({ staffMsg: '请粘贴员工的 openid' });
     this.setData({ staffLoading: true, staffMsg: '' });
-    call('/api/admins', 'POST', { openid, name: this.data.newName, role: this.data.newRole })
+    call('/api/admins', 'POST', {
+      openid,
+      name: this.data.newName,
+      role: this.data.newRole,
+      wecomUserid: (this.data.newWecomUserid || '').trim(),
+    })
       .then((res) => {
         this.setData({ staffLoading: false });
         if (res && res.error) return this.setData({ staffMsg: res.error });
-        this.setData({ newOpenid: '', newName: '', newRole: 'operator', staffMsg: '' });
+        this.setData({ newOpenid: '', newName: '', newRole: 'operator', newWecomUserid: '', staffMsg: '' });
         wx.showToast({ title: '已添加', icon: 'success' });
         this.loadAdmins();
       })

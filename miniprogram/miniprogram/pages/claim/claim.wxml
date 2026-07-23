@@ -96,7 +96,7 @@
       <view class="state">
         <view class="li li-gift state-icon"></view>
         <view class="state-t1">暂时没有你的奖励</view>
-        <view class="state-t2">收到奖励后，打开这里即可领取</view>
+        <view class="state-t2">{{emptyReason || '收到奖励后，打开这里即可领取'}}</view>
       </view>
 
       <!-- 合作档案 · 等级（没有奖励时开屏也能看到自己的记录池） -->

@@ -127,7 +127,13 @@
               <textarea class="input notify-ta" value="{{notifyText}}" bindinput="onNotifyText" maxlength="200" auto-height />
               <button class="btn btn-blue btn-block" bindtap="sendNotify" loading="{{notifying}}"
                       disabled="{{notifyDone}}">{{notifyDone?'已创建群发，去企微点发送':'企微群发通知'}}</button>
-              <view class="psub t-light">创建后，员工在企微「群发助手」点一次发送即可送达</view>
+              <view class="err" wx:if="{{sendErr}}">{{sendErr}}</view>
+              <block wx:if="{{notifyResult}}">
+                <view class="psub t-dark" wx:for="{{notifyResult.lines}}" wx:key="*this">任务派发：{{item}}</view>
+                <view class="psub t-light" wx:if="{{notifyResult.failCount}}">{{notifyResult.failCount}} 位客户未进入群发（本月接收已达上限或跟进关系变动），可用下方「转发领取入口」补发</view>
+              </block>
+              <view class="psub t-light">任务按"谁跟进谁发"派给对应员工，在企微「消息-客户联系」提醒里点一次发送即可送达</view>
+              <view class="psub t-light" wx:if="{{!myWecomUserid}}">提示：让超管在「员工」里给你配置企微账号后，你跟进的客户任务会直接派给你</view>
             </block>
             <view class="psub t-light" wx:else>未连接企微，可直接把小程序转发到客户聊天</view>
             <button class="btn btn-fill btn-block" open-type="share">转发领取入口给客户</button>
@@ -295,6 +301,11 @@
           <input class="input finput" placeholder="如 小王" placeholder-class="ph" value="{{newName}}" bindinput="onNewName" />
         </view>
         <view class="field">
+          <text class="flabel">企微账号</text>
+          <input class="input finput" placeholder="员工的企微userid（选填）" placeholder-class="ph" value="{{newWecomUserid}}" bindinput="onNewWecomUserid" />
+        </view>
+        <view class="psub t-faint">配置后：该员工发起群发时，他跟进的客户任务会直接派给他本人（企微后台「通讯录-成员-账号」可查）</view>
+        <view class="field">
           <text class="flabel">角色</text>
           <view class="chips chips-inline">
             <view class="chip {{newRole==='operator'?'on':''}}" data-role="operator" bindtap="pickRole">发放员</view>
@@ -316,6 +327,7 @@
               <text class="badge" wx:if="{{item.isMe}}">我</text>
             </view>
             <view class="staff-oid t-faint num">{{item.openid}}</view>
+            <view class="staff-oid t-faint num" wx:if="{{item.wecomUserid}}">企微：{{item.wecomUserid}}</view>
           </view>
           <view class="textbtn textbtn-danger" wx:if="{{!item.isMe}}" data-openid="{{item.openid}}" bindtap="removeStaff">移除</view>
         </view>
