@@ -280,8 +280,9 @@ app.get('/api/period', async (req, res) => {
 });
 
 // 调整额度：mode='add' 充值(累加,携带结余) | mode='set' 校准(设为实际余额)。金额单位元。
+// 资金额度的增减是财务动作，仅超管可操作；发放员只读（GET /api/period 仍对全体管理员开放）
 app.post('/api/period/adjust', async (req, res) => {
-  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  if (!requireSuper(req, res)) return;
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
   const body = req.body || {};
   const mode = body.mode === 'set' ? 'set' : 'add';

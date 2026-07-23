@@ -1,6 +1,15 @@
 <view class="page">
 
-  <block wx:if="{{isAdmin}}">
+  <!-- 身份未知：先给加载态，避免管理员打开先闪出"你还不是发放员" -->
+  <block wx:if="{{!ready}}">
+    <view class="state">
+      <view class="li li-users state-icon"></view>
+      <view class="state-t1">正在进入工作台</view>
+      <view class="state-t2">正在确认你的身份</view>
+    </view>
+  </block>
+
+  <block wx:elif="{{isAdmin}}">
     <!-- 编辑式导语 -->
     <view class="head">
       <view class="lede">把奖励<text class="em">发给对的人</text>，到账<text class="em">全程可查</text>。</view>
@@ -155,7 +164,8 @@
       <view class="block block-blue bal" wx:if="{{period}}">
         <view class="bal-top">
           <text class="bal-label">可发额度 · 剩余</text>
-          <view class="bal-actions">
+          <!-- 资金额度增减 = 财务动作，仅超管可见可点（后端同样强制） -->
+          <view class="bal-actions" wx:if="{{isSuper}}">
             <text class="bal-refresh" data-mode="add" bindtap="adjustQuota">充值</text>
             <text class="bal-refresh" data-mode="set" bindtap="adjustQuota">校准</text>
           </view>
@@ -166,13 +176,13 @@
         </block>
         <block wx:else>
           <view class="bal-num num">— —</view>
-          <view class="bal-sub">点「充值」记入账户余额，之后自动算剩余</view>
+          <view class="bal-sub">{{isSuper ? '点「充值」记入账户余额，之后自动算剩余' : '超管充值后，这里显示还能发多少'}}</view>
         </block>
       </view>
 
-      <!-- 数据色块：蓝主块 + 浅调对（不三块同色排排坐） -->
+      <!-- 数据色块：可发额度是本页唯一蓝色 hero，累计降为浅调（不同色块摞排坐） -->
       <view class="statrow" wx:if="{{stats}}">
-        <view class="block block-blue stat-main">
+        <view class="block tint-sky stat-main">
           <view class="sm-label">累计发放</view>
           <view class="sm-num num">¥{{statsTotalYuan}}</view>
           <view class="sm-sub">共 {{stats.total}} 笔</view>
@@ -197,7 +207,7 @@
               <text class="rec-amt num t-dark">¥{{item.yuan}}</text>
               <text class="rec-who t-light" wx:if="{{item.who}}">{{item.who}}</text>
             </view>
-            <view class="rec-remark t-faint">{{item.remark || '客户奖励'}}</view>
+            <view class="rec-remark t-light">{{item.sub}}</view>
           </view>
           <view class="rec-r">
             <text class="badge {{item.cls==='ok'?'badge-success':item.cls==='fail'?'badge-danger':'badge-warning'}}">{{item.statusText}}</text>
@@ -240,7 +250,9 @@
         <view class="ptitle t-dark">员工（{{admins.length}}）</view>
         <view class="staff hairline-b" wx:for="{{admins}}" wx:key="openid">
           <view class="staff-l" data-v="{{item.openid}}" bindtap="copyText">
-            <view class="staff-name t-dark">{{item.name}}
+            <view class="staff-name t-dark">
+              <!-- 名字包成 text：裸文本节点参与 flex 换行会让徽标掉行后参差 -->
+              <text class="staff-nm">{{item.name}}</text>
               <text class="badge {{item.isSuper?'badge-blue':''}}">{{item.roleText}}</text>
               <text class="badge" wx:if="{{item.isMe}}">我</text>
             </view>

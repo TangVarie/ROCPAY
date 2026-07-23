@@ -431,11 +431,13 @@ export async function listRewards({ limit = 50, offset = 0 } = {}) {
     `SELECT r.rid, r.amount_fen, r.remark, r.created_by, r.status,
             r.created_at, r.expires_at, r.target_external_userid,
             c.remark AS target_remark, c.name AS target_name,
+            a.name AS created_by_name,
             t.claimer_openid, t.transfer_bill_no, t.state AS transfer_state,
             t.updated_at AS transfer_updated_at
        FROM rewards r
        LEFT JOIN transfers t ON t.out_bill_no = r.rid
        LEFT JOIN customers c ON c.external_userid = r.target_external_userid
+       LEFT JOIN admins a ON a.openid = r.created_by
       ORDER BY r.created_at DESC
       LIMIT ${lim} OFFSET ${off}`
   );

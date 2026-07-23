@@ -2,6 +2,7 @@ const { call } = require('../../api.js');
 
 Page({
   data: {
+    ready: false, // /api/me 返回前不渲染任何角色内容，避免管理员打开先闪"你还不是发放员"
     openid: '',
     isAdmin: false,
     isSuper: false,
@@ -55,6 +56,7 @@ Page({
       .then((me) => {
         const isSuper = !!me.isSuper;
         this.setData({
+          ready: true,
           openid: me.openid || '',
           isAdmin: !!me.isAdmin,
           isSuper,
@@ -70,7 +72,7 @@ Page({
         }
         if (isSuper) this.loadAdmins();
       })
-      .catch((e) => this.setData({ error: '无法连接后端：' + (e.errMsg || e.message || '') }));
+      .catch((e) => this.setData({ ready: true, error: '无法连接后端：' + (e.errMsg || e.message || '') }));
   },
 
   switchTab(e) {
@@ -177,13 +179,36 @@ Page({
 
   submitBatch() {
     if (this.data.loading) return; // 防连点：重复提交会生成重复奖励（重复打款）
-    const { selected, minAmountYuan, maxAmountYuan } = this.data;
+    const { selected, minAmountYuan, maxAmountYuan, period } = this.data;
     for (let i = 0; i < selected.length; i++) {
       const yuan = Number(selected[i].amountYuan);
       if (!(yuan > 0)) return this.setData({ sendErr: `「${selected[i].label}」还没填金额` });
       if (yuan < minAmountYuan) return this.setData({ sendErr: `「${selected[i].label}」金额不能小于 ${minAmountYuan} 元` });
       if (yuan > maxAmountYuan) return this.setData({ sendErr: `「${selected[i].label}」金额不能大于 ${maxAmountYuan} 元` });
     }
+    // 真金白银出账前必须过目一次汇总：人数、合计、最大单笔；额度不够再多一句硬提醒
+    let totalFen = 0;
+    let maxFen = 0;
+    selected.forEach((s) => {
+      const f = Math.round(Number(s.amountYuan) * 100);
+      totalFen += f;
+      if (f > maxFen) maxFen = f;
+    });
+    const totalYuan = (totalFen / 100).toFixed(2);
+    let content = `共 ${selected.length} 人\n合计 ¥${totalYuan}\n最大单笔 ¥${(maxFen / 100).toFixed(2)}`;
+    if (period && period.hasQuota && Number(period.remainingYuan) < totalFen / 100) {
+      content += `\n\n注意：可发额度仅剩 ¥${period.remainingYuan}，本次将超出，请先确认商户余额充足。`;
+    }
+    wx.showModal({
+      title: '确认发放',
+      content,
+      confirmText: '确认发放',
+      confirmColor: '#235e8e',
+      success: (r) => { if (r.confirm) this._doSubmitBatch(); },
+    });
+  },
+  _doSubmitBatch() {
+    const { selected } = this.data;
     this.setData({ sendErr: '', loading: true });
     const items = selected.map((s) => ({
       externalUserid: s.external_userid,
@@ -326,10 +351,12 @@ Page({
           const map = { SUCCESS: '已到账', WAIT_USER_CONFIRM: '待确认', FAIL: '失败', CLOSED: '已关闭', CREATED: '待领取', CLAIMED: '待确认' };
           const records = res.list.map((r) => {
             const st = r.transfer_state || r.status || 'CREATED';
+            const by = r.created_by_name || '';
             return {
               rid: r.rid,
               yuan: (r.amount_fen / 100).toFixed(2),
-              remark: r.remark || '',
+              // 副行：备注 + 谁发的（多发放员团队对账/追责要看这个）
+              sub: (r.remark || '客户奖励') + (by ? ' · ' + by + ' 发放' : ''),
               who: r.target_remark || r.target_name || (r.target_external_userid ? '定向客户' : ''),
               statusText: map[st] || st,
               cls: st === 'SUCCESS' ? 'ok' : st === 'FAIL' || st === 'CLOSED' ? 'fail' : 'warn',

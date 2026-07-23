@@ -63,7 +63,7 @@ page {
 /* 白底描边块（设置类内容） */
 .panel {
   background: var(--surface);
-  border: 1rpx solid var(--border);
+  border: 1px solid var(--border); /* 用物理像素，避免 1rpx 在部分机型被吞 */
   border-radius: 40rpx;
   padding: 32rpx;
   box-sizing: border-box;
@@ -110,22 +110,27 @@ page {
 .btn-red:active { background: var(--danger-dark); }
 .btn-block { width: 100%; }
 
-/* ---- 发丝线分隔（列表不许一条一卡） ---- */
+/* ---- 发丝线分隔（列表不许一条一卡） ----
+   1rpx 在部分机型换算成 <1 物理像素会被吞/深浅不一，改用 1px + scaleY(0.5) 经典半像素方案 */
 .hairline-b { position: relative; }
 .hairline-b::after {
   content: '';
   position: absolute;
   left: 0; right: 0; bottom: 0;
-  height: 1rpx;
+  height: 1px;
   background: var(--border);
+  transform: scaleY(0.5);
+  transform-origin: 0 100%;
 }
 .hairline-t { position: relative; }
 .hairline-t::before {
   content: '';
   position: absolute;
   left: 0; right: 0; top: 0;
-  height: 1rpx;
+  height: 1px;
   background: var(--border);
+  transform: scaleY(0.5);
+  transform-origin: 0 0;
 }
 
 /* ---- 状态标签：语义色/10 底 + 加深档文字，4px 圆角 ---- */

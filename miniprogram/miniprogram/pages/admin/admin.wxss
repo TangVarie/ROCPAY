@@ -102,11 +102,12 @@
 .cb.on::after {
   content: '';
   position: absolute;
-  left: 9rpx; top: 10rpx;
+  left: 50%; top: 50%;
   width: 18rpx; height: 9rpx;
   border-left: 4rpx solid #ffffff;
   border-bottom: 4rpx solid #ffffff;
-  transform: rotate(-45deg);
+  /* transform 居中代替硬坐标：rpx 取整在不同机型上不会再偏心 */
+  transform: translate(-50%, -65%) rotate(-45deg);
 }
 
 /* 面板内空态 */
@@ -127,10 +128,11 @@
 .pickbar-r { display: flex; align-items: center; gap: 8rpx; }
 .pickbtn { height: 76rpx; line-height: 76rpx; padding: 0 36rpx; font-size: 27rpx; margin: 0; }
 
-/* 统一填充 */
+/* 统一填充：行内文字按钮与 84rpx 输入框等高，避免跨组件 center 对不齐 */
 .fillall { display: flex; align-items: center; gap: 14rpx; margin: 24rpx 0 8rpx; }
 .fa-amt { width: 180rpx; flex: none; text-align: center; }
 .fa-note { flex: 1; }
+.fillall .textbtn { height: 84rpx; line-height: 84rpx; padding-top: 0; padding-bottom: 0; }
 
 /* 逐人行 */
 .frow {
@@ -177,9 +179,18 @@
   margin: 20rpx 0 24rpx;
 }
 
-/* 表单 */
+/* 表单
+   原生 input 与 view 文字是两套排版度量，align-items:center 混排必然微错位。
+   解法：标签做成与输入框等高(84rpx)的行盒，行内基线自然对齐 */
 .field { display: flex; align-items: center; margin: 24rpx 0; }
-.flabel { width: 140rpx; flex: none; font-size: 27rpx; color: var(--text-light); }
+.flabel {
+  width: 140rpx;
+  flex: none;
+  font-size: 27rpx;
+  color: var(--text-light);
+  height: 84rpx;
+  line-height: 84rpx;
+}
 .finput { flex: 1; }
 
 /* ---- 记录 · 数据色块（蓝主块 + 浅调对） ---- */
@@ -191,9 +202,9 @@
   flex-direction: column;
   justify-content: center;
 }
-.sm-label { font-size: 24rpx; color: rgba(255, 255, 255, 0.85); }
-.sm-num { font-size: 72rpx; font-weight: 700; color: #ffffff; line-height: 1.15; margin-top: 8rpx; }
-.sm-sub { font-size: 22rpx; color: rgba(255, 255, 255, 0.85); margin-top: 6rpx; }
+.sm-label { font-size: 24rpx; color: rgba(0, 0, 0, 0.55); }
+.sm-num { font-size: 72rpx; font-weight: 700; color: rgba(0, 0, 0, 0.9); line-height: 1.15; margin-top: 8rpx; }
+.sm-sub { font-size: 22rpx; color: rgba(0, 0, 0, 0.55); margin-top: 6rpx; }
 .stat-side { flex: 1; display: flex; flex-direction: column; gap: 20rpx; }
 .stat-mini { padding: 22rpx 26rpx; }
 .smm-label { font-size: 22rpx; color: rgba(0, 0, 0, 0.6); }
