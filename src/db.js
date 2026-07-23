@@ -677,7 +677,7 @@ export async function upsertCustomer(c) {
 /** 搜索客户（按备注名/昵称 LIKE）。返回是否已开过小程序(opened)。 */
 export async function searchCustomers({ q = '', followUserid = '', limit = 50, offset = 0 } = {}) {
   if (!pool) return [];
-  const lim = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+  const lim = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
   const off = Math.max(parseInt(offset, 10) || 0, 0);
   const where = [];
   const params = {};
@@ -777,9 +777,17 @@ export async function getClaimerProfile(openid) {
 }
 
 /** 客户等级总榜：按真实到账（SUCCESS）以领取人 openid 聚合，联客户档案取名字 */
-export async function getLeaderboard(limit = 50) {
+// 客户等级榜（分页）。minFen/maxFen 用累计到账金额做区间筛选（对应等级门槛），
+// 由调用方按 LEVELS 换算传入；不传则全部。DESC 排序 + LIMIT/OFFSET 真分页，几千客户也能翻到底。
+export async function getLeaderboard({ limit = 50, offset = 0, minFen = null, maxFen = null } = {}) {
   if (!pool) return [];
-  const n = Math.max(1, Math.min(Number(limit) || 50, 200));
+  const lim = Math.max(1, Math.min(parseInt(limit, 10) || 50, 200));
+  const off = Math.max(parseInt(offset, 10) || 0, 0);
+  const having = [];
+  const params = {};
+  if (minFen != null) { having.push('fen >= :minFen'); params.minFen = Math.round(minFen); }
+  if (maxFen != null) { having.push('fen < :maxFen'); params.maxFen = Math.round(maxFen); }
+  const havingSql = having.length ? 'HAVING ' + having.join(' AND ') : '';
   const [rows] = await pool.query(
     `SELECT t.claimer_openid, COUNT(*) AS n, COALESCE(SUM(t.amount_fen),0) AS fen,
             MAX(c.external_userid) AS external_userid,
@@ -788,10 +796,32 @@ export async function getLeaderboard(limit = 50) {
        LEFT JOIN customers c ON c.openid = t.claimer_openid
       WHERE t.state = 'SUCCESS'
       GROUP BY t.claimer_openid
+      ${havingSql}
       ORDER BY fen DESC, n DESC
-      LIMIT ${n}`
+      LIMIT ${lim} OFFSET ${off}`,
+    params
   );
   return rows;
+}
+
+// 各金额档人数分布（SQL 聚合，不受任何列表上限影响，永远准）。
+// buckets = [{lv, name, minFen, maxFen}]（maxFen 为该级上界=下一级门槛，最高级为 null）。
+export async function getLeaderboardDist(buckets) {
+  if (!pool || !buckets || !buckets.length) return { dist: [], total: 0 };
+  // 每个客户一行（累计到账 fen），在内存里归档到桶——聚合结果每客户一行、几千行也很轻
+  const [rows] = await pool.query(
+    `SELECT COALESCE(SUM(t.amount_fen),0) AS fen
+       FROM transfers t WHERE t.state='SUCCESS'
+      GROUP BY t.claimer_openid`
+  );
+  const dist = buckets.map((b) => ({ lv: b.lv, name: b.name, count: 0 }));
+  for (const r of rows) {
+    const fen = Number(r.fen);
+    for (let i = buckets.length - 1; i >= 0; i--) {
+      if (fen >= buckets[i].minFen) { dist[i].count++; break; }
+    }
+  }
+  return { dist, total: rows.length };
 }
 
 /** 查一笔奖励是否是定向的（供 token 领取时拦截，防止绕过定向） */
@@ -836,6 +866,7 @@ export const db = {
   revokeReward,
   getClaimerProfile,
   getLeaderboard,
+  getLeaderboardDist,
 };
 
 export default db;

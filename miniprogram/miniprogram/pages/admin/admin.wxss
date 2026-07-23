@@ -241,6 +241,7 @@
 .rec-revoke { font-size: 24rpx; font-weight: 600; color: var(--danger); padding: 8rpx 4rpx; }
 .rec-revoke:active { opacity: 0.6; }
 .loadmore { text-align: center; padding: 28rpx 0 8rpx; }
+.loadmore-hint { text-align: center; padding: 16rpx 24rpx 8rpx; font-size: 24rpx; line-height: 1.5; }
 
 /* 记录行：画布直排 + 发丝线 */
 .rec {

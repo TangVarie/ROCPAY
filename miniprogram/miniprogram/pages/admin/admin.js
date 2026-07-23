@@ -18,6 +18,10 @@ Page({
     custQ: '',
     custList: [],
     custLoaded: false,
+    custOffset: 0,
+    custHasMore: false,
+    custCapped: false,
+    custLoading: false,
     syncing: false,
     selected: [], // [{external_userid, label, amountYuan, note}]
     selectedMap: {}, // eu -> true（wxml 勾选态）
@@ -51,6 +55,9 @@ Page({
     rankDist: [], // 各等级人数分布
     rankTotal: 0,
     rankLv: null, // 当前筛选的等级（null=全部）
+    rankOffset: 0,
+    rankHasMore: false,
+    rankLoading: false,
     period: null, // 可发额度（运行式余额）{ hasQuota, remainingYuan, paidSinceYuan, low }
 
     // ---- 员工 ----
@@ -100,22 +107,34 @@ Page({
   // ============ 定向批量 ============
   onCustQ(e) { this.setData({ custQ: e.detail.value }); },
   searchCustomers() { this.loadCustomers(); },
-  loadCustomers() {
+  // more=true 追加下一页；否则按当前搜索词重查。分页避免一次塞几千客户
+  loadCustomers(more) {
+    if (this.data.custLoading) return;
+    const LIMIT = 60;
     const q = (this.data.custQ || '').trim();
-    call('/api/customers?limit=100&q=' + encodeURIComponent(q), 'GET')
+    const offset = more === true ? this.data.custOffset : 0;
+    this.setData({ custLoading: true });
+    call(`/api/customers?limit=${LIMIT}&offset=${offset}&q=${encodeURIComponent(q)}`, 'GET')
       .then((res) => {
-        if (res && res.list) {
-          const list = res.list.map((c) => ({
-            external_userid: c.external_userid,
-            label: c.remark || c.name || c.external_userid,
-            sub: c.remark && c.name && c.remark !== c.name ? c.name : '',
-            opened: !!c.opened,
-          }));
-          this.setData({ custList: list, custLoaded: true });
-        }
+        this.setData({ custLoading: false });
+        if (!res || !res.list) return this.setData({ custLoaded: true });
+        const page = res.list.map((c) => ({
+          external_userid: c.external_userid,
+          label: c.remark || c.name || c.external_userid,
+          sub: c.remark && c.name && c.remark !== c.name ? c.name : '',
+          opened: !!c.opened,
+        }));
+        this.setData({
+          custList: more === true ? this.data.custList.concat(page) : page,
+          custOffset: offset + page.length,
+          custHasMore: res.hasMore || false,
+          custCapped: res.capped || false,
+          custLoaded: true,
+        });
       })
-      .catch(() => this.setData({ custLoaded: true }));
+      .catch(() => this.setData({ custLoading: false, custLoaded: true }));
   },
+  loadMoreCustomers() { this.loadCustomers(true); },
 
   // 同步客户：后端单次最多跑 ~10s，客户多时返回 partial，这里自动带回进度续传直到跑完
   syncCustomers() {
@@ -424,24 +443,33 @@ Page({
     this.setData({ recFilter: Object.assign({}, this.data.recFilter, { target: '', targetLabel: '' }) });
     this.loadRecords();
   },
-  // ============ 客户榜（等级总榜 + 分布 + 筛选） ============
-  loadRank() {
+  // ============ 客户榜（等级总榜 + 分布 + 筛选 + 分页） ============
+  // more=true 追加下一页；否则重查。分布 dist/total 只在第一页返回，不覆盖翻页
+  loadRank(more) {
+    if (this.data.rankLoading) return;
     const lv = this.data.rankLv;
-    call('/api/leaderboard?limit=100' + (lv != null ? '&lv=' + lv : ''), 'GET')
+    const offset = more === true ? this.data.rankOffset : 0;
+    this.setData({ rankLoading: true });
+    call(`/api/leaderboard?offset=${offset}` + (lv != null ? '&lv=' + lv : ''), 'GET')
       .then((res) => {
+        this.setData({ rankLoading: false });
         if (!res || !res.list) return;
-        this.setData({
-          rank: res.list.map((r) => Object.assign({}, r, { totalYuanText: (Number(r.totalYuan) || 0).toFixed(2) })),
-          rankDist: res.dist || [],
-          rankTotal: res.total || 0,
-        });
+        const page = res.list.map((r) => Object.assign({}, r, { totalYuanText: (Number(r.totalYuan) || 0).toFixed(2) }));
+        const patch = {
+          rank: more === true ? this.data.rank.concat(page) : page,
+          rankOffset: offset + page.length,
+          rankHasMore: res.hasMore || false,
+        };
+        if (res.dist) { patch.rankDist = res.dist; patch.rankTotal = res.total || 0; }
+        this.setData(patch);
       })
-      .catch(() => {});
+      .catch(() => this.setData({ rankLoading: false }));
   },
+  loadMoreRank() { this.loadRank(true); },
   pickRankLv(e) {
     const v = e.currentTarget.dataset.lv;
     const lv = v === '' || v == null ? null : Number(v);
-    this.setData({ rankLv: this.data.rankLv === lv ? null : lv }); // 再点一次取消
+    this.setData({ rankLv: this.data.rankLv === lv ? null : lv, rankOffset: 0 }); // 再点一次取消
     this.loadRank();
   },
   // 点榜单行 → 跳到记录页只看该客户的资金往来（单人台账）

@@ -62,6 +62,8 @@
               </view>
               <text class="badge {{item.opened?'badge-blue':''}}">{{item.opened?'开过小程序':'未开过'}}</text>
             </view>
+            <view class="loadmore textbtn" wx:if="{{custHasMore}}" bindtap="loadMoreCustomers">{{custLoading ? '加载中…' : '加载更多'}}</view>
+            <view class="loadmore-hint t-faint" wx:if="{{custCapped}}">匹配较多，仅显示前 500 位，请输入更完整的备注名精确查找</view>
           </block>
           <view class="pempty" wx:elif="{{custLoaded}}">
             <view class="li li-users pempty-icon"></view>
@@ -270,6 +272,7 @@
           </view>
           <text class="rk-amt num t-dark">¥{{item.totalYuanText}}</text>
         </view>
+        <view class="loadmore textbtn" wx:if="{{rankHasMore}}" bindtap="loadMoreRank">{{rankLoading ? '加载中…' : '加载更多'}}</view>
       </block>
       <view class="state" wx:else>
         <view class="li li-users state-icon"></view>

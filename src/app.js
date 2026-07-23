@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p6-levels';
+const BUILD = 'p7-paging';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -341,10 +341,26 @@ app.get('/api/leaderboard', async (req, res) => {
   if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
   try {
-    const rows = await db.getLeaderboard(1000); // 先全量算分布，再按需筛选/截断
-    const all = rows.map((r) => {
+    const LIMIT = 40;
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    // 分布桶：每级 [minFen, 下一级门槛)；SQL 聚合出各级人数，不受列表分页影响
+    const buckets = LEVELS.map((L, i) => ({
+      lv: L.lv,
+      name: L.name,
+      minFen: L.minFen,
+      maxFen: i + 1 < LEVELS.length ? LEVELS[i + 1].minFen : null,
+    }));
+    // 榜单：按等级筛选时用该级金额区间做 HAVING，翻页 LIMIT/OFFSET（真分页，几千客户也翻得到底）
+    const wantLv = req.query.lv != null && req.query.lv !== '' ? Number(req.query.lv) : null;
+    const b = wantLv != null ? buckets.find((x) => x.lv === wantLv) : null;
+    const [rows, distRes] = await Promise.all([
+      db.getLeaderboard({ limit: LIMIT, offset, minFen: b ? b.minFen : null, maxFen: b ? b.maxFen : null }),
+      offset === 0 ? db.getLeaderboardDist(buckets) : Promise.resolve(null), // 分布只在第一页算一次
+    ]);
+    const list = rows.map((r, i) => {
       const lv = levelOf(Number(r.n), Number(r.fen));
       return {
+        rank: offset + i + 1,
         name: r.remark || r.name || '客户' + String(r.claimer_openid || '').slice(-4),
         eu: r.external_userid || '', // 有企微档案才可跳单人台账
         count: Number(r.n),
@@ -353,12 +369,13 @@ app.get('/api/leaderboard', async (req, res) => {
         lvName: lv.name,
       };
     });
-    // 各等级人数分布（含 0 人的级别也列出，筛选条完整）
-    const dist = LEVELS.map((L) => ({ lv: L.lv, name: L.name, count: all.filter((c) => c.lv === L.lv).length }));
-    const wantLv = req.query.lv != null && req.query.lv !== '' ? Number(req.query.lv) : null;
-    const filtered = wantLv != null ? all.filter((c) => c.lv === wantLv) : all;
-    const list = filtered.slice(0, Number(req.query.limit) || 100).map((c, i) => ({ rank: i + 1, ...c }));
-    res.json({ list, dist, total: all.length, levels: LEVELS.map((L) => ({ lv: L.lv, name: L.name, minYuan: L.minFen / 100 })) });
+    const out = { list, hasMore: rows.length === LIMIT };
+    if (distRes) {
+      out.dist = distRes.dist;
+      out.total = distRes.total;
+      out.levels = LEVELS.map((L) => ({ lv: L.lv, name: L.name, minYuan: L.minFen / 100 }));
+    }
+    res.json(out);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -525,13 +542,25 @@ app.get('/api/customers', async (req, res) => {
   if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
   try {
+    const q = String(req.query.q || '').trim();
+    const searching = q.length > 0;
+    // 搜索：全量匹配，一次返回，绝不截断（搜一个人搜不到很离谱）；仅在结果多到接近上限时提示精确化
+    // 浏览：分页，避免一次塞几千客户
+    const SEARCH_CAP = 500;
+    const limit = searching ? SEARCH_CAP : Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    const offset = searching ? 0 : Math.max(Number(req.query.offset) || 0, 0);
     const list = await db.searchCustomers({
-      q: String(req.query.q || '').trim(),
+      q,
       followUserid: String(req.query.follow || '').trim(),
-      limit: Number(req.query.limit) || 50,
-      offset: Number(req.query.offset) || 0,
+      limit,
+      offset,
     });
-    res.json({ list, wecom: wecom.wecomEnabled });
+    res.json({
+      list,
+      hasMore: !searching && list.length === limit, // 搜索不分页
+      capped: searching && list.length >= SEARCH_CAP, // 搜索结果过多，提示精确化
+      wecom: wecom.wecomEnabled,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
