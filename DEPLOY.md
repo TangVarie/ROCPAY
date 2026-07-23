@@ -1,7 +1,8 @@
 # ROCPAY 部署指南（微信云托管 + 自带 MySQL）
 
-> 这是在原 `README.md` 基础上、**加上数据库（建库）后**的完整部署走一遍。
+> 系统能力/架构/接口总览见 **[`README.md`](./README.md)**；本文是**从零部署的分步走查**。
 > 只想跑通转账、暂时不要数据库？跳过第 3 步即可——不填 `MYSQL_*` 变量，系统自动运行在「无状态模式」，转账照常工作。
+> 要用**台账/定向/企微**等完整能力则必须建库（第 3 步）；企微直连还需备案的自定义域名（§12）。
 
 ---
 
@@ -14,7 +15,7 @@
 微信云托管 · 后端容器（本仓库根目录，监听 3000）
       │  内网
       ▼
-微信云托管 · 自带 MySQL（库名 rocpay，3 张表由服务启动时自动创建）
+微信云托管 · 自带 MySQL（库名 rocpay，6 张表由服务启动时自动创建）
       │  外网 HTTPS 签名请求
       ▼
 微信支付 V3 · 商家转账 transfer-bills
@@ -64,7 +65,7 @@
 2. 设置 **root 密码**（记住它）。
 3. 开通后，在「连接信息 / 连接管理」里抄下 **内网地址**（形如 `10.x.x.x`）、**端口**（一般 `3306`）、**用户名**（`root`）。
 
-> **不需要**你手动建库建表。库名 `rocpay` 和 3 张表（`rewards` / `transfers` / `notify_events`）会在服务**第一次启动时自动创建**（`src/db.js` 里的 `CREATE DATABASE / CREATE TABLE IF NOT EXISTS`，幂等安全）。
+> **不需要**你手动建库建表。库名 `rocpay` 和 6 张表（`rewards` / `transfers` / `notify_events` / `admins` / `customers` / `settings`）会在服务**第一次启动时自动创建**（`src/db.js` 里的 `CREATE DATABASE / CREATE TABLE IF NOT EXISTS`，幂等安全）。
 
 ### 3.2 把连接信息填进服务的环境变量
 二选一：
@@ -110,6 +111,7 @@
 | **`MYSQL_USER`** | **root** |
 | **`MYSQL_PASSWORD`** | **你设置的 root 密码** |
 | **`MYSQL_DATABASE`** | **rocpay** |
+| **`WX_PUBLIC_HOSTS`** ★安全 | **你的公网域名**（`roc.bywood.com.cn,<云托管默认域名>`，逗号分隔）。公网只放行回调/健康/验证路径、不信任伪造身份头。**强烈建议配上**，小程序内网调用不受影响 |
 
 > 企微（P2，接企微时才填，见 §12）：`WECOM_CORPID`、`WECOM_CONTACT_SECRET`、`WECOM_CALLBACK_TOKEN`、`WECOM_CALLBACK_AES_KEY`（后两个用于解锁「企业可信IP」，见 §12.4）、可选 `WECOM_AGENT_ID`。
 > **安全（强烈建议）**：`WX_PUBLIC_HOSTS`=你的公网自定义域名（如 `roc.bywood.com.cn`，多个逗号分隔）。设了它，公网域名只放行回调/健康/验证路径、且不信任伪造的 x-wx-openid，防止有人从公网冒充管理员调 `/api/rewards` 等接口。小程序走内网 callContainer 不受影响（设完用体验版验一下发放正常即可）。`ALLOW_DEV_AUTH` 只在本地调试用 `DEV_OPENID` 时置 `1`，**生产环境绝不要设**。
