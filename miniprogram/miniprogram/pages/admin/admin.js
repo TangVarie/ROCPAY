@@ -39,9 +39,6 @@ Page({
     // ---- 记录 ----
     records: [],
     stats: null,
-    balance: null, // { availableYuan, pendingYuan, hasPending }
-    balanceErr: '',
-    balanceLoading: false,
     period: null, // 可发额度（运行式余额）{ hasQuota, remainingYuan, paidSinceYuan, low }
 
     // ---- 员工 ----
@@ -69,7 +66,6 @@ Page({
         if (me.isAdmin) {
           this.loadCustomers();
           this.loadRecords();
-          this.loadBalance();
           this.loadPeriod();
         }
         if (isSuper) this.loadAdmins();
@@ -80,7 +76,7 @@ Page({
   switchTab(e) {
     const tab = e.currentTarget.dataset.tab;
     this.setData({ tab });
-    if (tab === 'records') { this.loadRecords(); this.loadBalance(); this.loadPeriod(); }
+    if (tab === 'records') { this.loadRecords(); this.loadPeriod(); }
     if (tab === 'staff') this.loadAdmins();
   },
   switchSendMode(e) {
@@ -107,17 +103,24 @@ Page({
       .catch(() => this.setData({ custLoaded: true }));
   },
 
+  // 同步客户：后端单次最多跑 ~10s，客户多时返回 partial，这里自动带回进度续传直到跑完
   syncCustomers() {
     if (this.data.syncing) return;
     this.setData({ syncing: true, sendErr: '' });
-    call('/api/customers/sync', 'POST', {})
-      .then((res) => {
+    const step = (startIndex, cursor, acc) =>
+      call('/api/customers/sync', 'POST', { startIndex, cursor }).then((res) => {
+        if (res && res.error) throw new Error(res.error);
+        const total = acc + (res.synced || 0);
+        if (res.partial) return step(res.nextIndex, res.nextCursor || '', total);
+        return total;
+      });
+    step(0, '', 0)
+      .then((total) => {
         this.setData({ syncing: false });
-        if (res && res.error) return this.setData({ sendErr: res.error });
-        wx.showToast({ title: `已同步 ${res.synced} 位客户`, icon: 'success' });
+        wx.showToast({ title: `已同步 ${total} 位客户`, icon: 'success' });
         this.loadCustomers();
       })
-      .catch((e) => this.setData({ syncing: false, sendErr: '同步失败：' + (e.errMsg || e.message || '') }));
+      .catch((e) => this.setData({ syncing: false, sendErr: '同步失败：' + (e.message || e.errMsg || '') }));
   },
 
   toggleCust(e) {
@@ -268,30 +271,6 @@ Page({
   },
 
   // ============ 记录 ============
-  loadBalance() {
-    if (this.data.balanceLoading) return;
-    this.setData({ balanceLoading: true });
-    call('/api/balance', 'GET')
-      .then((res) => {
-        this.setData({ balanceLoading: false });
-        if (!res || res.error || typeof res.availableYuan !== 'number') {
-          return this.setData({ balance: null, balanceErr: (res && res.error) || '暂时取不到余额' });
-        }
-        const pending = Number(res.pendingYuan) || 0;
-        this.setData({
-          balance: {
-            availableYuan: (Number(res.availableYuan) || 0).toFixed(2),
-            pendingYuan: pending.toFixed(2),
-            hasPending: pending > 0,
-          },
-          balanceErr: '',
-        });
-      })
-      .catch((e) =>
-        this.setData({ balanceLoading: false, balanceErr: '余额获取失败：' + (e.errMsg || e.message || '') })
-      );
-  },
-
   // 可发额度（运行式余额）：剩余 + 自上次充值已发放
   loadPeriod() {
     call('/api/period', 'GET')

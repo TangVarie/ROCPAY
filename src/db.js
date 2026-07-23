@@ -496,6 +496,63 @@ export async function getPeriodStats(since) {
   return { paidFen: Number(rows[0].paid_fen), paidCount: Number(rows[0].paid_count) };
 }
 
+/**
+ * 原子调整可发额度（mode='add' 充值累加携带结余 / mode='set' 校准设为实际余额）。
+ * 事务 + SELECT...FOR UPDATE 行锁：两位管理员同时充值也不会互相覆盖丢一笔。
+ */
+export async function adjustQuota({ mode, amountFen }) {
+  if (!pool) throw new Error('未开启数据库');
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    // 锁住两行设置，序列化并发的充值/校准
+    const [rows] = await conn.query(
+      `SELECT k, v FROM settings WHERE k IN ('quota_base_fen','quota_base_paid_fen') FOR UPDATE`
+    );
+    const map = {};
+    for (const r of rows) map[r.k] = r.v;
+    const [[paid]] = await conn.query(
+      `SELECT COALESCE(SUM(amount_fen),0) AS paid_fen FROM rewards WHERE status IN ('CLAIMED','SUCCESS')`
+    );
+    const allPaidFen = Number(paid.paid_fen);
+    let newBaseFen;
+    if (mode === 'set') {
+      newBaseFen = amountFen;
+    } else {
+      const baseRaw = 'quota_base_fen' in map ? map.quota_base_fen : null;
+      const baseFen = Number(baseRaw) || 0;
+      const anchorPaidFen = Number(map.quota_base_paid_fen || '0') || 0;
+      const remainingNow = baseRaw != null ? baseFen - (allPaidFen - anchorPaidFen) : 0;
+      newBaseFen = remainingNow + amountFen;
+    }
+    await conn.query(
+      `INSERT INTO settings (k, v) VALUES ('quota_base_fen', :b), ('quota_base_paid_fen', :p)
+       ON DUPLICATE KEY UPDATE v=VALUES(v)`,
+      { b: String(newBaseFen), p: String(allPaidFen) }
+    );
+    await conn.commit();
+  } catch (e) {
+    try { await conn.rollback(); } catch (_) { /* 回滚失败不掩盖原错误 */ }
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
+
+/** 近 7 天内未到终态(在途)的转账单号：给自动对账用（回调丢失/落库缺笔都能追平） */
+export async function listUnfinishedTransfers(limit = 20) {
+  if (!pool) return [];
+  const n = Math.max(1, Math.min(Number(limit) || 20, 100));
+  const [rows] = await pool.query(
+    `SELECT out_bill_no FROM transfers
+      WHERE state NOT IN (${TERMINAL_SQL})
+        AND created_at > DATE_SUB(NOW(), INTERVAL 7 DAY)
+      ORDER BY updated_at ASC
+      LIMIT ${n}`
+  );
+  return rows.map((r) => r.out_bill_no);
+}
+
 // ---------------- 员工/管理员 ----------------
 
 /** 返回全部管理员，用于内存缓存 */
@@ -666,6 +723,8 @@ export const db = {
   getSetting,
   setSetting,
   getPeriodStats,
+  adjustQuota,
+  listUnfinishedTransfers,
   loadAdmins,
   upsertAdmin,
   setAdminEnabled,

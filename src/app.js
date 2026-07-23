@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p2-bywood';
+const BUILD = 'p3-ledger';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -41,6 +41,26 @@ function nameRuleError(yuan, name) {
   if (yuan >= 2000 && !hasName) return '金额 ≥ 2000 元必须填写收款人真实姓名';
   if (yuan < 0.3 && hasName) return '金额 < 0.3 元不支持填写收款人姓名';
   return null;
+}
+
+// 关键落库：同步等待 + 失败重试一次。用于"钱已划走"的记账（领取 CLAIMED），
+// 最大限度保证额度台账不缺笔；两次都失败也不阻断业务（转账已发起），只留高危日志，
+// 后台自动对账(reconcileTransfers)还会兜底追平。
+async function persistCritical(action, fn) {
+  if (!db.dbEnabled) return;
+  try {
+    await fn();
+  } catch (e1) {
+    await new Promise((r) => setTimeout(r, 300));
+    try {
+      await fn();
+    } catch (e2) {
+      console.error(
+        `[db][高危] ${action} 两次落库失败（转账已发起，台账可能缺一笔，自动对账会尝试追平）：`,
+        e2.code || e2.message
+      );
+    }
+  }
 }
 
 // 落库辅助：尽力而为，任何写库失败只记日志，绝不阻断发钱/领钱链路
@@ -227,47 +247,7 @@ app.get('/api/diagnose', async (req, res) => {
   }
 });
 
-// 商户实时可用余额（管理员/发放员均可见）：配合"累计发放"一眼看清发了多少、还剩多少可发。
-// 走微信支付 V3 直连商户端点 /v3/merchant/fund/balance/{account_type}，account_type=BASIC；
-// available_amount/pending_amount 单位是分(int64)，前端按元展示（务必 /100，否则 100 倍误差）。
-app.get('/api/balance', async (req, res) => {
-  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
-  // 账户类型：默认取配置；?account= 可临时探测（BASIC/OPERATION/FEES），省得改环境变量重部署
-  const ALLOWED = ['BASIC', 'OPERATION', 'FEES'];
-  const q = String(req.query.account || '').toUpperCase();
-  const accountType = ALLOWED.includes(q)
-    ? q
-    : ALLOWED.includes(config.wechatpay.balanceAccountType)
-    ? config.wechatpay.balanceAccountType
-    : 'BASIC';
-  try {
-    const { status, data } = await wechatpay.request('GET', `/v3/merchant/fund/balance/${accountType}`);
-    if (status !== 200) {
-      const raw = data.message || data.code || `HTTP ${status}`;
-      // 未开通接口权限 / 账户类型不存在：都给运营一句可操作的人话，别甩微信原文
-      const noAuth = data.code === 'NO_AUTH' || /没有.*权限|无.*权限|not.*permission/i.test(raw);
-      const badType = data.code === 'INVALID_REQUEST' && /账户|account/i.test(raw);
-      return res.status(502).json({
-        code: data.code || '',
-        accountType,
-        error: noAuth
-          ? '实时余额接口未开通：请商户平台超管在「产品中心 → 申请开通」搜"余额"申请余额查询权限，通过后此处自动显示（不影响发放与台账）'
-          : badType
-          ? `商户号没有 ${accountType} 账户：换个账户类型（设 WECHATPAY_BALANCE_ACCOUNT_TYPE=OPERATION 或 BASIC，或临时 URL 带 ?account=OPERATION 探测）`
-          : raw,
-      });
-    }
-    res.json({
-      accountType,
-      availableYuan: (Number(data.available_amount) || 0) / 100,
-      pendingYuan: (Number(data.pending_amount) || 0) / 100,
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// 可发额度台账（自家账本，绕开微信余额权限）——「运行式余额」模型：
+// 可发额度台账（自家账本；微信余额查询接口已弃用——需单独开通权限、且此账本已覆盖需求）——「运行式余额」模型：
 //   剩余 = 锚点剩余(quota_base_fen) − 自锚点起已发放(allTimePaid − quota_base_paid_fen)
 //   充值时新剩余 = 当前剩余 + 充值额（携带上期结余，解决"还剩一点又充值"）
 //   校准时新剩余 = 直接设为实际余额（与商户平台核对时用）
@@ -309,20 +289,8 @@ app.post('/api/period/adjust', async (req, res) => {
   if (!(yuan >= 0)) return res.status(400).json({ error: '请输入正确金额' });
   const amtFen = Math.round(yuan * 100);
   try {
-    const allTime = await db.getPeriodStats(null);
-    let newBaseFen;
-    if (mode === 'set') {
-      newBaseFen = amtFen; // 校准：剩余直接设为实际余额
-    } else {
-      // 充值：新剩余 = 当前剩余 + 充值额（携带上期结余）
-      const baseRaw = await db.getSetting('quota_base_fen', null);
-      const baseFen = Number(baseRaw) || 0;
-      const anchorPaidFen = Number(await db.getSetting('quota_base_paid_fen', '0')) || 0;
-      const remainingNow = baseRaw != null ? baseFen - (allTime.paidFen - anchorPaidFen) : 0;
-      newBaseFen = Math.round(remainingNow) + amtFen;
-    }
-    await db.setSetting('quota_base_fen', String(newBaseFen));
-    await db.setSetting('quota_base_paid_fen', String(allTime.paidFen)); // 重新锚定
+    // 事务 + 行锁（db.adjustQuota）：两位管理员同时充值也不会丢任何一笔
+    await db.adjustQuota({ mode, amountFen: amtFen });
     res.json(await computeQuota());
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -462,10 +430,14 @@ app.get('/api/customers', async (req, res) => {
 });
 
 // 从企微同步客户入库——管理员（需配企微）。body.userids = 要同步的企微员工 userid 列表
+// 大客户量防超时：单次最多跑 ~10s（客户端 callContainer 15s 超时，留足余量），
+// 超时返回 { partial:true, nextIndex, nextCursor }，前端自动带回续传直到跑完。upsert 幂等，重跑无害。
 app.post('/api/customers/sync', async (req, res) => {
   if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
   if (!wecom.wecomEnabled) return res.status(503).json({ error: '未配置企微（WECOM_CORPID/WECOM_CONTACT_SECRET）' });
+  const DEADLINE_MS = 10_000;
+  const startAt = Date.now();
   try {
     // 不传 userids 时，自动发现所有配置了「客户联系」的员工，全量同步
     let userids = Array.isArray((req.body || {}).userids) ? req.body.userids.filter(Boolean) : [];
@@ -473,23 +445,30 @@ app.post('/api/customers/sync', async (req, res) => {
     if (!userids.length) {
       return res.status(400).json({ error: '企微里没有配置「客户联系」的员工（请在企微后台把负责客户的员工加入客户联系使用范围）' });
     }
+    const startIndex = Math.min(Math.max(Number((req.body || {}).startIndex) || 0, 0), userids.length);
+    const startCursor = typeof (req.body || {}).cursor === 'string' ? req.body.cursor : '';
     let synced = 0;
-    for (const uid of userids) {
-      let cursor = '';
+    for (let i = startIndex; i < userids.length; i++) {
+      const uid = userids[i];
+      let cursor = i === startIndex ? startCursor : '';
       let guard = 0;
       do {
-        const d = await wecom.batchGetByUser([uid], cursor, 100);
-        for (const item of d.external_contact_list || []) {
-          const c = wecom.normalizeContact(item);
-          if (c.externalUserid) {
-            await db.upsertCustomer(c);
-            synced++;
-          }
+        if (Date.now() - startAt > DEADLINE_MS) {
+          return res.json({ ok: true, partial: true, synced, nextIndex: i, nextCursor: cursor, totalStaff: userids.length });
         }
+        const d = await wecom.batchGetByUser([uid], cursor, 100);
+        const contacts = (d.external_contact_list || [])
+          .map((item) => wecom.normalizeContact(item))
+          .filter((c) => c.externalUserid);
+        // 10 个一批并发落库，比逐条 await 快一个数量级
+        for (let j = 0; j < contacts.length; j += 10) {
+          await Promise.all(contacts.slice(j, j + 10).map((c) => db.upsertCustomer(c)));
+        }
+        synced += contacts.length;
         cursor = d.next_cursor || '';
       } while (cursor && ++guard < 200);
     }
-    res.json({ ok: true, synced, staff: userids.length });
+    res.json({ ok: true, synced, totalStaff: userids.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -638,7 +617,7 @@ app.post('/api/claim/mine', async (req, res) => {
       remark: r.remark,
       name: r.recipient_name || undefined,
     });
-    persist('recordClaim(mine)', () =>
+    await persistCritical('recordClaim(mine)', () =>
       db.recordClaim({
         rid: r.rid,
         claimerOpenid: openid,
@@ -707,7 +686,7 @@ app.post('/api/claim', async (req, res) => {
       remark: payload.remark,
       name: payload.name || undefined,
     });
-    persist('recordClaim', () =>
+    await persistCritical('recordClaim', () =>
       db.recordClaim({
         rid: payload.rid,
         claimerOpenid: openid,
@@ -807,8 +786,43 @@ app.post('/api/notify', async (req, res) => {
   }
 });
 
+// ---- 自动对账：定时把"在途/未终态"的转账用微信侧最新状态刷新 ----
+// 作用：① 没配回调(WECHATPAY_NOTIFY_URL)也能追平到账状态；② 回调偶发丢失能兜底；
+// ③ 领取时 recordClaim 万一没写上，微信侧查到的单也会把 CLAIMED/终态补回，台账自愈。
+let reconciling = false;
+async function reconcileTransfers() {
+  if (!db.dbEnabled || reconciling) return;
+  reconciling = true;
+  try {
+    const bills = await db.listUnfinishedTransfers(20);
+    for (const outBillNo of bills) {
+      try {
+        const data = await queryTransferByOutBillNo(outBillNo);
+        await db.updateTransferState({
+          outBillNo: data.out_bill_no || outBillNo,
+          state: data.state,
+          transferBillNo: data.transfer_bill_no,
+          failReason: data.fail_reason,
+          claimerOpenid: data.openid,
+          amountFen: data.transfer_amount,
+        });
+      } catch (_) {
+        /* 单笔查询失败跳过，下一轮再试 */
+      }
+    }
+  } catch (e) {
+    console.error('[reconcile] 自动对账失败：', e.code || e.message);
+  } finally {
+    reconciling = false;
+  }
+}
+
 app.listen(config.port, async () => {
   console.log(`✅ 服务已启动，监听端口 ${config.port}`);
+  if (db.dbEnabled) {
+    setTimeout(reconcileTransfers, 60_000); // 启动 1 分钟后先跑一轮
+    setInterval(reconcileTransfers, 10 * 60_000); // 之后每 10 分钟一轮
+  }
   if (db.dbEnabled) {
     if (config.db.autoMigrate) {
       try {
