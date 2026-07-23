@@ -285,7 +285,21 @@
 .state-t2 { margin-top: 8rpx; font-size: 26rpx; color: var(--text-light); text-align: center; }
 
 /* ---- 客户等级总榜 ---- */
-.rank-head { margin-bottom: 8rpx; }
+.rank-head { margin-bottom: 16rpx; }
+/* 等级分布筛选条 */
+.lvchips { display: flex; flex-wrap: wrap; gap: 12rpx; margin-bottom: 16rpx; }
+.lvchip {
+  height: 56rpx;
+  line-height: 56rpx;
+  padding: 0 20rpx;
+  border-radius: var(--r-control);
+  font-size: 23rpx;
+  background: var(--fill);
+  color: var(--text);
+}
+.lvchip.on { background: var(--primary); color: #ffffff; font-weight: 600; }
+.lvchip:active { opacity: 0.8; }
+.lvchip-n { margin-left: 4rpx; opacity: 0.75; }
 .rk { display: flex; align-items: center; gap: 20rpx; padding: 26rpx 4rpx; }
 .rk:active { background: rgba(0, 0, 0, 0.04); }
 .rk-no { width: 56rpx; flex: none; font-size: 32rpx; font-weight: 700; color: var(--text-faint); text-align: center; }

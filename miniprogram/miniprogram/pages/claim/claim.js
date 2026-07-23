@@ -49,11 +49,8 @@ Page({
     if (!p) return null;
     const lv = p.level || { lv: 0, name: '初识', next: null };
     let nextText = '';
-    if (lv.next) {
-      const parts = [];
-      if (lv.next.needCount > 0) parts.push(`再合作 ${lv.next.needCount} 次`);
-      if (lv.next.needYuan != null && lv.next.needYuan > 0) parts.push(`累计满 ¥${Math.ceil(Number(p.totalYuan) + lv.next.needYuan)}`);
-      if (parts.length) nextText = parts.join(' 或 ') + `，升级${lv.next.name}`;
+    if (lv.next && lv.next.needYuan > 0) {
+      nextText = `再领 ¥${Number(lv.next.needYuan).toFixed(2)} 升级${lv.next.name}`;
     }
     return {
       lv: lv.lv,

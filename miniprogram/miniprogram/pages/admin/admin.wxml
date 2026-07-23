@@ -243,8 +243,19 @@
     <!-- ================= 客户（等级总榜） ================= -->
     <block wx:if="{{tab==='rank'}}">
       <view class="panel rank-head">
-        <view class="ptitle t-dark">客户等级榜</view>
-        <view class="psub t-light">按真实到账排序 · 点任意一行查看该客户的资金往来</view>
+        <view class="prow">
+          <view class="ptitle t-dark">客户等级榜</view>
+          <view class="psub t-light" style="margin-top:0">共 {{rankTotal}} 位</view>
+        </view>
+        <view class="psub t-light">按累计到账排序 · 点任意一行查看该客户的资金往来</view>
+      </view>
+
+      <!-- 等级分布 + 筛选：点某级只看该级客户，再点取消 -->
+      <view class="lvchips">
+        <view class="lvchip {{rankLv==null?'on':''}}" data-lv="" bindtap="pickRankLv">全部 {{rankTotal}}</view>
+        <view class="lvchip {{rankLv===item.lv?'on':''}}" wx:for="{{rankDist}}" wx:key="lv" data-lv="{{item.lv}}" bindtap="pickRankLv">
+          LV{{item.lv}}·{{item.name}} <text class="lvchip-n num">{{item.count}}</text>
+        </view>
       </view>
       <block wx:if="{{rank.length}}">
         <view class="rk hairline-b" wx:for="{{rank}}" wx:key="rank"

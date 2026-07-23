@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p5-rank';
+const BUILD = 'p6-levels';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -214,24 +214,27 @@ app.post('/api/wecom/callback', (_req, res) => res.status(200).send(''));
 // 当前用户：帮员工拿到自己的 openid、判断是否管理员，并告知金额上下限（前端预校验用）
 // ---- 客户等级（合作档案）：按真实到账的领取次数/累计金额定级，满足次数或金额其一即达标 ----
 // 机制参考去中心化平台的分层激励：级别只升不降、门槛透明、下一级进度可见
+// 客户等级：8 级，纯按累计真实到账金额划分（不看次数），门槛几何递增拉开区分度。
+// minFen=达到该级所需的累计到账（分）。改门槛/名称只动这张表，全端同步。
 const LEVELS = [
-  { lv: 1, name: '新伙伴', minCount: 1, minFen: 0 },
-  { lv: 2, name: '熟客', minCount: 3, minFen: 20000 },
-  { lv: 3, name: '金牌伙伴', minCount: 10, minFen: 100000 },
-  { lv: 4, name: '钻石伙伴', minCount: 30, minFen: 500000 },
+  { lv: 1, name: '新伙伴', minFen: 1 }, //         ≥ ¥0.01（领过就是新伙伴）
+  { lv: 2, name: '铜牌伙伴', minFen: 10000 }, //   ≥ ¥100
+  { lv: 3, name: '银牌伙伴', minFen: 30000 }, //   ≥ ¥300
+  { lv: 4, name: '金牌伙伴', minFen: 80000 }, //   ≥ ¥800
+  { lv: 5, name: '钻石伙伴', minFen: 200000 }, //  ≥ ¥2,000
+  { lv: 6, name: '合作专家', minFen: 500000 }, //  ≥ ¥5,000
+  { lv: 7, name: '配合大师', minFen: 1200000 }, // ≥ ¥12,000
 ];
 function levelOf(count, fen) {
   let cur = { lv: 0, name: '初识' };
   for (const L of LEVELS) {
-    if (count >= L.minCount || (L.minFen > 0 && fen >= L.minFen)) cur = L;
+    if (fen >= L.minFen) cur = L;
   }
   const next = LEVELS.find((L) => L.lv === cur.lv + 1) || null;
   return {
     lv: cur.lv,
     name: cur.name,
-    next: next
-      ? { name: next.name, needCount: Math.max(0, next.minCount - count), needYuan: next.minFen > 0 ? Math.max(0, (next.minFen - fen) / 100) : null }
-      : null,
+    next: next ? { name: next.name, needYuan: Math.max(0, (next.minFen - fen) / 100) } : null,
   };
 }
 
@@ -332,16 +335,16 @@ app.post('/api/period/adjust', async (req, res) => {
   }
 });
 
-// 【员工】客户等级总榜：按真实到账聚合排名 + 等级，运营看谁领得多/什么级别；前端点行跳该客户台账
+// 【员工】客户等级总榜：按真实到账聚合排名 + 等级；?lv=N 只看某一级。
+// 返回 list（含各行等级）+ dist（各等级人数分布，给筛选条 + 概览用）+ levels（等级表，前端展示门槛）
 app.get('/api/leaderboard', async (req, res) => {
   if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
   try {
-    const rows = await db.getLeaderboard(Number(req.query.limit) || 50);
-    const list = rows.map((r, i) => {
+    const rows = await db.getLeaderboard(1000); // 先全量算分布，再按需筛选/截断
+    const all = rows.map((r) => {
       const lv = levelOf(Number(r.n), Number(r.fen));
       return {
-        rank: i + 1,
         name: r.remark || r.name || '客户' + String(r.claimer_openid || '').slice(-4),
         eu: r.external_userid || '', // 有企微档案才可跳单人台账
         count: Number(r.n),
@@ -350,7 +353,12 @@ app.get('/api/leaderboard', async (req, res) => {
         lvName: lv.name,
       };
     });
-    res.json({ list });
+    // 各等级人数分布（含 0 人的级别也列出，筛选条完整）
+    const dist = LEVELS.map((L) => ({ lv: L.lv, name: L.name, count: all.filter((c) => c.lv === L.lv).length }));
+    const wantLv = req.query.lv != null && req.query.lv !== '' ? Number(req.query.lv) : null;
+    const filtered = wantLv != null ? all.filter((c) => c.lv === wantLv) : all;
+    const list = filtered.slice(0, Number(req.query.limit) || 100).map((c, i) => ({ rank: i + 1, ...c }));
+    res.json({ list, dist, total: all.length, levels: LEVELS.map((L) => ({ lv: L.lv, name: L.name, minYuan: L.minFen / 100 })) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

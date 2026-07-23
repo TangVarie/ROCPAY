@@ -48,6 +48,9 @@ Page({
 
     // ---- 客户榜 ----
     rank: [],
+    rankDist: [], // 各等级人数分布
+    rankTotal: 0,
+    rankLv: null, // 当前筛选的等级（null=全部）
     period: null, // 可发额度（运行式余额）{ hasQuota, remainingYuan, paidSinceYuan, low }
 
     // ---- 员工 ----
@@ -421,17 +424,25 @@ Page({
     this.setData({ recFilter: Object.assign({}, this.data.recFilter, { target: '', targetLabel: '' }) });
     this.loadRecords();
   },
-  // ============ 客户榜（等级总榜） ============
+  // ============ 客户榜（等级总榜 + 分布 + 筛选） ============
   loadRank() {
-    call('/api/leaderboard?limit=50', 'GET')
+    const lv = this.data.rankLv;
+    call('/api/leaderboard?limit=100' + (lv != null ? '&lv=' + lv : ''), 'GET')
       .then((res) => {
-        if (res && res.list) {
-          this.setData({
-            rank: res.list.map((r) => Object.assign({}, r, { totalYuanText: (Number(r.totalYuan) || 0).toFixed(2) })),
-          });
-        }
+        if (!res || !res.list) return;
+        this.setData({
+          rank: res.list.map((r) => Object.assign({}, r, { totalYuanText: (Number(r.totalYuan) || 0).toFixed(2) })),
+          rankDist: res.dist || [],
+          rankTotal: res.total || 0,
+        });
       })
       .catch(() => {});
+  },
+  pickRankLv(e) {
+    const v = e.currentTarget.dataset.lv;
+    const lv = v === '' || v == null ? null : Number(v);
+    this.setData({ rankLv: this.data.rankLv === lv ? null : lv }); // 再点一次取消
+    this.loadRank();
   },
   // 点榜单行 → 跳到记录页只看该客户的资金往来（单人台账）
   goCustomerLedger(e) {
