@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p9-groupsend';
+const BUILD = 'p10-claim-precheck';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -916,6 +916,34 @@ async function resolveCustomer(unionid, openid) {
   if (externalUserid) await db.bindCustomerByUnionid(unionid, openid).catch(() => {});
   return externalUserid;
 }
+
+// 【客户】链接领取前置校验（只读，不发起任何转账）：
+// 领取页进入即调，金额/备注以这里返回的令牌载荷为准（URL 的 amt 参数任何人都能改，只配当兜底展示）；
+// 已过期/已撤回/已到账/定向 直接返回终态，前端不再出现"先渲染领取块、点了才报错"的倒置流程。
+// CLAIMED（已发起待确认）不拦：同一领取人重开确认页是合法路径，他人误点由 POST /api/claim 兜底报错。
+app.get('/api/claim/status', async (req, res) => {
+  let payload;
+  try {
+    payload = verifyRewardToken(String(req.query.token || ''));
+  } catch (e) {
+    const state = /过期/.test(e.message) ? 'EXPIRED' : 'INVALID';
+    return res.json({ state, error: e.message });
+  }
+  let state = 'VALID';
+  if (db.dbEnabled) {
+    try {
+      const rw = await db.getReward(payload.rid);
+      if (rw) {
+        if (rw.status === 'CANCELLED') state = 'CANCELLED';
+        else if (rw.status === 'SUCCESS') state = 'SUCCESS';
+        else if (rw.target_external_userid) state = 'TARGETED';
+      }
+    } catch (_) {
+      /* 查库失败按可领处理：点领取时 POST /api/claim 仍有全量强校验兜底 */
+    }
+  }
+  res.json({ state, amountYuan: payload.fen / 100, remark: payload.remark || '' });
+});
 
 // 【客户】领取：发起转账，返回 package_info 供小程序拉起确认页
 app.post('/api/claim', async (req, res) => {

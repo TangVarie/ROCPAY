@@ -18,7 +18,14 @@
 
   <!-- 奖励色块：领取前红块 / 到账后蓝块，块内纯白 -->
   <block wx:if="{{mode==='token' || mode==='mine'}}">
-    <view class="reward-block {{status==='ok' ? 'block-blue' : 'block-red'}} {{celebrate ? 'celebrate' : ''}} block">
+    <!-- 令牌已终结（过期/已领/已撤回）：直接给终态，不再出现可点的领取按钮 -->
+    <view class="state" wx:if="{{tokenGone}}">
+      <view class="li li-alert state-icon"></view>
+      <view class="state-t1">无法领取</view>
+      <view class="state-t2">{{tokenGone}}</view>
+    </view>
+
+    <view wx:else class="reward-block {{status==='ok' ? 'block-blue' : 'block-red'}} {{celebrate ? 'celebrate' : ''}} block">
       <view class="rb-checkwrap" wx:if="{{status==='ok'}}"><view class="rb-check"></view></view>
       <view class="rb-label">{{ status==='ok' ? '已到账微信零钱' : (mode==='mine' ? '属于你的奖励' : '你收到一笔奖励') }}</view>
       <view class="rb-amount"><text class="rb-sign num">¥</text><text class="rb-num num">{{ mode==='mine' ? mineAmt : amtText }}</text></view>
@@ -47,7 +54,7 @@
         <text class="badge badge-blue">LV{{profile.lv}} · {{profile.name}}</text>
         <text class="lv-nums t-light num">合作 {{profile.count}} 次 · 累计 ¥{{profile.totalYuan}}</text>
       </view>
-      <view class="lv-next t-faint" wx:if="{{profile.nextText}}">{{profile.nextText}}</view>
+      <view class="lv-next t-hint" wx:if="{{profile.nextText}}">{{profile.nextText}}</view>
     </view>
 
     <!-- 下半版面：品牌大字报（到账后用正红呼应奖励色） -->
@@ -83,7 +90,7 @@
       </view>
 
       <button class="btn btn-blue btn-block" bindtap="goAdmin">进入工作台</button>
-      <view class="ah-tips t-faint">定向发放 · 台账对账 · 客户等级榜</view>
+      <view class="ah-tips t-hint">定向发放 · 台账对账 · 客户等级榜</view>
 
       <!-- 下半版面：累计发放大字报（有内容的填充） -->
       <view class="wm-zone" wx:if="{{adminHome && adminHome.totalAllYuan}}">
@@ -105,7 +112,7 @@
           <text class="badge badge-blue">LV{{profile.lv}} · {{profile.name}}</text>
           <text class="lv-nums t-light num">合作 {{profile.count}} 次 · 累计 ¥{{profile.totalYuan}}</text>
         </view>
-        <view class="lv-next t-faint" wx:if="{{profile.nextText}}">{{profile.nextText}}</view>
+        <view class="lv-next t-hint" wx:if="{{profile.nextText}}">{{profile.nextText}}</view>
       </view>
 
       <view class="panel join">

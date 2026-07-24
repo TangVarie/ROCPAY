@@ -2,13 +2,13 @@ const { call } = require('../../api.js');
 
 Page({
   data: {
-    // 模式：loading(识别中) | token(链接领取) | mine(定向领取) | empty(无奖励)
+    // 模式：loading(识别中) | token(链接领取) | mine(定向领取) | empty(无奖励) | error(连不上后端)
     mode: 'loading',
     // 链接领取（token）
     token: '',
-    amt: '',
     amtText: '--',
     remark: '',
+    tokenGone: '', // 非空 = 令牌已终结（过期/已领/已撤回），显示终态而不是可点的领取块
     // 定向领取（身份识别）
     mineAmt: '',
     mineRemark: '',
@@ -29,20 +29,51 @@ Page({
   onLoad(options) {
     const token = options.token ? decodeURIComponent(options.token) : '';
     if (token) {
-      // 链接进入：令牌流程。金额一律两位小数（BYWOOD 规范）
-      const n = Number(options.amt);
+      // 链接进入：令牌流程。金额/备注以后端校验接口返回为准——URL 的 amt 任何人都能改，
+      // 只当作校验接口不可达时的兜底展示，防"改链接把 ¥1 显示成 ¥10000"的伪造
+      this._urlAmt = options.amt || '';
       this.setData({
         mode: 'token',
         token,
-        amt: options.amt || '',
-        amtText: n > 0 ? n.toFixed(2) : '--',
+        amtText: '--',
         remark: options.remark ? decodeURIComponent(options.remark) : '',
       });
+      this.checkToken();
       this.refreshProfile(); // 顺带拉合作档案（等级卡）
       return;
     }
     // 直接打开：识别身份，看有没有属于我的定向奖励
     this.checkMine();
+  },
+
+  // 领取前置校验（只读）：进入即验 token，已过期/已领/已撤回直接给终态界面，
+  // 不再"先渲染领取块、点了才报错"；有效时金额以后端为准（两位小数，BYWOOD 规范）
+  checkToken() {
+    call(`/api/claim/status?token=${encodeURIComponent(this.data.token)}`, 'GET')
+      .then((res) => {
+        if (!res || !res.state) return this._tokenFallback();
+        if (res.state === 'VALID') {
+          this.setData({
+            amtText: Number(res.amountYuan) > 0 ? Number(res.amountYuan).toFixed(2) : '--',
+            remark: res.remark || this.data.remark,
+          });
+          return;
+        }
+        const map = {
+          EXPIRED: '这条领取链接已过期，请联系发放员重新发送',
+          CANCELLED: '这笔奖励已被发放方撤回',
+          SUCCESS: '这笔奖励已被领取过了',
+          TARGETED: '这是定向奖励，请从员工发来的小程序卡片打开领取',
+          INVALID: '领取链接无效，请联系发放员重新发送',
+        };
+        this.setData({ tokenGone: map[res.state] || '该奖励当前不可领取' });
+      })
+      .catch(() => this._tokenFallback());
+  },
+  // 校验接口不可达（冷启动/网络抖动）：退回 URL 金额兜底展示；点领取仍有后端强校验把关
+  _tokenFallback() {
+    const n = Number(this._urlAmt);
+    this.setData({ amtText: n > 0 ? n.toFixed(2) : '--' });
   },
 
   // 合作档案（等级）：/api/me 里带回，静默失败不打扰主流程
@@ -76,11 +107,21 @@ Page({
     this.setData({ mode: 'loading', status: 'idle', message: '' });
     Promise.all([
       call('/api/me', 'GET').catch((e) => ({ _err: e })),
-      call('/api/claim/mine', 'GET').catch(() => ({})),
+      call('/api/claim/mine', 'GET').catch((e) => ({ _err: e })),
     ]).then(([me, mine]) => {
       // /api/me 都拿不到 openid = 后端连不上/没部署好，明确报错而不是装作"没奖励"
       if (!me || me._err || !me.openid) {
         const detail = me && me._err ? (me._err.errMsg || me._err.message || '') : '后端无响应';
+        this.setData({ mode: 'error', message: detail });
+        return;
+      }
+      // 奖励查询失败 ≠ 没有奖励：定向发了钱、客户却看到"暂时没有你的奖励"是最伤的误导，
+      // 这里必须走错误态 + 重试，而不是空态
+      if (!mine || mine._err || mine.error) {
+        const detail =
+          (mine && mine._err && (mine._err.errMsg || mine._err.message)) ||
+          (mine && mine.error) ||
+          '奖励查询失败';
         this.setData({ mode: 'error', message: detail });
         return;
       }

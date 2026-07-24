@@ -31,10 +31,13 @@ page {
   --bg-secondary: #eff1f3;
   --surface: #ffffff;
   --fill: rgba(0, 0, 0, 0.04);
-  /* 黑色阶文字（禁纯黑） */
+  /* 黑色阶文字（禁纯黑）。
+     hint(0.45) 是信息性辅助文字（时间/提示/说明）的下限档，白底约 3.4:1；
+     faint(0.3) 白底仅 ~2.1:1，只许用于纯装饰（水印、占位符），不许承载信息或交互 */
   --text-dark: rgba(0, 0, 0, 0.9);
   --text: rgba(0, 0, 0, 0.65);
   --text-light: rgba(0, 0, 0, 0.55);
+  --text-hint: rgba(0, 0, 0, 0.45);
   --text-faint: rgba(0, 0, 0, 0.3);
   /* 分隔 */
   --border: rgba(0, 0, 0, 0.08);
@@ -80,6 +83,7 @@ page {
 .t-dark { color: var(--text-dark); }
 .t-body { color: var(--text); }
 .t-light { color: var(--text-light); }
+.t-hint { color: var(--text-hint); }
 .t-faint { color: var(--text-faint); }
 .num {
   font-family: var(--font-num);

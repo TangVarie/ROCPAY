@@ -152,8 +152,12 @@
 }
 .frow-amt { width: 150rpx; flex: none; height: 76rpx; line-height: 76rpx; padding: 0 16rpx; text-align: center; font-size: 28rpx; }
 .frow-note { width: 190rpx; flex: none; height: 76rpx; line-height: 76rpx; padding: 0 18rpx; font-size: 26rpx; }
-.frow-del { flex: none; font-size: 24rpx; color: var(--text-faint); padding: 16rpx 8rpx; }
+/* 可交互元素不许用 faint（白底 ~2.1:1，低于 WCAG 组件 3:1 底线），用 light 档 */
+.frow-del { flex: none; font-size: 24rpx; color: var(--text-light); padding: 16rpx 8rpx; }
 .frow-del:active { color: var(--danger); }
+/* 校验失败的行：浅红底高亮 + 金额框加深，配合 pageScrollTo 定位，30 人时不用自己翻着找 */
+.frow-err { background: rgba(184, 41, 60, 0.06); border-radius: var(--r-control); }
+.frow-err .frow-amt { background: rgba(184, 41, 60, 0.12); }
 .submitbtn { margin-top: 28rpx; }
 
 /* 语义横幅：语义色/10 底 + 黑字 */
@@ -284,6 +288,7 @@
 .state-icon { margin-bottom: 28rpx; }
 .state-t1 { font-size: 34rpx; font-weight: 600; color: var(--text-dark); }
 .state-t2 { margin-top: 8rpx; font-size: 26rpx; color: var(--text-light); text-align: center; }
+.state-btn { margin-top: 40rpx; width: 320rpx; }
 
 /* ---- 客户等级总榜 ---- */
 .rank-head { margin-bottom: 16rpx; }
@@ -303,7 +308,7 @@
 .lvchip-n { margin-left: 4rpx; opacity: 0.75; }
 .rk { display: flex; align-items: center; gap: 20rpx; padding: 26rpx 4rpx; }
 .rk:active { background: rgba(0, 0, 0, 0.04); }
-.rk-no { width: 56rpx; flex: none; font-size: 32rpx; font-weight: 700; color: var(--text-faint); text-align: center; }
+.rk-no { width: 56rpx; flex: none; font-size: 32rpx; font-weight: 700; color: var(--text-hint); text-align: center; }
 .rk-top { color: var(--primary); } /* 前三名主色 */
 .rk-main { flex: 1; min-width: 0; }
 .rk-name { display: flex; align-items: center; gap: 12rpx; flex-wrap: wrap; font-size: 29rpx; font-weight: 500; }
