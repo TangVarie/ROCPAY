@@ -124,6 +124,7 @@
 /* 面板内空态 */
 .pempty { padding: 48rpx 24rpx 32rpx; display: flex; flex-direction: column; align-items: center; }
 .pempty-icon { width: 80rpx; height: 80rpx; margin-bottom: 20rpx; }
+.pempty-spin { margin-bottom: 20rpx; } /* 加载态双箭动效：尺寸由 .chev-spinner 自带，只补下边距 */
 .pempty-t1 { font-size: 30rpx; font-weight: 600; }
 .pempty-t2 { font-size: 26rpx; margin-top: 6rpx; text-align: center; }
 .pempty-btn { margin-top: 32rpx; width: 300rpx; height: 80rpx; font-size: 28rpx; }

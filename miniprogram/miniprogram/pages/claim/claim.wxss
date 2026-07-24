@@ -175,6 +175,11 @@
   40% { transform: scale(1.02); }
   100% { transform: scale(1); }
 }
+/* 尊重系统「减弱动态效果」：庆祝动效停用，到账状态仍由色块变蓝表达 */
+@media (prefers-reduced-motion: reduce) {
+  .reward-block.celebrate { animation: none; }
+  .rb-check { animation: none; }
+}
 
 /* ===== 合作档案 · 等级卡（开屏与领取页都展示） ===== */
 .lvcard { margin-top: 24rpx; }

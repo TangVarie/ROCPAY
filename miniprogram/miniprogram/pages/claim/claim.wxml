@@ -1,8 +1,8 @@
 <view class="page stagger-in">
 
-  <!-- 识别中 -->
+  <!-- 识别中：品牌双箭加载动效（蓝→红依次亮起） -->
   <view class="state" wx:if="{{mode==='loading'}}">
-    <view class="li li-gift state-icon"></view>
+    <view class="chev-spinner state-icon" aria-label="加载中"></view>
     <view class="state-t1">正在为你查看奖励</view>
     <view class="state-t2">通常只需要一两秒</view>
   </view>
