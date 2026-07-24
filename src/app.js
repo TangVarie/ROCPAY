@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p11-batch-ops';
+const BUILD = 'p12-staff-search-dark';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -452,13 +452,16 @@ app.get('/api/rewards', async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
-    // 台账筛选：status=created|waiting|success|failed，days=近N天，target=某客户（单人往来），batch=某一批次
+    // 台账筛选：status=created|waiting|success|failed，days=近N天，target=某客户（单人往来），
+    // batch=某一批次，q=关键词（备注/单号/金额/客户名），month=自然月 YYYY-MM
     // 列表和 stats 用同一组筛选 → stats 即"筛选范围内的资金消耗汇总"
     const filters = {
       status: String(req.query.status || 'all'),
       days: Number(req.query.days) || 0,
       target: String(req.query.target || ''),
       batch: String(req.query.batch || ''),
+      q: String(req.query.q || ''),
+      month: String(req.query.month || ''),
     };
     const [list, stats] = await Promise.all([
       db.listRewards({ limit, offset, ...filters }),
@@ -554,6 +557,28 @@ app.post('/api/admins', async (req, res) => {
   }
 });
 
+// 停用/启用员工。停用立即生效（缓存即时刷新），资料与企微映射保留，可随时恢复——
+// 比"删了重加"多一条不中断权限档案的路（评审 管P1-4）
+app.post('/api/admins/enable', async (req, res) => {
+  if (!requireSuper(req, res)) return;
+  const openid = String((req.body || {}).openid || '').trim();
+  const enabled = !!(req.body || {}).enabled;
+  if (!openid) return res.status(400).json({ error: '缺少 openid' });
+  try {
+    if (!enabled) {
+      const cur = (await db.loadAdmins()).find((a) => a.openid === openid);
+      if (cur && cur.role === 'super' && cur.enabled && (await db.countEnabledSupers()) <= 1) {
+        return res.status(400).json({ error: '不能停用最后一个超级管理员' });
+      }
+    }
+    await db.setAdminEnabled(openid, enabled);
+    await refreshAdmins();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // 删除员工
 app.post('/api/admins/remove', async (req, res) => {
   if (!requireSuper(req, res)) return;
@@ -586,17 +611,21 @@ app.get('/api/customers', async (req, res) => {
     const SEARCH_CAP = 500;
     const limit = searching ? SEARCH_CAP : Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
     const offset = searching ? 0 : Math.max(Number(req.query.offset) || 0, 0);
-    const list = await db.searchCustomers({
-      q,
-      followUserid: String(req.query.follow || '').trim(),
-      limit,
-      offset,
-    });
+    const [list, lastSyncAt] = await Promise.all([
+      db.searchCustomers({
+        q,
+        followUserid: String(req.query.follow || '').trim(),
+        limit,
+        offset,
+      }),
+      db.getLastSyncAt().catch(() => null), // 上次同步时间：拿不到不影响列表
+    ]);
     res.json({
       list,
       hasMore: !searching && list.length === limit, // 搜索不分页
       capped: searching && list.length >= SEARCH_CAP, // 搜索结果过多，提示精确化
       wecom: wecom.wecomEnabled,
+      lastSyncAt, // 客户档案最近一次从企微同步的时间（null=从未同步）
     });
   } catch (e) {
     res.status(500).json({ error: e.message });

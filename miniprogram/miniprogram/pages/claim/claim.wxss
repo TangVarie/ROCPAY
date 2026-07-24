@@ -146,10 +146,10 @@
 .ah-alert { margin-bottom: 20rpx; padding: 26rpx 30rpx; }
 .ah-alert:active { opacity: 0.85; }
 .ah-alert-t { font-size: 30rpx; font-weight: 700; color: var(--danger-dark); }
-.ah-alert-s { font-size: 22rpx; color: rgba(0, 0, 0, 0.55); margin-top: 4rpx; }
+.ah-alert-s { font-size: 22rpx; color: var(--text-light); margin-top: 4rpx; }
 .ah-minis { display: flex; gap: 20rpx; margin-bottom: 28rpx; }
 .ah-mini { flex: 1; padding: 22rpx 26rpx; }
-.ahm-label { font-size: 22rpx; color: rgba(0, 0, 0, 0.6); }
+.ahm-label { font-size: 22rpx; color: var(--text-light); }
 .ahm-num { font-size: 40rpx; font-weight: 700; line-height: 1.2; margin-top: 2rpx; }
 .ah-tips { margin-top: 20rpx; text-align: center; font-size: 22rpx; letter-spacing: 1rpx; }
 

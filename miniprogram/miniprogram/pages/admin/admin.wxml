@@ -55,6 +55,7 @@
             <view class="ptitle t-dark">选择客户</view>
             <view class="textbtn" bindtap="syncCustomers">{{syncing?'同步中…':'从企微同步'}}</view>
           </view>
+          <view class="psub t-hint" wx:if="{{lastSyncText}}">上次同步 {{lastSyncText}}</view>
 
           <view class="searchbar">
             <input class="input searchinput" placeholder="搜客户备注名" placeholder-class="ph" value="{{custQ}}"
@@ -216,7 +217,14 @@
         </block>
       </view>
 
-      <!-- 台账筛选：状态 × 时间范围；点客户名可只看单人往来 -->
+      <!-- 台账搜索：备注 / 客户名 / 金额 / 单号（回车或点搜索生效） -->
+      <view class="searchbar rec-search">
+        <input class="input searchinput" placeholder="搜备注 / 客户名 / 金额 / 单号" placeholder-class="ph" value="{{recQ}}"
+               bindinput="onRecQ" confirm-type="search" bindconfirm="searchRecords" />
+        <button class="btn btn-blue searchbtn" bindtap="searchRecords">搜索</button>
+      </view>
+
+      <!-- 台账筛选：状态 × 时间范围（天数窗/自然月互斥）；点客户名可只看单人往来 -->
       <view class="fchips">
         <view class="fchip {{recFilter.status==='all'?'on':''}}" data-k="status" data-v="all" bindtap="pickRecFilter">全部</view>
         <view class="fchip {{recFilter.status==='created'?'on':''}}" data-k="status" data-v="created" bindtap="pickRecFilter">待领取</view>
@@ -225,9 +233,14 @@
         <view class="fchip {{recFilter.status==='failed'?'on':''}}" data-k="status" data-v="failed" bindtap="pickRecFilter">失败/撤回</view>
       </view>
       <view class="fchips">
-        <view class="fchip {{recFilter.days===0?'on':''}}" data-k="days" data-v="0" bindtap="pickRecFilter">全部时间</view>
+        <view class="fchip {{recFilter.days===0 && !recFilter.month ?'on':''}}" data-k="days" data-v="0" bindtap="pickRecFilter">全部时间</view>
         <view class="fchip {{recFilter.days===7?'on':''}}" data-k="days" data-v="7" bindtap="pickRecFilter">近7天</view>
         <view class="fchip {{recFilter.days===30?'on':''}}" data-k="days" data-v="30" bindtap="pickRecFilter">近30天</view>
+        <picker mode="date" fields="month" value="{{recFilter.month}}" bindchange="pickRecMonth">
+          <view class="fchip {{recFilter.month?'on':''}}">{{recFilter.month || '按月'}}</view>
+        </picker>
+        <view class="fchip fchip-target on" wx:if="{{recFilter.month}}" bindtap="clearRecMonth">✕</view>
+        <view class="fchip fchip-target on" wx:if="{{recFilter.q}}" bindtap="clearRecQ">「{{recFilter.q}}」 ✕</view>
         <view class="fchip fchip-target on" wx:if="{{recFilter.target}}" bindtap="clearCustomerFilter">{{recFilter.targetLabel}} ✕</view>
         <view class="fchip fchip-target on" wx:if="{{recFilter.batch}}" bindtap="clearBatchFilter">本批发放 ✕</view>
       </view>
@@ -345,11 +358,15 @@
     <!-- ================= 员工 ================= -->
     <block wx:if="{{tab==='staff' && isSuper}}">
       <view class="panel">
-        <view class="ptitle t-dark">添加发放员</view>
-        <view class="psub t-light">员工打开本小程序复制他的编号发你，粘贴到这里；添加后立即生效</view>
+        <view class="prow">
+          <view class="ptitle t-dark">{{editingOpenid ? '编辑员工' : '添加发放员'}}</view>
+          <view class="textbtn textbtn-plain" wx:if="{{editingOpenid}}" bindtap="cancelEditStaff">取消编辑</view>
+        </view>
+        <view class="psub t-light" wx:if="{{!editingOpenid}}">员工打开本小程序复制他的编号发你，粘贴到这里；添加后立即生效</view>
+        <view class="psub t-hint" wx:else>保存将覆盖备注名/角色/企微账号（企微账号留空则保留原值），并重新启用该员工</view>
         <view class="field">
           <text class="flabel">编号</text>
-          <input class="input finput" placeholder="粘贴员工 openid" placeholder-class="ph" value="{{newOpenid}}" bindinput="onNewOpenid" />
+          <input class="input finput" placeholder="粘贴员工 openid" placeholder-class="ph" value="{{newOpenid}}" bindinput="onNewOpenid" disabled="{{!!editingOpenid}}" />
         </view>
         <view class="field">
           <text class="flabel">备注名</text>
@@ -367,7 +384,7 @@
             <view class="chip {{newRole==='super'?'on':''}}" data-role="super" bindtap="pickRole">超管</view>
           </view>
         </view>
-        <button class="btn btn-blue btn-block" bindtap="addStaff" loading="{{staffLoading}}">添加</button>
+        <button class="btn btn-blue btn-block" bindtap="addStaff" loading="{{staffLoading}}">{{editingOpenid ? '保存修改' : '添加'}}</button>
         <view class="err" wx:if="{{staffMsg}}">{{staffMsg}}</view>
       </view>
 
@@ -381,11 +398,17 @@
               <text class="staff-nm">{{item.name}}</text>
               <text class="badge {{item.isSuper?'badge-blue':''}}">{{item.roleText}}</text>
               <text class="badge" wx:if="{{item.isMe}}">我</text>
+              <text class="badge badge-danger" wx:if="{{!item.enabled}}">已停用</text>
             </view>
             <view class="staff-oid t-hint num">{{item.openid}}</view>
             <view class="staff-oid t-hint num" wx:if="{{item.wecomUserid}}">企微：{{item.wecomUserid}}</view>
           </view>
-          <view class="textbtn textbtn-danger" wx:if="{{!item.isMe}}" data-openid="{{item.openid}}" bindtap="removeStaff">移除</view>
+          <view class="staff-actions">
+            <view class="textbtn staff-act" catchtap="editStaff" data-openid="{{item.openid}}">编辑</view>
+            <view class="textbtn staff-act textbtn-plain" wx:if="{{!item.isMe}}" catchtap="toggleStaffEnabled"
+                  data-openid="{{item.openid}}" data-enabled="{{item.enabled}}">{{item.enabled ? '停用' : '启用'}}</view>
+            <view class="textbtn staff-act textbtn-danger" wx:if="{{!item.isMe}}" data-openid="{{item.openid}}" catchtap="removeStaff">移除</view>
+          </view>
         </view>
       </view>
     </block>

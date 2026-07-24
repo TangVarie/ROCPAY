@@ -20,6 +20,7 @@ Page({
     custList: [],
     custLoaded: false,
     custError: false, // 加载失败态：与"真没有客户/搜索无结果"严格区分
+    lastSyncText: '', // 客户档案上次从企微同步的时间（''=未同步过）
     custOffset: 0,
     custHasMore: false,
     custCapped: false,
@@ -52,7 +53,9 @@ Page({
     recError: false, // 加载失败态：断网时不许用空态说谎
     stats: null,
     statsPaidYuan: '0.00',
-    recFilter: { status: 'all', days: 0, target: '', targetLabel: '', batch: '' }, // batch 非空 = 批次视图
+    // batch 非空 = 批次视图；q = 关键词（备注/客户名/金额/单号）；month 与 days 互斥（按月对账用）
+    recFilter: { status: 'all', days: 0, target: '', targetLabel: '', batch: '', q: '', month: '' },
+    recQ: '', // 关键词输入框的即时值（回车/点搜索才生效到 recFilter.q）
     recOffset: 0,
     recHasMore: false,
     recLoading: false,
@@ -80,6 +83,7 @@ Page({
     newName: '',
     newRole: 'operator',
     newWecomUserid: '', // 员工企微userid（配置后其群发任务派给本人）
+    editingOpenid: '', // 非空 = 表单在编辑该员工（保存即覆盖），而不是新增
     staffMsg: '',
     staffLoading: false,
     staffListErr: false, // 员工列表加载失败提示（loadAdmins 不许静默失败）
@@ -148,6 +152,14 @@ Page({
     else if (this.data.step === 'pick') this.loadCustomers();
   },
 
+  // 'YYYY-MM-DD HH:MM:SS' → 当年省年份（'MM-DD HH:MM'）、跨年补年份（'YYYY-MM-DD HH:MM'），对账不产生歧义
+  _fmtTime(s) {
+    const full = String(s || '').replace('T', ' ');
+    if (!full) return '';
+    const nowYear = String(new Date().getFullYear());
+    return full.slice(0, 4) === nowYear ? full.slice(5, 16) : full.slice(0, 16);
+  },
+
   // 异常笔数（FAIL/CLOSED，不含主动撤回）：failed 筛选的 stats.total 减去 cancelled_count。
   // 静默失败：角标是提醒不是数据源，拉不到不打扰
   loadAlerts() {
@@ -204,6 +216,7 @@ Page({
           custCapped: res.capped || false,
           custLoaded: true,
           custLoading: false,
+          lastSyncText: this._fmtTime(res.lastSyncAt), // 档案陈旧与否，运营一眼可判
         });
       })
       .catch(() => {
@@ -454,8 +467,8 @@ Page({
         path: `/pages/claim/claim?token=${encodeURIComponent(r.token)}&amt=${r.amountYuan}&remark=${encodeURIComponent(r.remark || '')}`,
       };
     }
-    // 定向发放：分享领取入口即可（客户按身份识别，无需令牌）
-    return { title: '你的奖励到啦，点开领取', path: '/pages/claim/claim' };
+    // 定向发放：分享领取入口即可（客户按身份识别，无需令牌）。标题带品牌名增强信任
+    return { title: '梨响 ROC · 你的奖励到啦，点开领取', path: '/pages/claim/claim' };
   },
 
   // ============ 记录 ============
@@ -519,7 +532,8 @@ Page({
     const f = this.data.recFilter;
     this.setData({ recLoading: true, recError: false });
     call(
-      `/api/rewards?limit=${LIMIT}&offset=${offset}&status=${f.status}&days=${f.days}&target=${encodeURIComponent(f.target)}&batch=${encodeURIComponent(f.batch || '')}`,
+      `/api/rewards?limit=${LIMIT}&offset=${offset}&status=${f.status}&days=${f.days}&target=${encodeURIComponent(f.target)}` +
+        `&batch=${encodeURIComponent(f.batch || '')}&q=${encodeURIComponent(f.q || '')}&month=${encodeURIComponent(f.month || '')}`,
       'GET'
     )
       .then((res) => {
@@ -529,6 +543,7 @@ Page({
         const records = res.list.map((r) => {
           const st = r.transfer_state || r.status || 'CREATED';
           const by = r.created_by_name || '';
+          const full = (r.created_at || '').replace('T', ' ');
           return {
             rid: r.rid,
             yuan: (r.amount_fen / 100).toFixed(2),
@@ -545,8 +560,9 @@ Page({
                 : 'warn',
             // 只有还没到账的能撤：未领取直接作废；已领待确认向微信撤销资金回流
             canRevoke: r.status === 'CREATED' || r.status === 'CLAIMED',
-            createdAt: (r.created_at || '').replace('T', ' ').slice(5, 16),
-            createdFull: (r.created_at || '').replace('T', ' '), // 详情层用完整时间（跨年对账不丢年份）
+            createdAt: this._fmtTime(full), // 当年省年份、跨年补年份
+            createdFull: full, // 详情层用完整时间
+            updatedFull: (r.transfer_updated_at || '').replace('T', ' '), // 转账状态最后更新时间
             billNo: r.transfer_bill_no || '', // 微信转账单号：与商户平台逐笔勾稽的凭据
             batchId: r.batch_id || '', // 批次号：非空说明来自一次批量发放，可整批查看/撤回
           };
@@ -583,9 +599,32 @@ Page({
   pickRecFilter(e) {
     const { k, v } = e.currentTarget.dataset;
     const f = Object.assign({}, this.data.recFilter);
-    if (k === 'days') f.days = Number(v) || 0;
+    if (k === 'days') { f.days = Number(v) || 0; f.month = ''; } // 天数窗与月份互斥
     else f.status = v;
     this.setData({ recFilter: f });
+    this._resetRecords();
+    this.loadRecords();
+  },
+  // ---- 台账关键词搜索（备注/客户名/金额/单号）与月份筛选（按月对账） ----
+  onRecQ(e) { this.setData({ recQ: e.detail.value }); },
+  searchRecords() {
+    const q = (this.data.recQ || '').trim();
+    this.setData({ recFilter: Object.assign({}, this.data.recFilter, { q }) });
+    this._resetRecords();
+    this.loadRecords();
+  },
+  clearRecQ() {
+    this.setData({ recQ: '', recFilter: Object.assign({}, this.data.recFilter, { q: '' }) });
+    this._resetRecords();
+    this.loadRecords();
+  },
+  pickRecMonth(e) {
+    this.setData({ recFilter: Object.assign({}, this.data.recFilter, { month: e.detail.value || '', days: 0 }) });
+    this._resetRecords();
+    this.loadRecords();
+  },
+  clearRecMonth() {
+    this.setData({ recFilter: Object.assign({}, this.data.recFilter, { month: '' }) });
     this._resetRecords();
     this.loadRecords();
   },
@@ -612,10 +651,11 @@ Page({
     if (r && r.batchId) this._enterBatchView(r.batchId);
   },
   _enterBatchView(batch) {
-    // 进批次视图时清掉时间/单人筛选：这一批可能跨越"近7天"边界，混着筛会看不全
+    // 进批次视图时清掉时间/单人/关键词筛选：这一批可能跨越筛选窗边界，混着筛会看不全
     this.setData({
       tab: 'records',
-      recFilter: { status: 'all', days: 0, target: '', targetLabel: '', batch },
+      recQ: '',
+      recFilter: { status: 'all', days: 0, target: '', targetLabel: '', batch, q: '', month: '' },
     });
     this._resetRecords();
     this.loadRecords();
@@ -678,6 +718,7 @@ Page({
       r.who ? `客户：${r.who}` : '',
       `备注：${r.sub}`,
       `创建：${r.createdFull}`,
+      r.updatedFull && r.updatedFull !== r.createdFull ? `状态更新：${r.updatedFull}` : '',
       `商户单号：${r.rid}`,
       `微信单号：${r.billNo || '—（转账发起后生成）'}`,
       r.batchId ? `批次号：${r.batchId}` : '',
@@ -793,6 +834,7 @@ Page({
             isSuper: a.role === 'super',
             isMe: a.openid === this.data.openid,
             wecomUserid: a.wecom_userid || '',
+            enabled: a.enabled !== false, // 停用的员工保留在列表里（可恢复），只是失去权限
           }));
           this.setData({ admins });
         } else {
@@ -818,11 +860,51 @@ Page({
       .then((res) => {
         this.setData({ staffLoading: false });
         if (res && res.error) return this.setData({ staffMsg: res.error });
-        this.setData({ newOpenid: '', newName: '', newRole: 'operator', newWecomUserid: '', staffMsg: '' });
-        wx.showToast({ title: '已添加', icon: 'success' });
+        const wasEdit = !!this.data.editingOpenid;
+        this.setData({ newOpenid: '', newName: '', newRole: 'operator', newWecomUserid: '', editingOpenid: '', staffMsg: '' });
+        wx.showToast({ title: wasEdit ? '已保存' : '已添加', icon: 'success' });
         this.loadAdmins();
       })
       .catch((e) => this.setData({ staffLoading: false, staffMsg: '网络错误：' + (e.errMsg || e.message || '') }));
+  },
+  // 就地编辑：把该员工资料填回表单，保存即覆盖（改名/改企微账号/改角色不再需要删了重加）
+  editStaff(e) {
+    const openid = e.currentTarget.dataset.openid;
+    const a = this.data.admins.find((x) => x.openid === openid);
+    if (!a) return;
+    this.setData({
+      editingOpenid: openid,
+      newOpenid: openid,
+      newName: a.name === '（未命名）' ? '' : a.name,
+      newRole: a.isSuper ? 'super' : 'operator',
+      newWecomUserid: a.wecomUserid || '',
+      staffMsg: '',
+    });
+    wx.pageScrollTo({ scrollTop: 0, duration: 200 });
+  },
+  cancelEditStaff() {
+    this.setData({ editingOpenid: '', newOpenid: '', newName: '', newRole: 'operator', newWecomUserid: '', staffMsg: '' });
+  },
+  // 停用/启用：停用立即失权但保留资料与企微映射，可随时恢复；最后一个超管后端会拦
+  toggleStaffEnabled(e) {
+    const { openid, enabled } = e.currentTarget.dataset; // enabled = 当前状态
+    const next = !enabled;
+    const doIt = () =>
+      call('/api/admins/enable', 'POST', { openid, enabled: next })
+        .then((res) => {
+          if (res && res.error) return wx.showToast({ title: res.error, icon: 'none' });
+          wx.showToast({ title: next ? '已启用' : '已停用', icon: 'success' });
+          this.loadAdmins();
+        })
+        .catch(() => wx.showToast({ title: '网络错误', icon: 'none' }));
+    if (next) return doIt();
+    wx.showModal({
+      title: '停用员工',
+      content: '停用后立即失去发放权限；资料与企微配置保留，可随时重新启用。',
+      confirmText: '停用',
+      confirmColor: '#b8293c',
+      success: (r) => { if (r.confirm) doIt(); },
+    });
   },
   removeStaff(e) {
     const openid = e.currentTarget.dataset.openid;

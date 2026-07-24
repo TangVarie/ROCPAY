@@ -468,7 +468,9 @@ export async function saveNotifyEvent({ eventType, outBillNo, transferBillNo, st
 // 台账筛选条件 → WHERE 子句（listRewards/getStats 共用，保证列表和汇总口径一致）
 //   status: all|created(待领取)|waiting(待确认)|success|failed(含失败/关闭/撤回)
 //   days:   只看近 N 天（0=全部）；target: 只看某个客户（单人资金往来）；batch: 只看某一批次
-function rewardFilterSql({ status = 'all', days = 0, target = '', batch = '' } = {}) {
+//   q:      关键词（备注模糊 / 单号 rid 精确 / 金额精确(元) / 客户备注名·昵称）
+//   month:  只看某个自然月（YYYY-MM；边界按库内 UTC 时间，与 days 的 NOW() 口径一致）
+function rewardFilterSql({ status = 'all', days = 0, target = '', batch = '', q = '', month = '' } = {}) {
   const conds = [];
   const params = {};
   const st = String(status || 'all');
@@ -489,14 +491,37 @@ function rewardFilterSql({ status = 'all', days = 0, target = '', batch = '' } =
     conds.push(`r.batch_id = :batch`);
     params.batch = String(batch);
   }
+  const kw = String(q || '').trim();
+  if (kw) {
+    // 客户名走子查询而不是 JOIN：getStats 不带 customers 表也能用同一段 WHERE，两边口径不劈叉
+    const ors = [
+      `r.remark LIKE :kw_like`,
+      `r.rid = :kw`,
+      `r.target_external_userid IN
+         (SELECT external_userid FROM customers WHERE remark LIKE :kw_like OR name LIKE :kw_like)`,
+    ];
+    params.kw_like = `%${kw}%`;
+    params.kw = kw;
+    const yuan = Number(kw);
+    if (Number.isFinite(yuan) && yuan > 0) {
+      ors.push(`r.amount_fen = :kw_fen`);
+      params.kw_fen = Math.round(yuan * 100);
+    }
+    conds.push(`(${ors.join(' OR ')})`);
+  }
+  const m = String(month || '').trim();
+  if (/^\d{4}-\d{2}$/.test(m)) {
+    conds.push(`r.created_at >= :m_start AND r.created_at < DATE_ADD(:m_start, INTERVAL 1 MONTH)`);
+    params.m_start = m + '-01';
+  }
   return { where: conds.length ? `WHERE ${conds.join(' AND ')}` : '', params };
 }
 
-export async function listRewards({ limit = 50, offset = 0, status, days, target, batch } = {}) {
+export async function listRewards({ limit = 50, offset = 0, status, days, target, batch, q, month } = {}) {
   if (!pool) return [];
   const lim = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
   const off = Math.max(parseInt(offset, 10) || 0, 0);
-  const { where, params } = rewardFilterSql({ status, days, target, batch });
+  const { where, params } = rewardFilterSql({ status, days, target, batch, q, month });
   const [rows] = await pool.execute(
     `SELECT r.rid, r.amount_fen, r.remark, r.created_by, r.status,
             r.created_at, r.expires_at, r.target_external_userid, r.batch_id,
@@ -791,6 +816,13 @@ export async function searchCustomers({ q = '', followUserid = '', limit = 50, o
   return rows.map((r) => ({ ...r, opened: !!r.opened }));
 }
 
+/** 客户档案的最近同步时间（MAX(synced_at)），给"上次同步 xx"展示用；没同步过返回 null */
+export async function getLastSyncAt() {
+  if (!pool) return null;
+  const [[row]] = await pool.query(`SELECT MAX(synced_at) AS t FROM customers`);
+  return row.t || null;
+}
+
 /** 按 unionid 查客户（只读）。企微同步后本地就有 unionid，领取时优先走库、不必调企微。 */
 export async function findCustomerByUnionid(unionid) {
   if (!pool || !unionid) return null;
@@ -971,6 +1003,7 @@ export const db = {
   upsertCustomer,
   getFollowMap,
   searchCustomers,
+  getLastSyncAt,
   findCustomerByUnionid,
   bindCustomerByUnionid,
   bindCustomerOpenid,

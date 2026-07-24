@@ -42,9 +42,9 @@ page {
   /* 分隔 */
   --border: rgba(0, 0, 0, 0.08);
   --border-strong: #e5e6eb;
-  /* 数字字体：DIN(iOS)/Bahnschrift(Win) 之外补齐主流安卓厂商字体（MiSans/HarmonyOS/OPPO Sans），
-     零加载成本拉平安卓端的数字质感；真要全端一致需内嵌字体文件，见 loadFontFace 备注 */
-  --font-num: 'DIN Alternate', 'Bahnschrift', 'MiSans', 'HarmonyOS Sans SC', 'OPPO Sans', 'vivo Sans', 'Roboto Condensed', 'Helvetica Neue', sans-serif;
+  /* 数字字体：'ROC Num' 由 app.js loadFontFace 按 config.NUM_FONT_URL 注册（未配置即跳过），
+     其后是零加载成本的系统栈兜底：DIN(iOS)/Bahnschrift(Win) + 主流安卓厂商字体 */
+  --font-num: 'ROC Num', 'DIN Alternate', 'Bahnschrift', 'MiSans', 'HarmonyOS Sans SC', 'OPPO Sans', 'vivo Sans', 'Roboto Condensed', 'Helvetica Neue', sans-serif;
 
   background: var(--bg);
   color: var(--text);
@@ -90,12 +90,12 @@ page {
   font-variant-numeric: tabular-nums lining-nums;
 }
 
-/* 编辑式导语：21px 基色 black/50 + 黑色加粗重点 */
+/* 编辑式导语：21px 次级色 + 加粗重点（走 token，深色模式自动翻转） */
 .lede {
   font-size: 42rpx;
   line-height: 1.5;
   font-weight: 500;
-  color: rgba(0, 0, 0, 0.5);
+  color: var(--text-light);
 }
 .lede .em { color: var(--text-dark); font-weight: 600; }
 
@@ -238,3 +238,39 @@ page {
 .stagger-in > view:nth-child(4) { animation-delay: 165ms; }
 .stagger-in > view:nth-child(5) { animation-delay: 220ms; }
 .stagger-in > view:nth-child(6) { animation-delay: 275ms; }
+
+/* ============================================================
+   深色模式（app.json darkmode:true + theme.json 管导航栏；这里翻转 token）
+   原则：品牌色块（藏蓝/正红大块 + 白字）不动，只翻画布/表面/文字黑阶/分隔；
+   语义"加深档"文字在暗底上反向改亮档，danger 文字同理提亮保对比
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+  page {
+    --primary: #4c8fc7; /* 亮一档：暗底上作文字/描边可读（原藏蓝在暗底只有 ~2:1） */
+    --primary-dark: #3b74a5;
+    --tint-sky: #1c2a38;
+    --tint-blush: #362128;
+    --success-deep: #4ad39f;
+    --warning-deep: #ffb266;
+    --danger: #e05a70;
+    --danger-dark: #f08a9a;
+    --bg: #151619;
+    --bg-secondary: #1d1f23;
+    --surface: #1f2126;
+    --fill: rgba(255, 255, 255, 0.08);
+    --text-dark: rgba(255, 255, 255, 0.92);
+    --text: rgba(255, 255, 255, 0.68);
+    --text-light: rgba(255, 255, 255, 0.55);
+    --text-hint: rgba(255, 255, 255, 0.45);
+    --text-faint: rgba(255, 255, 255, 0.3);
+    --border: rgba(255, 255, 255, 0.12);
+    --border-strong: #3a3d44;
+  }
+  /* 线性图标是黑描边 data URI，CSS 改不了 stroke：整体反相，黑/30 → 白/30 */
+  .li { filter: invert(1); }
+  .cb { border-color: rgba(255, 255, 255, 0.25); }
+  .btn-fill:active { background: rgba(255, 255, 255, 0.12); }
+  /* 大字报水印：品牌色极淡在暗底上不可见，换亮调同样极淡 */
+  .wm { color: rgba(126, 179, 220, 0.1); }
+  .wm-red { color: rgba(226, 96, 103, 0.09); }
+}

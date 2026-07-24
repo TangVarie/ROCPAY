@@ -217,12 +217,12 @@
 }
 /* 批次视图操作行：整批撤回入口，紧贴汇总块右缘 */
 .batch-actions { display: flex; justify-content: flex-end; margin: -16rpx 0 20rpx; }
-.sm-label { font-size: 24rpx; color: rgba(0, 0, 0, 0.55); }
-.sm-num { font-size: 72rpx; font-weight: 700; color: rgba(0, 0, 0, 0.9); line-height: 1.15; margin-top: 8rpx; }
-.sm-sub { font-size: 22rpx; color: rgba(0, 0, 0, 0.55); margin-top: 6rpx; }
+.sm-label { font-size: 24rpx; color: var(--text-light); }
+.sm-num { font-size: 72rpx; font-weight: 700; color: var(--text-dark); line-height: 1.15; margin-top: 8rpx; }
+.sm-sub { font-size: 22rpx; color: var(--text-light); margin-top: 6rpx; }
 .stat-side { flex: 1; display: flex; flex-direction: column; gap: 20rpx; }
 .stat-mini { padding: 22rpx 26rpx; }
-.smm-label { font-size: 22rpx; color: rgba(0, 0, 0, 0.6); }
+.smm-label { font-size: 22rpx; color: var(--text-light); }
 .smm-num { font-size: 44rpx; font-weight: 700; line-height: 1.2; margin-top: 2rpx; }
 
 /* ---- 记录 · 实时可用余额主块 ---- */
@@ -237,11 +237,14 @@
 .bal-sub { font-size: 22rpx; color: rgba(255, 255, 255, 0.8); margin-top: 8rpx; }
 .bal-low { color: #ffb0b0; font-weight: 700; } /* 剩余告罄/超支：浅红提醒 */
 
-/* 台账筛选 chips：比方式 chips 更小一号，可横向换行 */
+/* 台账搜索条：与筛选 chips 同区，下边距收紧 */
+.rec-search { margin: 0 0 16rpx; }
+
+/* 台账筛选 chips：比方式 chips 小一号但高度 ≥64rpx（32px 触控目标，筛选高频不许误触） */
 .fchips { display: flex; flex-wrap: wrap; gap: 12rpx; margin-bottom: 16rpx; }
 .fchip {
-  height: 52rpx;
-  line-height: 52rpx;
+  height: 64rpx;
+  line-height: 64rpx;
   padding: 0 22rpx;
   border-radius: var(--r-control);
   font-size: 24rpx;
@@ -252,10 +255,10 @@
 .fchip:active { opacity: 0.8; }
 .fchip-target { background: var(--accent); } /* 单人筛选中：点一下清除 */
 
-/* 记录行撤回 + 批次入口 + 加载更多 */
-.rec-revoke { font-size: 24rpx; font-weight: 600; color: var(--danger); padding: 8rpx 4rpx; }
+/* 记录行撤回 + 批次入口 + 加载更多。撤回是危险操作：热区拉到 ≥64rpx 高，误触成本高于视觉紧凑 */
+.rec-revoke { font-size: 24rpx; font-weight: 600; color: var(--danger); padding: 18rpx 8rpx; margin: -8rpx -4rpx; }
 .rec-revoke:active { opacity: 0.6; }
-.rec-batch { font-size: 22rpx; font-weight: 500; color: var(--primary); padding: 6rpx 4rpx; }
+.rec-batch { font-size: 22rpx; font-weight: 500; color: var(--primary); padding: 14rpx 8rpx; margin: -6rpx -4rpx; }
 .rec-batch:active { opacity: 0.6; }
 .loadmore { text-align: center; padding: 28rpx 0 8rpx; }
 .loadmore-hint { text-align: center; padding: 16rpx 24rpx 8rpx; font-size: 24rpx; line-height: 1.5; }
@@ -290,6 +293,9 @@
 .staff-l { flex: 1; min-width: 0; }
 .staff-name { font-size: 29rpx; font-weight: 500; display: flex; align-items: center; gap: 12rpx; flex-wrap: wrap; }
 .staff-oid { font-size: 22rpx; word-break: break-all; margin-top: 4rpx; }
+/* 员工行操作列：编辑 / 停用|启用 / 移除 */
+.staff-actions { flex: none; display: flex; align-items: center; }
+.staff-act { font-size: 24rpx; padding: 16rpx 10rpx; }
 
 /* 状态页（空/提示） */
 .state {
@@ -308,8 +314,8 @@
 /* 等级分布筛选条 */
 .lvchips { display: flex; flex-wrap: wrap; gap: 12rpx; margin-bottom: 16rpx; }
 .lvchip {
-  height: 56rpx;
-  line-height: 56rpx;
+  height: 64rpx;
+  line-height: 64rpx;
   padding: 0 20rpx;
   border-radius: var(--r-control);
   font-size: 23rpx;
@@ -327,6 +333,12 @@
 .rk-name { display: flex; align-items: center; gap: 12rpx; flex-wrap: wrap; font-size: 29rpx; font-weight: 500; }
 .rk-sub { font-size: 22rpx; margin-top: 2rpx; }
 .rk-amt { flex: none; font-size: 30rpx; font-weight: 600; }
+
+/* 深色模式：行按压反馈从黑幕改白幕（token 覆盖在 app.wxss，这里只补硬编码的 active 态） */
+@media (prefers-color-scheme: dark) {
+  .cust:active { background: rgba(255, 255, 255, 0.06); }
+  .rk:active { background: rgba(255, 255, 255, 0.06); }
+}
 
 /* openid（与领取页一致） */
 .openid-row {
