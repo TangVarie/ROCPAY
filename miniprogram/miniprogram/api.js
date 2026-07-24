@@ -36,8 +36,15 @@ function withTimeout(p, ms) {
 let queue = Promise.resolve();
 
 function call(path, method, data) {
-  const attempt = () => withTimeout(rawCall(path, method, data), 16000);
-  const task = queue.then(() => attempt().catch(() => sleep(400).then(attempt)));
+  const m = String(method || 'GET').toUpperCase();
+  const attempt = () => withTimeout(rawCall(path, m, data), 16000);
+  // 自动重试只给 GET：POST 大多是资金/写操作，"客户端判失败"不代表服务端没执行——
+  // 大批量发放超过 15s 超时后自动重发，会整批重复建单（客户领双份）。
+  // 写接口的重试安全由服务端幂等键保证（批量/快发/充值均已支持），不靠这里盲重发。
+  // 冷启动 -501000 由串行队列兜底：首个请求（GET /api/me）建立会话后，后续 POST 不受影响
+  const task = queue.then(() =>
+    m === 'GET' ? attempt().catch(() => sleep(400).then(attempt)) : attempt()
+  );
   // 队列只关心"轮到下一个"，不吞真实结果/错误
   queue = task.catch(() => {});
   return task;

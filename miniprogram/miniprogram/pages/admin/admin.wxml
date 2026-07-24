@@ -142,6 +142,7 @@
         <block wx:if="{{step==='result' && batchResult}}">
           <view class="banner banner-success">
             <text class="t-dark">已为 <text class="num">{{batchResult.peopleCount}}</text> 人创建 <text class="num">{{batchResult.createdCount}}</text> 笔定向奖励{{batchResult.createdCount > batchResult.peopleCount ? '（大额已自动拆单，客户逐笔确认）' : ''}}，客户打开小程序即可领取</text>
+            <view class="banner-line t-body" wx:if="{{batchResult.duplicate}}">检测到该批此前已创建成功——以上为已建结果，未重复创建</view>
           </view>
           <view class="banner banner-danger" wx:if="{{batchResult.errors.length}}">
             <view class="t-dark">{{batchResult.errors.length}} 笔未创建：</view>

@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p14-cancel-fix-resume';
+const BUILD = 'p15-idempotency';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -353,9 +353,12 @@ app.post('/api/period/adjust', async (req, res) => {
   const yuan = Number(body.yuan);
   if (!(yuan >= 0)) return res.status(400).json({ error: '请输入正确金额' });
   const amtFen = Math.round(yuan * 100);
+  // 幂等键：响应丢失后的重复提交带同一键，只记一次账（重复提交返回当前额度，前端无感）
+  const opKeyRaw = String(body.opKey || '');
+  const opKey = /^[a-f0-9]{16,64}$/i.test(opKeyRaw) ? opKeyRaw.toLowerCase() : '';
   try {
     // 事务 + 行锁（db.adjustQuota）：两位管理员同时充值也不会丢任何一笔
-    await db.adjustQuota({ mode, amountFen: amtFen });
+    await db.adjustQuota({ mode, amountFen: amtFen, opKey });
     res.json(await computeQuota());
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -430,11 +433,18 @@ app.post('/api/rewards', (req, res) => {
   if (nameErr) return res.status(400).json({ error: nameErr });
   const fen = Math.round(yuan * 100);
   try {
-    const { token, rid, exp } = createRewardToken({ fen, remark, name });
+    // 幂等：前端带 clientKey 时 rid 由键确定性派生——重试得到同一 rid，
+    // saveReward upsert 不会产生"界面拿不到 token 的孤儿单"白占额度；
+    // 两次响应的 token 都指向同一笔，领取按 out_bill_no 天然幂等
+    const ckRaw = String((req.body || {}).clientKey || '');
+    const rid = /^[a-f0-9]{16,64}$/i.test(ckRaw)
+      ? crypto.createHash('sha256').update(`quick:${ckRaw.toLowerCase()}`).digest('hex').slice(0, 32)
+      : undefined;
+    const { token, rid: outRid, exp } = createRewardToken({ fen, remark, name, rid });
     persist('saveReward', () =>
-      db.saveReward({ rid, amountFen: fen, remark, name, createdBy: openid, exp })
+      db.saveReward({ rid: outRid, amountFen: fen, remark, name, createdBy: openid, exp })
     );
-    res.json({ token, rid, exp, amountYuan: yuan, remark });
+    res.json({ token, rid: outRid, exp, amountYuan: yuan, remark });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -486,7 +496,18 @@ app.post('/api/rewards/revoke', async (req, res) => {
     if (!r) return res.status(404).json({ error: '找不到这笔奖励' });
     if (r.status === 'CREATED') {
       const ok = await db.revokeReward(rid, openid); // 撤回连操作人一起落（审计）
-      if (!ok) return res.status(409).json({ error: '这笔奖励刚被领取，无法撤回' });
+      if (!ok) {
+        // 状态在读写之间变了：查明真实状态再说话——重复撤回时别把"已撤回"误说成"刚被领取"
+        const cur = await db.getReward(rid).catch(() => null);
+        const st = cur && cur.status;
+        const msg =
+          st === 'CANCELLED'
+            ? '这笔奖励已是撤回状态，无需重复操作'
+            : st === 'CLAIMED'
+              ? '这笔奖励刚被领取（转账已发起），刷新后可对「待确认」继续撤回'
+              : '这笔奖励状态刚发生变化，请刷新后重试';
+        return res.status(409).json({ error: msg });
+      }
       return res.json({ ok: true, mode: 'unclaimed' });
     }
     if (r.status === 'CLAIMED') {
@@ -789,6 +810,32 @@ app.post('/api/rewards/batch', async (req, res) => {
   if (!items.length) return res.status(400).json({ error: '没有要发放的项目' });
   if (items.length > 200) return res.status(400).json({ error: '单次最多 200 人' });
 
+  // 幂等键：前端为一次发放意图生成随机键，重试（超时后的手动重发）复用同一键。
+  // 命中已建批次直接回放原结果——从根上杜绝"客户端判失败重发 → 整批重复建单 → 客户领双份"的资损面
+  const ckRaw = String((req.body || {}).clientKey || '');
+  const clientKey = /^[a-f0-9]{16,64}$/i.test(ckRaw) ? ckRaw.toLowerCase() : '';
+  const batchId = clientKey ? clientKey.slice(0, 32) : newRid();
+  if (clientKey) {
+    const existing = await db.listBatchRewards(batchId).catch(() => []);
+    if (existing.length) {
+      return res.json({
+        createdCount: existing.length,
+        peopleCount: new Set(existing.map((r) => r.target_external_userid)).size,
+        errorCount: 0,
+        batchId,
+        duplicate: true, // 此前已创建成功，这是原结果回放，未重复建单
+        created: existing.map((r) => ({
+          rid: r.rid,
+          externalUserid: r.target_external_userid,
+          amountYuan: r.amount_fen / 100,
+          remark: r.remark || '',
+        })),
+        people: [],
+        errors: [],
+      });
+    }
+  }
+
   // 大额自动拆单：单人金额超过微信单笔限额时拆成多笔（200×6+160），客户逐笔确认串行到账。
   // 单人总额受微信「单日向单用户」上限约束——拆单绕不过这条线，直接前置拦截
   const capFen = Math.round(config.app.splitCapYuan * 100);
@@ -834,12 +881,17 @@ app.post('/api/rewards/batch', async (req, res) => {
 
   const created = [];
   const people = []; // 每人汇总：{externalUserid, totalYuan, bills}
-  const batchId = newRid(); // 本次提交的批次号：拆单后的所有笔共用，台账按批查看/按批撤回的锚点
+  // batchId：拆单后的所有笔共用，台账按批查看/按批撤回的锚点（clientKey 模式下即幂等键本身）
   for (const p of plans) {
     const exp = Math.floor(Date.now() / 1000) + config.app.rewardTtlHours * 3600;
     let ok = 0;
-    for (const billFen of p.bills) {
-      const rid = newRid();
+    for (let j = 0; j < p.bills.length; j++) {
+      const billFen = p.bills[j];
+      // clientKey 模式下 rid 由批次键+条目序号确定性派生：极端并发下同一批被处理两次，
+      // 也只会 upsert 同一套 rid（主键去重），绝不会长出第二套单
+      const rid = clientKey
+        ? crypto.createHash('sha256').update(`${batchId}:${p.i}:${j}`).digest('hex').slice(0, 32)
+        : newRid();
       try {
         await db.saveReward({
           rid,

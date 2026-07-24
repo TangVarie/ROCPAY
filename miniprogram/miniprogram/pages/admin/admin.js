@@ -152,6 +152,14 @@ Page({
     else if (this.data.step === 'pick') this.loadCustomers();
   },
 
+  // 32 位十六进制随机串：批量发放/快发/充值的幂等键。同一意图（含失败后的重试）复用同一键，
+  // 服务端据此保证绝不重复建单/重复记账
+  _newKey() {
+    let s = '';
+    for (let i = 0; i < 32; i++) s += '0123456789abcdef'[(Math.random() * 16) | 0];
+    return s;
+  },
+
   // 'YYYY-MM-DD HH:MM:SS' → 当年省年份（'MM-DD HH:MM'）、跨年补年份（'YYYY-MM-DD HH:MM'），对账不产生歧义
   _fmtTime(s) {
     const full = String(s || '').replace('T', ' ');
@@ -364,16 +372,19 @@ Page({
   },
   _doSubmitBatch() {
     const { selected } = this.data;
+    // 幂等键：本次发放意图首次提交时生成，失败重试复用——服务端命中已建批次会回放原结果而不是再建一批
+    if (!this._batchKey) this._batchKey = this._newKey();
     this.setData({ sendErr: '', loading: true });
     const items = selected.map((s) => ({
       externalUserid: s.external_userid,
       amountYuan: Number(s.amountYuan),
       remark: s.note || '',
     }));
-    call('/api/rewards/batch', 'POST', { items })
+    call('/api/rewards/batch', 'POST', { items, clientKey: this._batchKey })
       .then((res) => {
         this.setData({ loading: false });
         if (res && res.error) return this.setData({ sendErr: res.error });
+        this._batchKey = null; // 本批已确认落地，下一批换新键
         // 拆单后同一客户出现多笔 → 通知名单去重，每人只发一张卡片
         const targets = [...new Set((res.created || []).map((c) => c.externalUserid))];
         const labelOf = {};
@@ -384,6 +395,7 @@ Page({
             createdCount: res.createdCount, // 拆单后的总笔数
             peopleCount: res.peopleCount || targets.length,
             batchId: res.batchId || '', // 批次号：结果页可直达"本批台账"
+            duplicate: !!res.duplicate, // 重试命中已建批次：展示原结果，未重复创建
             errors: (res.errors || []).map((er) => ({ ...er, label: labelOf[er.target] || er.target || '' })),
             targets,
           },
@@ -392,7 +404,12 @@ Page({
         });
         this.loadRecords();
       })
-      .catch((e) => this.setData({ loading: false, sendErr: '网络错误：' + (e.errMsg || e.message || '') }));
+      .catch((e) =>
+        this.setData({
+          loading: false,
+          sendErr: '网络错误：' + (e.errMsg || e.message || '') + '（可放心重试，同一批不会重复创建）',
+        })
+      );
   },
 
   onNotifyText(e) { this.setData({ notifyText: e.detail.value }); },
@@ -431,13 +448,15 @@ Page({
   },
 
   newBatch() {
+    this._batchKey = null; // 新一批 = 新意图，换新幂等键
     this.setData({ step: 'pick', selected: [], selectedMap: {}, batchResult: null, sendErr: '', errIdx: -1, notifyDone: false, notifyResult: null });
   },
 
   // ============ 链接快发（副） ============
-  onAmount(e) { this.setData({ amountYuan: e.detail.value }); },
-  onRemark(e) { this.setData({ remark: e.detail.value }); },
-  onName(e) { this.setData({ name: e.detail.value }); },
+  // 输入一变即换新幂等键：改过金额/备注再提交是新意图，不该命中旧单
+  onAmount(e) { this._quickKey = null; this.setData({ amountYuan: e.detail.value }); },
+  onRemark(e) { this._quickKey = null; this.setData({ remark: e.detail.value }); },
+  onName(e) { this._quickKey = null; this.setData({ name: e.detail.value }); },
   onGenerate() {
     if (this.data.loading) return; // 防连点
     const raw = String(this.data.amountYuan == null ? '' : this.data.amountYuan).trim();
@@ -448,15 +467,18 @@ Page({
       return this.setData({ error: `金额不能小于 ${this.data.minAmountYuan} 元` });
     if (yuan > this.data.splitCapYuan)
       return this.setData({ error: `链接快发是单笔转账，限额 ¥${this.data.splitCapYuan}；大额请用「定向发放」（自动拆成多笔）` });
+    // 幂等键：重试复用同一键，服务端派生同一单号，不会产生"界面拿不到 token 的孤儿单"白占额度
+    if (!this._quickKey) this._quickKey = this._newKey();
     this.setData({ loading: true, error: '', reward: null });
-    call('/api/rewards', 'POST', { amountYuan: yuan, remark: this.data.remark, name: this.data.name })
+    call('/api/rewards', 'POST', { amountYuan: yuan, remark: this.data.remark, name: this.data.name, clientKey: this._quickKey })
       .then((res) => {
         this.setData({ loading: false });
         if (res && res.error) return this.setData({ error: res.error });
+        this._quickKey = null; // 已成功拿到 token，下一单换新键
         this.setData({ reward: res });
         this.loadRecords();
       })
-      .catch((e) => this.setData({ loading: false, error: '网络错误：' + (e.errMsg || e.message || '') }));
+      .catch((e) => this.setData({ loading: false, error: '网络错误：' + (e.errMsg || e.message || '') + '（可放心重试，不会重复生成）' }));
   },
 
   onShareAppMessage() {
@@ -509,13 +531,14 @@ Page({
         if (Number.isNaN(yuan) || yuan < 0 || (!isSet && yuan <= 0)) {
           return wx.showToast({ title: '请输入正确金额', icon: 'none' });
         }
-        call('/api/period/adjust', 'POST', { mode, yuan })
+        // opKey：这次确认的幂等键。响应丢失后的重复提交只会记一次账
+        call('/api/period/adjust', 'POST', { mode, yuan, opKey: this._newKey() })
           .then((res) => {
             if (res && res.error) return wx.showToast({ title: res.error, icon: 'none' });
             wx.showToast({ title: isSet ? '已校准' : '已充值', icon: 'success' });
             this.applyPeriod(res);
           })
-          .catch(() => wx.showToast({ title: '网络错误', icon: 'none' }));
+          .catch(() => wx.showToast({ title: '网络错误，请刷新核对剩余后再试', icon: 'none' }));
       },
     });
   },

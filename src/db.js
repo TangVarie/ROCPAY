@@ -631,17 +631,22 @@ export async function getPeriodStats(since) {
  * 原子调整可发额度（mode='add' 充值累加携带结余 / mode='set' 校准设为实际余额）。
  * 事务 + SELECT...FOR UPDATE 行锁：两位管理员同时充值也不会互相覆盖丢一笔。
  */
-export async function adjustQuota({ mode, amountFen }) {
+export async function adjustQuota({ mode, amountFen, opKey }) {
   if (!pool) throw new Error('未开启数据库');
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    // 锁住两行设置，序列化并发的充值/校准
+    // 锁住设置行，序列化并发的充值/校准；quota_last_op 一并锁定用于防重
     const [rows] = await conn.query(
-      `SELECT k, v FROM settings WHERE k IN ('quota_base_fen','quota_base_paid_fen') FOR UPDATE`
+      `SELECT k, v FROM settings WHERE k IN ('quota_base_fen','quota_base_paid_fen','quota_last_op') FOR UPDATE`
     );
     const map = {};
     for (const r of rows) map[r.k] = r.v;
+    // 幂等：同一操作键重复提交（响应丢失后的重试）直接当已成功，不再记第二次
+    if (opKey && map.quota_last_op === opKey) {
+      await conn.commit();
+      return false;
+    }
     const [[paid]] = await conn.query(
       `SELECT COALESCE(SUM(amount_fen),0) AS paid_fen FROM rewards WHERE ${QUOTA_CONSUMED_SQL}`
     );
@@ -657,11 +662,13 @@ export async function adjustQuota({ mode, amountFen }) {
       newBaseFen = remainingNow + amountFen;
     }
     await conn.query(
-      `INSERT INTO settings (k, v) VALUES ('quota_base_fen', :b), ('quota_base_paid_fen', :p)
+      `INSERT INTO settings (k, v)
+       VALUES ('quota_base_fen', :b), ('quota_base_paid_fen', :p), ('quota_last_op', :op)
        ON DUPLICATE KEY UPDATE v=VALUES(v)`,
-      { b: String(newBaseFen), p: String(allPaidFen) }
+      { b: String(newBaseFen), p: String(allPaidFen), op: opKey || '' }
     );
     await conn.commit();
+    return true;
   } catch (e) {
     try { await conn.rollback(); } catch (_) { /* 回滚失败不掩盖原错误 */ }
     throw e;
@@ -927,11 +934,12 @@ export async function getReward(rid) {
   return rows.length ? rows[0] : null;
 }
 
-/** 某一批次的全部奖励（rid+status），批量撤回用。按创建顺序返回 */
+/** 某一批次的全部奖励，批量撤回与幂等回放（重试命中已建批次时重构响应）共用。按创建顺序返回 */
 export async function listBatchRewards(batchId) {
   if (!pool || !batchId) return [];
   const [rows] = await pool.execute(
-    `SELECT rid, status, amount_fen FROM rewards WHERE batch_id=:b ORDER BY created_at ASC, rid ASC`,
+    `SELECT rid, status, amount_fen, remark, target_external_userid
+       FROM rewards WHERE batch_id=:b ORDER BY created_at ASC, rid ASC`,
     { b: batchId }
   );
   return rows;
