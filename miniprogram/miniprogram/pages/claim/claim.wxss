@@ -27,11 +27,12 @@
   color: #ffffff;
   margin-top: 10rpx;
 }
-/* 大额拆单：共 N 笔 · 合计 提示（色块内白字弱化一档） */
+/* 大额拆单：共 N 笔 · 合计 提示（红底上白字不降透明度：0.9 白约 4.4:1 踩线，
+   纯白 ~5:1 才过小字 4.5:1；层级差交给字号/字重，不牺牲对比度） */
 .rb-multi {
   margin-top: 14rpx;
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.9);
+  color: #ffffff;
   line-height: 1.5;
 }
 .rb-btn {
@@ -64,7 +65,7 @@
 .rb-fine {
   margin-top: 16rpx;
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.85);
+  color: #ffffff;
   line-height: 1.5;
 }
 .after-note {
@@ -96,7 +97,7 @@
 .state-detail {
   margin-top: 16rpx;
   font-size: 22rpx;
-  color: var(--text-faint);
+  color: var(--text-hint);
   text-align: center;
   word-break: break-all;
   max-height: 200rpx;
@@ -141,9 +142,14 @@
 .ah-num { font-size: 84rpx; font-weight: 700; color: #ffffff; line-height: 1.15; margin-top: 8rpx; }
 .ah-sub { font-size: 22rpx; color: rgba(255, 255, 255, 0.8); margin-top: 8rpx; }
 .ah-low { color: #ffb0b0; } /* 额度告罄浅红 */
+/* 异常警示块：浅红底 + 冷酒红标题，进门可见、点击直达失败筛选 */
+.ah-alert { margin-bottom: 20rpx; padding: 26rpx 30rpx; }
+.ah-alert:active { opacity: 0.85; }
+.ah-alert-t { font-size: 30rpx; font-weight: 700; color: var(--danger-dark); }
+.ah-alert-s { font-size: 22rpx; color: var(--text-light); margin-top: 4rpx; }
 .ah-minis { display: flex; gap: 20rpx; margin-bottom: 28rpx; }
 .ah-mini { flex: 1; padding: 22rpx 26rpx; }
-.ahm-label { font-size: 22rpx; color: rgba(0, 0, 0, 0.6); }
+.ahm-label { font-size: 22rpx; color: var(--text-light); }
 .ahm-num { font-size: 40rpx; font-weight: 700; line-height: 1.2; margin-top: 2rpx; }
 .ah-tips { margin-top: 20rpx; text-align: center; font-size: 22rpx; letter-spacing: 1rpx; }
 

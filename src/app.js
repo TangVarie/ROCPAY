@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p9-groupsend';
+const BUILD = 'p13-revoke-audit';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -452,12 +452,16 @@ app.get('/api/rewards', async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
-    // 台账筛选：status=created|waiting|success|failed，days=近N天，target=某客户（单人往来）
+    // 台账筛选：status=created|waiting|success|failed，days=近N天，target=某客户（单人往来），
+    // batch=某一批次，q=关键词（备注/单号/金额/客户名），month=自然月 YYYY-MM
     // 列表和 stats 用同一组筛选 → stats 即"筛选范围内的资金消耗汇总"
     const filters = {
       status: String(req.query.status || 'all'),
       days: Number(req.query.days) || 0,
       target: String(req.query.target || ''),
+      batch: String(req.query.batch || ''),
+      q: String(req.query.q || ''),
+      month: String(req.query.month || ''),
     };
     const [list, stats] = await Promise.all([
       db.listRewards({ limit, offset, ...filters }),
@@ -472,7 +476,8 @@ app.get('/api/rewards', async (req, res) => {
 // 【员工】撤回一笔奖励：未领取的直接作废；已领取待确认的向微信撤销转账（冻结资金解冻回流）。
 // 撤回后客户端不再展示、不可再领；台账状态变「已撤回」，可发额度自动回流（撤销单不再计入消耗）。
 app.post('/api/rewards/revoke', async (req, res) => {
-  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  const openid = getOpenid(req);
+  if (!isAdmin(openid)) return res.status(403).json({ error: '无权限' });
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
   const rid = String((req.body || {}).rid || '').trim();
   if (!rid) return res.status(400).json({ error: '缺少 rid' });
@@ -480,7 +485,7 @@ app.post('/api/rewards/revoke', async (req, res) => {
     const r = await db.getReward(rid);
     if (!r) return res.status(404).json({ error: '找不到这笔奖励' });
     if (r.status === 'CREATED') {
-      const ok = await db.revokeReward(rid);
+      const ok = await db.revokeReward(rid, openid); // 撤回连操作人一起落（审计）
       if (!ok) return res.status(409).json({ error: '这笔奖励刚被领取，无法撤回' });
       return res.json({ ok: true, mode: 'unclaimed' });
     }
@@ -492,6 +497,7 @@ app.post('/api/rewards/revoke', async (req, res) => {
         state: data.state || 'CANCELING',
         transferBillNo: data.transfer_bill_no,
       });
+      persist('markRevoked', () => db.markRevoked(rid, openid)); // 状态由撤销结果驱动，这里只补审计
       return res.json({ ok: true, mode: 'canceled', state: data.state });
     }
     return res.status(409).json({ error: `当前状态(${r.status})不可撤回：已到账或已终结` });
@@ -553,6 +559,28 @@ app.post('/api/admins', async (req, res) => {
   }
 });
 
+// 停用/启用员工。停用立即生效（缓存即时刷新），资料与企微映射保留，可随时恢复——
+// 比"删了重加"多一条不中断权限档案的路（评审 管P1-4）
+app.post('/api/admins/enable', async (req, res) => {
+  if (!requireSuper(req, res)) return;
+  const openid = String((req.body || {}).openid || '').trim();
+  const enabled = !!(req.body || {}).enabled;
+  if (!openid) return res.status(400).json({ error: '缺少 openid' });
+  try {
+    if (!enabled) {
+      const cur = (await db.loadAdmins()).find((a) => a.openid === openid);
+      if (cur && cur.role === 'super' && cur.enabled && (await db.countEnabledSupers()) <= 1) {
+        return res.status(400).json({ error: '不能停用最后一个超级管理员' });
+      }
+    }
+    await db.setAdminEnabled(openid, enabled);
+    await refreshAdmins();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // 删除员工
 app.post('/api/admins/remove', async (req, res) => {
   if (!requireSuper(req, res)) return;
@@ -585,17 +613,21 @@ app.get('/api/customers', async (req, res) => {
     const SEARCH_CAP = 500;
     const limit = searching ? SEARCH_CAP : Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
     const offset = searching ? 0 : Math.max(Number(req.query.offset) || 0, 0);
-    const list = await db.searchCustomers({
-      q,
-      followUserid: String(req.query.follow || '').trim(),
-      limit,
-      offset,
-    });
+    const [list, lastSyncAt] = await Promise.all([
+      db.searchCustomers({
+        q,
+        followUserid: String(req.query.follow || '').trim(),
+        limit,
+        offset,
+      }),
+      db.getLastSyncAt().catch(() => null), // 上次同步时间：拿不到不影响列表
+    ]);
     res.json({
       list,
       hasMore: !searching && list.length === limit, // 搜索不分页
       capped: searching && list.length >= SEARCH_CAP, // 搜索结果过多，提示精确化
       wecom: wecom.wecomEnabled,
+      lastSyncAt, // 客户档案最近一次从企微同步的时间（null=从未同步）
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -802,6 +834,7 @@ app.post('/api/rewards/batch', async (req, res) => {
 
   const created = [];
   const people = []; // 每人汇总：{externalUserid, totalYuan, bills}
+  const batchId = newRid(); // 本次提交的批次号：拆单后的所有笔共用，台账按批查看/按批撤回的锚点
   for (const p of plans) {
     const exp = Math.floor(Date.now() / 1000) + config.app.rewardTtlHours * 3600;
     let ok = 0;
@@ -816,6 +849,7 @@ app.post('/api/rewards/batch', async (req, res) => {
           createdBy: openid,
           exp,
           targetExternalUserid: p.target,
+          batchId,
         });
         created.push({ rid, externalUserid: p.target, amountYuan: billFen / 100, remark: p.remark || '' });
         ok++;
@@ -830,10 +864,53 @@ app.post('/api/rewards/batch', async (req, res) => {
     createdCount: created.length, // 拆单后的总笔数
     peopleCount: people.length,
     errorCount: errors.length,
+    batchId: created.length ? batchId : '', // 一笔都没落库就不返回批次号
     created,
     people,
     errors,
   });
+});
+
+// 【员工】按批撤回：一次确认撤掉整批里所有还没到账的（发错一批不用 30 次逐条点）。
+// 逐笔处理：未领取(CREATED)直接作废；已领待确认(CLAIMED)向微信撤销资金回流；
+// 已到账/已终结跳过不动。逐笔回执，部分失败不回滚已成功的（撤回本就是幂等安全操作）。
+app.post('/api/rewards/batch/revoke', async (req, res) => {
+  const openid = getOpenid(req);
+  if (!isAdmin(openid)) return res.status(403).json({ error: '无权限' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  const batchId = String((req.body || {}).batchId || '').trim();
+  if (!batchId) return res.status(400).json({ error: '缺少 batchId' });
+  try {
+    const rows = await db.listBatchRewards(batchId);
+    if (!rows.length) return res.status(404).json({ error: '找不到该批次' });
+    let revoked = 0; // 未领取，直接作废
+    let canceled = 0; // 已发起转账，向微信撤销
+    let skipped = 0; // 已到账/已终结，不动
+    const errors = [];
+    for (const r of rows) {
+      try {
+        if (r.status === 'CREATED') {
+          (await db.revokeReward(r.rid, openid)) ? revoked++ : skipped++; // 撤的瞬间被领走 → 跳过
+        } else if (r.status === 'CLAIMED') {
+          const data = await cancelTransferByOutBillNo(r.rid);
+          await db.updateTransferState({
+            outBillNo: r.rid,
+            state: data.state || 'CANCELING',
+            transferBillNo: data.transfer_bill_no,
+          });
+          persist('markRevoked(batch)', () => db.markRevoked(r.rid, openid)); // 审计：谁发起的整批撤回
+          canceled++;
+        } else {
+          skipped++;
+        }
+      } catch (e) {
+        errors.push({ rid: r.rid, error: e.message });
+      }
+    }
+    res.json({ ok: true, total: rows.length, revoked, canceled, skipped, errors });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message, detail: e.data });
+  }
 });
 
 // 【客户】查我的定向奖励（身份匹配，防领错）
@@ -916,6 +993,34 @@ async function resolveCustomer(unionid, openid) {
   if (externalUserid) await db.bindCustomerByUnionid(unionid, openid).catch(() => {});
   return externalUserid;
 }
+
+// 【客户】链接领取前置校验（只读，不发起任何转账）：
+// 领取页进入即调，金额/备注以这里返回的令牌载荷为准（URL 的 amt 参数任何人都能改，只配当兜底展示）；
+// 已过期/已撤回/已到账/定向 直接返回终态，前端不再出现"先渲染领取块、点了才报错"的倒置流程。
+// CLAIMED（已发起待确认）不拦：同一领取人重开确认页是合法路径，他人误点由 POST /api/claim 兜底报错。
+app.get('/api/claim/status', async (req, res) => {
+  let payload;
+  try {
+    payload = verifyRewardToken(String(req.query.token || ''));
+  } catch (e) {
+    const state = /过期/.test(e.message) ? 'EXPIRED' : 'INVALID';
+    return res.json({ state, error: e.message });
+  }
+  let state = 'VALID';
+  if (db.dbEnabled) {
+    try {
+      const rw = await db.getReward(payload.rid);
+      if (rw) {
+        if (rw.status === 'CANCELLED') state = 'CANCELLED';
+        else if (rw.status === 'SUCCESS') state = 'SUCCESS';
+        else if (rw.target_external_userid) state = 'TARGETED';
+      }
+    } catch (_) {
+      /* 查库失败按可领处理：点领取时 POST /api/claim 仍有全量强校验兜底 */
+    }
+  }
+  res.json({ state, amountYuan: payload.fen / 100, remark: payload.remark || '' });
+});
 
 // 【客户】领取：发起转账，返回 package_info 供小程序拉起确认页
 app.post('/api/claim', async (req, res) => {

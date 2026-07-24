@@ -1,10 +1,12 @@
 {
   "pages": ["pages/claim/claim", "pages/admin/admin"],
+  "darkmode": true,
+  "themeLocation": "theme.json",
   "window": {
     "navigationBarTitleText": "梨响ROC",
-    "navigationBarBackgroundColor": "#fafafb",
-    "navigationBarTextStyle": "black",
-    "backgroundColor": "#fafafb"
+    "navigationBarBackgroundColor": "@navBgColor",
+    "navigationBarTextStyle": "@navTxtStyle",
+    "backgroundColor": "@bgColor"
   },
   "lazyCodeLoading": "requiredComponents",
   "sitemapLocation": "sitemap.json",

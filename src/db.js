@@ -57,6 +57,9 @@ const DDL = [
      remark         VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注(用户可见)',
      recipient_name VARCHAR(64)  NULL COMMENT '收款人真实姓名(可选·PII)',
      target_external_userid VARCHAR(64) NULL COMMENT '定向目标企微客户(P2)，NULL=非定向',
+     batch_id       VARCHAR(32)  NULL COMMENT '批次号：同一次批量发放的多笔共用，按批查看/撤回用',
+     revoked_by     VARCHAR(64)  NULL COMMENT '撤回操作人openid(审计：谁撤的这笔钱)',
+     revoked_at     DATETIME     NULL COMMENT '撤回操作时间',
      created_by     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '发放人(管理员)openid',
      status         VARCHAR(24)  NOT NULL DEFAULT 'CREATED' COMMENT 'CREATED|CLAIMED|SUCCESS|FAIL|CLOSED',
      expires_at     DATETIME     NULL COMMENT '领取有效期',
@@ -65,6 +68,7 @@ const DDL = [
      KEY idx_rewards_created_by (created_by),
      KEY idx_rewards_status (status),
      KEY idx_rewards_target (target_external_userid),
+     KEY idx_rewards_batch (batch_id),
      KEY idx_rewards_created_at (created_at)
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='发放的奖励'`,
 
@@ -186,6 +190,19 @@ async function ensureColumn(table, column, ddl) {
   }
 }
 
+/** 给已存在的表补索引（幂等，同 ensureColumn 的套路） */
+async function ensureIndex(table, indexName, ddl) {
+  if (!pool) return;
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS n FROM information_schema.statistics
+      WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?`,
+    [table, indexName]
+  );
+  if (Number(rows[0].n) === 0) {
+    await pool.query(`ALTER TABLE \`${table}\` ADD ${ddl}`);
+  }
+}
+
 /** 启动时建库建表（幂等）。失败只记日志，不阻断服务启动。 */
 export async function migrate() {
   if (!pool) return;
@@ -202,6 +219,24 @@ export async function migrate() {
     'admins',
     'wecom_userid',
     "wecom_userid VARCHAR(64) NULL COMMENT '员工的企微userid(群发sender映射)' AFTER enabled"
+  );
+  // 老库补列：批次号（按批查看/按批撤回）
+  await ensureColumn(
+    'rewards',
+    'batch_id',
+    "batch_id VARCHAR(32) NULL COMMENT '批次号：同一次批量发放的多笔共用' AFTER target_external_userid"
+  );
+  await ensureIndex('rewards', 'idx_rewards_batch', 'KEY idx_rewards_batch (batch_id)');
+  // 老库补列：撤回审计（谁在什么时候撤的）
+  await ensureColumn(
+    'rewards',
+    'revoked_by',
+    "revoked_by VARCHAR(64) NULL COMMENT '撤回操作人openid(审计)' AFTER batch_id"
+  );
+  await ensureColumn(
+    'rewards',
+    'revoked_at',
+    "revoked_at DATETIME NULL COMMENT '撤回操作时间' AFTER revoked_by"
   );
   await seedSuperAdmins(config.app.adminOpenids);
 }
@@ -278,12 +313,12 @@ function clip(s, n) {
   return str.length > n ? str.slice(0, n) : str;
 }
 
-/** 【发奖】管理员生成奖励时落库。targetExternalUserid 非空=定向奖励(P2) */
-export async function saveReward({ rid, amountFen, remark, name, createdBy, exp, targetExternalUserid }) {
+/** 【发奖】管理员生成奖励时落库。targetExternalUserid 非空=定向奖励(P2)；batchId=同一次批量发放的批次号 */
+export async function saveReward({ rid, amountFen, remark, name, createdBy, exp, targetExternalUserid, batchId }) {
   if (!pool) return;
   await pool.execute(
-    `INSERT INTO rewards (rid, amount_fen, remark, recipient_name, target_external_userid, created_by, status, expires_at)
-     VALUES (:rid, :amount_fen, :remark, :recipient_name, :target, :created_by, 'CREATED', :expires_at)
+    `INSERT INTO rewards (rid, amount_fen, remark, recipient_name, target_external_userid, batch_id, created_by, status, expires_at)
+     VALUES (:rid, :amount_fen, :remark, :recipient_name, :target, :batch_id, :created_by, 'CREATED', :expires_at)
      ON DUPLICATE KEY UPDATE amount_fen=VALUES(amount_fen), remark=VALUES(remark),
        recipient_name=VALUES(recipient_name), target_external_userid=VALUES(target_external_userid),
        created_by=VALUES(created_by)`,
@@ -293,6 +328,7 @@ export async function saveReward({ rid, amountFen, remark, name, createdBy, exp,
       remark: clip(remark || '', 64),
       recipient_name: name ? clip(name, 64) : null,
       target: targetExternalUserid || null,
+      batch_id: batchId || null,
       created_by: clip(createdBy || '', 64),
       expires_at: expToDate(exp),
     }
@@ -444,8 +480,10 @@ export async function saveNotifyEvent({ eventType, outBillNo, transferBillNo, st
  */
 // 台账筛选条件 → WHERE 子句（listRewards/getStats 共用，保证列表和汇总口径一致）
 //   status: all|created(待领取)|waiting(待确认)|success|failed(含失败/关闭/撤回)
-//   days:   只看近 N 天（0=全部）；target: 只看某个客户（单人资金往来）
-function rewardFilterSql({ status = 'all', days = 0, target = '' } = {}) {
+//   days:   只看近 N 天（0=全部）；target: 只看某个客户（单人资金往来）；batch: 只看某一批次
+//   q:      关键词（备注模糊 / 单号 rid 精确 / 金额精确(元) / 客户备注名·昵称）
+//   month:  只看某个自然月（YYYY-MM；边界按库内 UTC 时间，与 days 的 NOW() 口径一致）
+function rewardFilterSql({ status = 'all', days = 0, target = '', batch = '', q = '', month = '' } = {}) {
   const conds = [];
   const params = {};
   const st = String(status || 'all');
@@ -462,25 +500,55 @@ function rewardFilterSql({ status = 'all', days = 0, target = '' } = {}) {
     conds.push(`r.target_external_userid = :target`);
     params.target = String(target);
   }
+  if (batch) {
+    conds.push(`r.batch_id = :batch`);
+    params.batch = String(batch);
+  }
+  const kw = String(q || '').trim();
+  if (kw) {
+    // 客户名走子查询而不是 JOIN：getStats 不带 customers 表也能用同一段 WHERE，两边口径不劈叉
+    const ors = [
+      `r.remark LIKE :kw_like`,
+      `r.rid = :kw`,
+      `r.target_external_userid IN
+         (SELECT external_userid FROM customers WHERE remark LIKE :kw_like OR name LIKE :kw_like)`,
+    ];
+    params.kw_like = `%${kw}%`;
+    params.kw = kw;
+    const yuan = Number(kw);
+    if (Number.isFinite(yuan) && yuan > 0) {
+      ors.push(`r.amount_fen = :kw_fen`);
+      params.kw_fen = Math.round(yuan * 100);
+    }
+    conds.push(`(${ors.join(' OR ')})`);
+  }
+  const m = String(month || '').trim();
+  if (/^\d{4}-\d{2}$/.test(m)) {
+    conds.push(`r.created_at >= :m_start AND r.created_at < DATE_ADD(:m_start, INTERVAL 1 MONTH)`);
+    params.m_start = m + '-01';
+  }
   return { where: conds.length ? `WHERE ${conds.join(' AND ')}` : '', params };
 }
 
-export async function listRewards({ limit = 50, offset = 0, status, days, target } = {}) {
+export async function listRewards({ limit = 50, offset = 0, status, days, target, batch, q, month } = {}) {
   if (!pool) return [];
   const lim = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
   const off = Math.max(parseInt(offset, 10) || 0, 0);
-  const { where, params } = rewardFilterSql({ status, days, target });
+  const { where, params } = rewardFilterSql({ status, days, target, batch, q, month });
   const [rows] = await pool.execute(
     `SELECT r.rid, r.amount_fen, r.remark, r.created_by, r.status,
-            r.created_at, r.expires_at, r.target_external_userid,
+            r.created_at, r.expires_at, r.target_external_userid, r.batch_id,
+            r.revoked_by, r.revoked_at,
             c.remark AS target_remark, c.name AS target_name,
             a.name AS created_by_name,
+            ra.name AS revoked_by_name,
             t.claimer_openid, t.transfer_bill_no, t.state AS transfer_state,
             t.updated_at AS transfer_updated_at
        FROM rewards r
        LEFT JOIN transfers t ON t.out_bill_no = r.rid
        LEFT JOIN customers c ON c.external_userid = r.target_external_userid
        LEFT JOIN admins a ON a.openid = r.created_by
+       LEFT JOIN admins ra ON ra.openid = r.revoked_by
       ${where}
       ORDER BY r.created_at DESC
       LIMIT ${lim} OFFSET ${off}`,
@@ -764,6 +832,13 @@ export async function searchCustomers({ q = '', followUserid = '', limit = 50, o
   return rows.map((r) => ({ ...r, opened: !!r.opened }));
 }
 
+/** 客户档案的最近同步时间（MAX(synced_at)），给"上次同步 xx"展示用；没同步过返回 null */
+export async function getLastSyncAt() {
+  if (!pool) return null;
+  const [[row]] = await pool.query(`SELECT MAX(synced_at) AS t FROM customers`);
+  return row.t || null;
+}
+
 /** 按 unionid 查客户（只读）。企微同步后本地就有 unionid，领取时优先走库、不必调企微。 */
 export async function findCustomerByUnionid(unionid) {
   if (!pool || !unionid) return null;
@@ -831,14 +906,38 @@ export async function getReward(rid) {
   return rows.length ? rows[0] : null;
 }
 
-/** 撤回一笔未领取(CREATED)的奖励：置 CANCELLED，客户随即不可再领。返回是否真的撤到了 */
-export async function revokeReward(rid) {
+/** 某一批次的全部奖励（rid+status），批量撤回用。按创建顺序返回 */
+export async function listBatchRewards(batchId) {
+  if (!pool || !batchId) return [];
+  const [rows] = await pool.execute(
+    `SELECT rid, status, amount_fen FROM rewards WHERE batch_id=:b ORDER BY created_at ASC, rid ASC`,
+    { b: batchId }
+  );
+  return rows;
+}
+
+/** 撤回一笔未领取(CREATED)的奖励：置 CANCELLED 并记录操作人（审计），客户随即不可再领。返回是否真的撤到了 */
+export async function revokeReward(rid, revokedBy) {
   if (!pool) throw new Error('未开启数据库');
   const [r] = await pool.execute(
-    `UPDATE rewards SET status='CANCELLED' WHERE rid=:rid AND status='CREATED'`,
-    { rid }
+    `UPDATE rewards SET status='CANCELLED', revoked_by=:by, revoked_at=CURRENT_TIMESTAMP
+      WHERE rid=:rid AND status='CREATED'`,
+    { rid, by: revokedBy ? clip(revokedBy, 64) : null }
   );
   return r.affectedRows > 0;
+}
+
+/**
+ * 审计：记下这笔是谁在什么时候发起的撤回。用于已领待确认(CLAIMED)走微信撤销的路——
+ * 状态本身由撤销结果/回调驱动，这里只补操作人；首个发起人生效，重复点撤回不覆盖。
+ */
+export async function markRevoked(rid, revokedBy) {
+  if (!pool || !rid) return;
+  await pool.execute(
+    `UPDATE rewards SET revoked_by=:by, revoked_at=CURRENT_TIMESTAMP
+      WHERE rid=:rid AND revoked_by IS NULL`,
+    { rid, by: revokedBy ? clip(revokedBy, 64) : null }
+  );
 }
 
 /** 客户领取档案：合作次数/累计到账（等级体系的数据源，按领取人 openid 统计真实到账） */
@@ -934,6 +1033,7 @@ export const db = {
   upsertCustomer,
   getFollowMap,
   searchCustomers,
+  getLastSyncAt,
   findCustomerByUnionid,
   bindCustomerByUnionid,
   bindCustomerOpenid,
@@ -942,6 +1042,8 @@ export const db = {
   getRewardTarget,
   getReward,
   revokeReward,
+  markRevoked,
+  listBatchRewards,
   getClaimerProfile,
   getLeaderboard,
   getLeaderboardDist,
