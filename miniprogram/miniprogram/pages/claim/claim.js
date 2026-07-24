@@ -234,6 +234,14 @@ Page({
 
   // 拉起微信官方确认收款
   _confirmTransfer(res, onOk) {
+    // 旧版微信没有 requestMerchantTransfer：不检测会直接 JS 报错，点领取毫无反应且无任何提示
+    if (typeof wx.requestMerchantTransfer !== 'function') {
+      this.setData({
+        status: 'fail',
+        message: '当前微信版本过低，无法拉起确认收款，请升级微信到最新版本后再来领取',
+      });
+      return;
+    }
     wx.requestMerchantTransfer({
       mchId: res.mchId,
       appId: res.appId,

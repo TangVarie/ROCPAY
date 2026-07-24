@@ -21,13 +21,14 @@ function hmac(dataStr) {
 }
 
 // 生成令牌。fen=金额(分)，remark=备注，name=收款人姓名(可选)
-export function createRewardToken({ fen, remark = '', name = '' }) {
-  const rid = crypto.randomUUID().replace(/-/g, ''); // 32位，直接当商户单号 out_bill_no
+// rid 可由调用方传入（幂等场景：同一 clientKey 确定性派生同一 rid），不传则随机生成
+export function createRewardToken({ fen, remark = '', name = '', rid }) {
+  const theRid = rid || crypto.randomUUID().replace(/-/g, ''); // 32位，直接当商户单号 out_bill_no
   const exp = Math.floor(Date.now() / 1000) + config.app.rewardTtlHours * 3600;
-  const payload = { rid, fen, remark, name, exp };
+  const payload = { rid: theRid, fen, remark, name, exp };
   const data = b64url(JSON.stringify(payload));
   const sig = hmac(data);
-  return { token: `${data}.${sig}`, rid, exp };
+  return { token: `${data}.${sig}`, rid: theRid, exp };
 }
 
 // 校验令牌，返回载荷；失败抛错
