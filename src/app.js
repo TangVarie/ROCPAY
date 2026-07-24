@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p12-staff-search-dark';
+const BUILD = 'p13-revoke-audit';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -476,7 +476,8 @@ app.get('/api/rewards', async (req, res) => {
 // 【员工】撤回一笔奖励：未领取的直接作废；已领取待确认的向微信撤销转账（冻结资金解冻回流）。
 // 撤回后客户端不再展示、不可再领；台账状态变「已撤回」，可发额度自动回流（撤销单不再计入消耗）。
 app.post('/api/rewards/revoke', async (req, res) => {
-  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  const openid = getOpenid(req);
+  if (!isAdmin(openid)) return res.status(403).json({ error: '无权限' });
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
   const rid = String((req.body || {}).rid || '').trim();
   if (!rid) return res.status(400).json({ error: '缺少 rid' });
@@ -484,7 +485,7 @@ app.post('/api/rewards/revoke', async (req, res) => {
     const r = await db.getReward(rid);
     if (!r) return res.status(404).json({ error: '找不到这笔奖励' });
     if (r.status === 'CREATED') {
-      const ok = await db.revokeReward(rid);
+      const ok = await db.revokeReward(rid, openid); // 撤回连操作人一起落（审计）
       if (!ok) return res.status(409).json({ error: '这笔奖励刚被领取，无法撤回' });
       return res.json({ ok: true, mode: 'unclaimed' });
     }
@@ -496,6 +497,7 @@ app.post('/api/rewards/revoke', async (req, res) => {
         state: data.state || 'CANCELING',
         transferBillNo: data.transfer_bill_no,
       });
+      persist('markRevoked', () => db.markRevoked(rid, openid)); // 状态由撤销结果驱动，这里只补审计
       return res.json({ ok: true, mode: 'canceled', state: data.state });
     }
     return res.status(409).json({ error: `当前状态(${r.status})不可撤回：已到账或已终结` });
@@ -873,7 +875,8 @@ app.post('/api/rewards/batch', async (req, res) => {
 // 逐笔处理：未领取(CREATED)直接作废；已领待确认(CLAIMED)向微信撤销资金回流；
 // 已到账/已终结跳过不动。逐笔回执，部分失败不回滚已成功的（撤回本就是幂等安全操作）。
 app.post('/api/rewards/batch/revoke', async (req, res) => {
-  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  const openid = getOpenid(req);
+  if (!isAdmin(openid)) return res.status(403).json({ error: '无权限' });
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
   const batchId = String((req.body || {}).batchId || '').trim();
   if (!batchId) return res.status(400).json({ error: '缺少 batchId' });
@@ -887,7 +890,7 @@ app.post('/api/rewards/batch/revoke', async (req, res) => {
     for (const r of rows) {
       try {
         if (r.status === 'CREATED') {
-          (await db.revokeReward(r.rid)) ? revoked++ : skipped++; // 撤的瞬间被领走 → 跳过
+          (await db.revokeReward(r.rid, openid)) ? revoked++ : skipped++; // 撤的瞬间被领走 → 跳过
         } else if (r.status === 'CLAIMED') {
           const data = await cancelTransferByOutBillNo(r.rid);
           await db.updateTransferState({
@@ -895,6 +898,7 @@ app.post('/api/rewards/batch/revoke', async (req, res) => {
             state: data.state || 'CANCELING',
             transferBillNo: data.transfer_bill_no,
           });
+          persist('markRevoked(batch)', () => db.markRevoked(r.rid, openid)); // 审计：谁发起的整批撤回
           canceled++;
         } else {
           skipped++;

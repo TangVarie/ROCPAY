@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS rewards (
   recipient_name VARCHAR(64)  NULL COMMENT '收款人真实姓名(可选·PII)',
   target_external_userid VARCHAR(64) NULL COMMENT '定向目标企微客户(P2)，NULL=非定向',
   batch_id       VARCHAR(32)  NULL COMMENT '批次号：同一次批量发放的多笔共用，按批查看/撤回用',
+  revoked_by     VARCHAR(64)  NULL COMMENT '撤回操作人openid(审计:谁撤的这笔钱)',
+  revoked_at     DATETIME     NULL COMMENT '撤回操作时间',
   created_by     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '发放人(管理员)openid',
   status         VARCHAR(24)  NOT NULL DEFAULT 'CREATED' COMMENT 'CREATED|CLAIMED|SUCCESS|FAIL|CLOSED',
   expires_at     DATETIME     NULL COMMENT '领取有效期',

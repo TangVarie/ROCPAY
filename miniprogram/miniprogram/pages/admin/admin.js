@@ -565,6 +565,8 @@ Page({
             updatedFull: (r.transfer_updated_at || '').replace('T', ' '), // 转账状态最后更新时间
             billNo: r.transfer_bill_no || '', // 微信转账单号：与商户平台逐笔勾稽的凭据
             batchId: r.batch_id || '', // 批次号：非空说明来自一次批量发放，可整批查看/撤回
+            revokedAt: (r.revoked_at || '').replace('T', ' '), // 撤回审计：谁在什么时候撤的
+            revokedBy: r.revoked_by_name || (r.revoked_by ? '（已移除的员工）' : ''),
           };
         });
         const all = isMore ? this.data.records.concat(records) : records;
@@ -719,6 +721,7 @@ Page({
       `备注：${r.sub}`,
       `创建：${r.createdFull}`,
       r.updatedFull && r.updatedFull !== r.createdFull ? `状态更新：${r.updatedFull}` : '',
+      r.revokedAt ? `撤回：${r.revokedAt}${r.revokedBy ? ' · ' + r.revokedBy : ''}` : '',
       `商户单号：${r.rid}`,
       `微信单号：${r.billNo || '—（转账发起后生成）'}`,
       r.batchId ? `批次号：${r.batchId}` : '',

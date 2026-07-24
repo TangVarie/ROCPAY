@@ -58,6 +58,8 @@ const DDL = [
      recipient_name VARCHAR(64)  NULL COMMENT '收款人真实姓名(可选·PII)',
      target_external_userid VARCHAR(64) NULL COMMENT '定向目标企微客户(P2)，NULL=非定向',
      batch_id       VARCHAR(32)  NULL COMMENT '批次号：同一次批量发放的多笔共用，按批查看/撤回用',
+     revoked_by     VARCHAR(64)  NULL COMMENT '撤回操作人openid(审计：谁撤的这笔钱)',
+     revoked_at     DATETIME     NULL COMMENT '撤回操作时间',
      created_by     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '发放人(管理员)openid',
      status         VARCHAR(24)  NOT NULL DEFAULT 'CREATED' COMMENT 'CREATED|CLAIMED|SUCCESS|FAIL|CLOSED',
      expires_at     DATETIME     NULL COMMENT '领取有效期',
@@ -225,6 +227,17 @@ export async function migrate() {
     "batch_id VARCHAR(32) NULL COMMENT '批次号：同一次批量发放的多笔共用' AFTER target_external_userid"
   );
   await ensureIndex('rewards', 'idx_rewards_batch', 'KEY idx_rewards_batch (batch_id)');
+  // 老库补列：撤回审计（谁在什么时候撤的）
+  await ensureColumn(
+    'rewards',
+    'revoked_by',
+    "revoked_by VARCHAR(64) NULL COMMENT '撤回操作人openid(审计)' AFTER batch_id"
+  );
+  await ensureColumn(
+    'rewards',
+    'revoked_at',
+    "revoked_at DATETIME NULL COMMENT '撤回操作时间' AFTER revoked_by"
+  );
   await seedSuperAdmins(config.app.adminOpenids);
 }
 
@@ -525,14 +538,17 @@ export async function listRewards({ limit = 50, offset = 0, status, days, target
   const [rows] = await pool.execute(
     `SELECT r.rid, r.amount_fen, r.remark, r.created_by, r.status,
             r.created_at, r.expires_at, r.target_external_userid, r.batch_id,
+            r.revoked_by, r.revoked_at,
             c.remark AS target_remark, c.name AS target_name,
             a.name AS created_by_name,
+            ra.name AS revoked_by_name,
             t.claimer_openid, t.transfer_bill_no, t.state AS transfer_state,
             t.updated_at AS transfer_updated_at
        FROM rewards r
        LEFT JOIN transfers t ON t.out_bill_no = r.rid
        LEFT JOIN customers c ON c.external_userid = r.target_external_userid
        LEFT JOIN admins a ON a.openid = r.created_by
+       LEFT JOIN admins ra ON ra.openid = r.revoked_by
       ${where}
       ORDER BY r.created_at DESC
       LIMIT ${lim} OFFSET ${off}`,
@@ -900,14 +916,28 @@ export async function listBatchRewards(batchId) {
   return rows;
 }
 
-/** 撤回一笔未领取(CREATED)的奖励：置 CANCELLED，客户随即不可再领。返回是否真的撤到了 */
-export async function revokeReward(rid) {
+/** 撤回一笔未领取(CREATED)的奖励：置 CANCELLED 并记录操作人（审计），客户随即不可再领。返回是否真的撤到了 */
+export async function revokeReward(rid, revokedBy) {
   if (!pool) throw new Error('未开启数据库');
   const [r] = await pool.execute(
-    `UPDATE rewards SET status='CANCELLED' WHERE rid=:rid AND status='CREATED'`,
-    { rid }
+    `UPDATE rewards SET status='CANCELLED', revoked_by=:by, revoked_at=CURRENT_TIMESTAMP
+      WHERE rid=:rid AND status='CREATED'`,
+    { rid, by: revokedBy ? clip(revokedBy, 64) : null }
   );
   return r.affectedRows > 0;
+}
+
+/**
+ * 审计：记下这笔是谁在什么时候发起的撤回。用于已领待确认(CLAIMED)走微信撤销的路——
+ * 状态本身由撤销结果/回调驱动，这里只补操作人；首个发起人生效，重复点撤回不覆盖。
+ */
+export async function markRevoked(rid, revokedBy) {
+  if (!pool || !rid) return;
+  await pool.execute(
+    `UPDATE rewards SET revoked_by=:by, revoked_at=CURRENT_TIMESTAMP
+      WHERE rid=:rid AND revoked_by IS NULL`,
+    { rid, by: revokedBy ? clip(revokedBy, 64) : null }
+  );
 }
 
 /** 客户领取档案：合作次数/累计到账（等级体系的数据源，按领取人 openid 统计真实到账） */
@@ -1012,6 +1042,7 @@ export const db = {
   getRewardTarget,
   getReward,
   revokeReward,
+  markRevoked,
   listBatchRewards,
   getClaimerProfile,
   getLeaderboard,
