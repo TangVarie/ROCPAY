@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p10-claim-precheck';
+const BUILD = 'p11-batch-ops';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -452,12 +452,13 @@ app.get('/api/rewards', async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
-    // 台账筛选：status=created|waiting|success|failed，days=近N天，target=某客户（单人往来）
+    // 台账筛选：status=created|waiting|success|failed，days=近N天，target=某客户（单人往来），batch=某一批次
     // 列表和 stats 用同一组筛选 → stats 即"筛选范围内的资金消耗汇总"
     const filters = {
       status: String(req.query.status || 'all'),
       days: Number(req.query.days) || 0,
       target: String(req.query.target || ''),
+      batch: String(req.query.batch || ''),
     };
     const [list, stats] = await Promise.all([
       db.listRewards({ limit, offset, ...filters }),
@@ -802,6 +803,7 @@ app.post('/api/rewards/batch', async (req, res) => {
 
   const created = [];
   const people = []; // 每人汇总：{externalUserid, totalYuan, bills}
+  const batchId = newRid(); // 本次提交的批次号：拆单后的所有笔共用，台账按批查看/按批撤回的锚点
   for (const p of plans) {
     const exp = Math.floor(Date.now() / 1000) + config.app.rewardTtlHours * 3600;
     let ok = 0;
@@ -816,6 +818,7 @@ app.post('/api/rewards/batch', async (req, res) => {
           createdBy: openid,
           exp,
           targetExternalUserid: p.target,
+          batchId,
         });
         created.push({ rid, externalUserid: p.target, amountYuan: billFen / 100, remark: p.remark || '' });
         ok++;
@@ -830,10 +833,51 @@ app.post('/api/rewards/batch', async (req, res) => {
     createdCount: created.length, // 拆单后的总笔数
     peopleCount: people.length,
     errorCount: errors.length,
+    batchId: created.length ? batchId : '', // 一笔都没落库就不返回批次号
     created,
     people,
     errors,
   });
+});
+
+// 【员工】按批撤回：一次确认撤掉整批里所有还没到账的（发错一批不用 30 次逐条点）。
+// 逐笔处理：未领取(CREATED)直接作废；已领待确认(CLAIMED)向微信撤销资金回流；
+// 已到账/已终结跳过不动。逐笔回执，部分失败不回滚已成功的（撤回本就是幂等安全操作）。
+app.post('/api/rewards/batch/revoke', async (req, res) => {
+  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  const batchId = String((req.body || {}).batchId || '').trim();
+  if (!batchId) return res.status(400).json({ error: '缺少 batchId' });
+  try {
+    const rows = await db.listBatchRewards(batchId);
+    if (!rows.length) return res.status(404).json({ error: '找不到该批次' });
+    let revoked = 0; // 未领取，直接作废
+    let canceled = 0; // 已发起转账，向微信撤销
+    let skipped = 0; // 已到账/已终结，不动
+    const errors = [];
+    for (const r of rows) {
+      try {
+        if (r.status === 'CREATED') {
+          (await db.revokeReward(r.rid)) ? revoked++ : skipped++; // 撤的瞬间被领走 → 跳过
+        } else if (r.status === 'CLAIMED') {
+          const data = await cancelTransferByOutBillNo(r.rid);
+          await db.updateTransferState({
+            outBillNo: r.rid,
+            state: data.state || 'CANCELING',
+            transferBillNo: data.transfer_bill_no,
+          });
+          canceled++;
+        } else {
+          skipped++;
+        }
+      } catch (e) {
+        errors.push({ rid: r.rid, error: e.message });
+      }
+    }
+    res.json({ ok: true, total: rows.length, revoked, canceled, skipped, errors });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message, detail: e.data });
+  }
 });
 
 // 【客户】查我的定向奖励（身份匹配，防领错）

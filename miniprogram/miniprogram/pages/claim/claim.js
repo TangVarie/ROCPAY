@@ -201,6 +201,22 @@ Page({
         });
       })
       .catch(() => {});
+    // 异常警示：转账失败/被关闭（不含主动撤回）的笔数。对钱的异常，被动发现 = 事故，进门就要看见
+    call('/api/rewards?limit=1&status=failed', 'GET')
+      .then((r) => {
+        if (!r || !r.stats) return;
+        this.setData({
+          adminHome: Object.assign({ hasQuota: false }, this.data.adminHome, {
+            failCount: Math.max(0, (r.stats.total || 0) - (r.stats.cancelled_count || 0)),
+          }),
+        });
+      })
+      .catch(() => {});
+  },
+
+  // 异常警示块 → 直达工作台记录 Tab 的失败筛选
+  goFailed() {
+    wx.navigateTo({ url: '/pages/admin/admin?tab=records&status=failed' });
   },
 
   copyOpenid() {

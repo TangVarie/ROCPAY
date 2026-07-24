@@ -14,6 +14,16 @@
   transition: color 120ms ease-out;
 }
 .tab.on { color: var(--text-dark); font-weight: 600; }
+/* 资金异常红点：存在 FAIL/CLOSED（不含主动撤回）时挂在"记录"上，异常不能靠运营想起来去看 */
+.tab-dot {
+  position: absolute;
+  top: 12rpx;
+  right: 10rpx;
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: var(--accent);
+}
 .tab.on::after {
   content: '';
   position: absolute;
@@ -201,11 +211,12 @@
 .statrow { display: flex; gap: 20rpx; margin-bottom: 32rpx; }
 .stat-main {
   flex: 1.35;
-  color: #ffffff;
   display: flex;
   flex-direction: column;
   justify-content: center;
 }
+/* 批次视图操作行：整批撤回入口，紧贴汇总块右缘 */
+.batch-actions { display: flex; justify-content: flex-end; margin: -16rpx 0 20rpx; }
 .sm-label { font-size: 24rpx; color: rgba(0, 0, 0, 0.55); }
 .sm-num { font-size: 72rpx; font-weight: 700; color: rgba(0, 0, 0, 0.9); line-height: 1.15; margin-top: 8rpx; }
 .sm-sub { font-size: 22rpx; color: rgba(0, 0, 0, 0.55); margin-top: 6rpx; }
@@ -241,9 +252,11 @@
 .fchip:active { opacity: 0.8; }
 .fchip-target { background: var(--accent); } /* 单人筛选中：点一下清除 */
 
-/* 记录行撤回 + 加载更多 */
+/* 记录行撤回 + 批次入口 + 加载更多 */
 .rec-revoke { font-size: 24rpx; font-weight: 600; color: var(--danger); padding: 8rpx 4rpx; }
 .rec-revoke:active { opacity: 0.6; }
+.rec-batch { font-size: 22rpx; font-weight: 500; color: var(--primary); padding: 6rpx 4rpx; }
+.rec-batch:active { opacity: 0.6; }
 .loadmore { text-align: center; padding: 28rpx 0 8rpx; }
 .loadmore-hint { text-align: center; padding: 16rpx 24rpx 8rpx; font-size: 24rpx; line-height: 1.5; }
 

@@ -78,6 +78,12 @@
         <view class="ah-sub" wx:if="{{adminHome.low}}">额度已用尽，进工作台充值</view>
       </view>
 
+      <!-- 资金异常主动亮出来：失败/被关闭（不含主动撤回），点击直达失败台账 -->
+      <view class="block tint-blush ah-alert" wx:if="{{adminHome && adminHome.failCount > 0}}" bindtap="goFailed">
+        <view class="ah-alert-t">待处理异常 <text class="num">{{adminHome.failCount}}</text> 笔</view>
+        <view class="ah-alert-s">转账失败或被关闭，点击查看失败台账</view>
+      </view>
+
       <view class="ah-minis" wx:if="{{adminHome}}">
         <view class="block tint-sky ah-mini">
           <view class="ahm-label">近24小时发放</view>

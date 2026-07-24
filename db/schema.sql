@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS rewards (
   remark         VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注(用户可见)',
   recipient_name VARCHAR(64)  NULL COMMENT '收款人真实姓名(可选·PII)',
   target_external_userid VARCHAR(64) NULL COMMENT '定向目标企微客户(P2)，NULL=非定向',
+  batch_id       VARCHAR(32)  NULL COMMENT '批次号：同一次批量发放的多笔共用，按批查看/撤回用',
   created_by     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '发放人(管理员)openid',
   status         VARCHAR(24)  NOT NULL DEFAULT 'CREATED' COMMENT 'CREATED|CLAIMED|SUCCESS|FAIL|CLOSED',
   expires_at     DATETIME     NULL COMMENT '领取有效期',
@@ -24,6 +25,7 @@ CREATE TABLE IF NOT EXISTS rewards (
   updated_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_rewards_created_by (created_by),
   KEY idx_rewards_status (status),
+  KEY idx_rewards_batch (batch_id),
   KEY idx_rewards_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='发放的奖励';
 

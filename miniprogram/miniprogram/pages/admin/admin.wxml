@@ -31,7 +31,7 @@
     <!-- Tab：发丝线 + 蓝色下划指示 -->
     <view class="tabs hairline-b">
       <view class="tab {{tab==='send'?'on':''}}" data-tab="send" bindtap="switchTab">发放</view>
-      <view class="tab {{tab==='records'?'on':''}}" data-tab="records" bindtap="switchTab">记录</view>
+      <view class="tab {{tab==='records'?'on':''}}" data-tab="records" bindtap="switchTab">记录<text class="tab-dot" wx:if="{{failAlert > 0}}"></text></view>
       <view class="tab {{tab==='rank'?'on':''}}" data-tab="rank" bindtap="switchTab">客户</view>
       <view class="tab {{tab==='staff'?'on':''}}" data-tab="staff" bindtap="switchTab" wx:if="{{isSuper}}">员工</view>
     </view>
@@ -163,6 +163,7 @@
             </block>
             <view class="psub t-light" wx:else>未连接企微，可直接把小程序转发到客户聊天</view>
             <button class="btn btn-fill btn-block" open-type="share">转发领取入口给客户</button>
+            <view class="textbtn center-self" wx:if="{{batchResult.batchId}}" bindtap="viewBatchLedger">查看本批台账</view>
             <view class="textbtn center-self" bindtap="newBatch">再发一批</view>
           </view>
         </block>
@@ -228,6 +229,7 @@
         <view class="fchip {{recFilter.days===7?'on':''}}" data-k="days" data-v="7" bindtap="pickRecFilter">近7天</view>
         <view class="fchip {{recFilter.days===30?'on':''}}" data-k="days" data-v="30" bindtap="pickRecFilter">近30天</view>
         <view class="fchip fchip-target on" wx:if="{{recFilter.target}}" bindtap="clearCustomerFilter">{{recFilter.targetLabel}} ✕</view>
+        <view class="fchip fchip-target on" wx:if="{{recFilter.batch}}" bindtap="clearBatchFilter">本批发放 ✕</view>
       </view>
 
       <!-- 汇总（跟随筛选：范围内合计/动账，即期间或单人资金消耗） -->
@@ -249,6 +251,11 @@
         </view>
       </view>
 
+      <!-- 批次视图专属：整批撤回未到账（一次确认 + 逐笔回执，不用 30 次逐条点） -->
+      <view class="batch-actions" wx:if="{{recFilter.batch && stats && stats.pending_count > 0}}">
+        <view class="textbtn textbtn-danger" bindtap="revokeBatch">撤回本批未到账（{{stats.pending_count}} 笔）</view>
+      </view>
+
       <!-- 记录：画布直排 + 发丝线（不一条一卡）；点行看详情（rid/微信单号，对账取证用） -->
       <block wx:if="{{records.length}}">
         <view class="rec hairline-b" wx:for="{{records}}" wx:key="rid" data-i="{{index}}" bindtap="showRecDetail">
@@ -262,6 +269,7 @@
           <view class="rec-r">
             <text class="badge {{item.cls==='ok'?'badge-success':item.cls==='fail'?'badge-danger':'badge-warning'}}">{{item.statusText}}</text>
             <text class="rec-time t-hint num">{{item.createdAt}}</text>
+            <text class="rec-batch" wx:if="{{item.batchId && !recFilter.batch}}" data-batch="{{item.batchId}}" catchtap="filterByBatch">查看本批</text>
             <text class="rec-revoke" wx:if="{{item.canRevoke}}" data-rid="{{item.rid}}" data-yuan="{{item.yuan}}" data-who="{{item.who}}" catchtap="revokeReward">撤回</text>
           </view>
         </view>

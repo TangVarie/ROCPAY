@@ -52,10 +52,11 @@ Page({
     recError: false, // 加载失败态：断网时不许用空态说谎
     stats: null,
     statsPaidYuan: '0.00',
-    recFilter: { status: 'all', days: 0, target: '', targetLabel: '' },
+    recFilter: { status: 'all', days: 0, target: '', targetLabel: '', batch: '' }, // batch 非空 = 批次视图
     recOffset: 0,
     recHasMore: false,
     recLoading: false,
+    failAlert: 0, // 转账失败/被关闭（不含主动撤回）的笔数：记录 Tab 红点，对钱的异常不能靠"想起来去看"
 
     // ---- 客户榜 ----
     rank: [],
@@ -84,7 +85,15 @@ Page({
     staffListErr: false, // 员工列表加载失败提示（loadAdmins 不许静默失败）
   },
 
-  onLoad() {
+  onLoad(options) {
+    // 带参直达（如操作端主页"异常警示"跳转 ?tab=records&status=failed）
+    const o = options || {};
+    if (o.tab === 'records') {
+      this.setData({
+        tab: 'records',
+        recFilter: Object.assign({}, this.data.recFilter, { status: o.status || 'all' }),
+      });
+    }
     this.init();
   },
   init() {
@@ -108,6 +117,7 @@ Page({
           this.loadCustomers();
           this.loadRecords();
           this.loadPeriod();
+          this.loadAlerts();
         }
         if (isSuper) this.loadAdmins();
       })
@@ -132,10 +142,21 @@ Page({
   },
   _refreshTab() {
     const t = this.data.tab;
-    if (t === 'records') { this.loadRecords(); this.loadPeriod(); }
+    if (t === 'records') { this.loadRecords(); this.loadPeriod(); this.loadAlerts(); }
     else if (t === 'rank') this.loadRank();
     else if (t === 'staff') this.loadAdmins();
     else if (this.data.step === 'pick') this.loadCustomers();
+  },
+
+  // 异常笔数（FAIL/CLOSED，不含主动撤回）：failed 筛选的 stats.total 减去 cancelled_count。
+  // 静默失败：角标是提醒不是数据源，拉不到不打扰
+  loadAlerts() {
+    call('/api/rewards?limit=1&status=failed', 'GET')
+      .then((res) => {
+        if (!res || !res.stats) return;
+        this.setData({ failAlert: Math.max(0, (res.stats.total || 0) - (res.stats.cancelled_count || 0)) });
+      })
+      .catch(() => {});
   },
 
   switchTab(e) {
@@ -349,6 +370,7 @@ Page({
           batchResult: {
             createdCount: res.createdCount, // 拆单后的总笔数
             peopleCount: res.peopleCount || targets.length,
+            batchId: res.batchId || '', // 批次号：结果页可直达"本批台账"
             errors: (res.errors || []).map((er) => ({ ...er, label: labelOf[er.target] || er.target || '' })),
             targets,
           },
@@ -497,7 +519,7 @@ Page({
     const f = this.data.recFilter;
     this.setData({ recLoading: true, recError: false });
     call(
-      `/api/rewards?limit=${LIMIT}&offset=${offset}&status=${f.status}&days=${f.days}&target=${encodeURIComponent(f.target)}`,
+      `/api/rewards?limit=${LIMIT}&offset=${offset}&status=${f.status}&days=${f.days}&target=${encodeURIComponent(f.target)}&batch=${encodeURIComponent(f.batch || '')}`,
       'GET'
     )
       .then((res) => {
@@ -526,6 +548,7 @@ Page({
             createdAt: (r.created_at || '').replace('T', ' ').slice(5, 16),
             createdFull: (r.created_at || '').replace('T', ' '), // 详情层用完整时间（跨年对账不丢年份）
             billNo: r.transfer_bill_no || '', // 微信转账单号：与商户平台逐笔勾稽的凭据
+            batchId: r.batch_id || '', // 批次号：非空说明来自一次批量发放，可整批查看/撤回
           };
         });
         const all = isMore ? this.data.records.concat(records) : records;
@@ -579,6 +602,73 @@ Page({
     this._resetRecords();
     this.loadRecords();
   },
+  // ---- 批次视图：一次批量发放的 N 笔按批聚合回看（汇总同口径），并支持整批撤回 ----
+  filterByBatch(e) {
+    const batch = e.currentTarget.dataset.batch;
+    if (batch) this._enterBatchView(batch);
+  },
+  viewBatchLedger() {
+    const r = this.data.batchResult;
+    if (r && r.batchId) this._enterBatchView(r.batchId);
+  },
+  _enterBatchView(batch) {
+    // 进批次视图时清掉时间/单人筛选：这一批可能跨越"近7天"边界，混着筛会看不全
+    this.setData({
+      tab: 'records',
+      recFilter: { status: 'all', days: 0, target: '', targetLabel: '', batch },
+    });
+    this._resetRecords();
+    this.loadRecords();
+    this.loadPeriod();
+  },
+  clearBatchFilter() {
+    this.setData({ recFilter: Object.assign({}, this.data.recFilter, { batch: '' }) });
+    this._resetRecords();
+    this.loadRecords();
+  },
+  // 整批撤回未到账：发错一批不用 30 次逐条点。已到账的不动，未领取作废、待确认向微信撤销
+  revokeBatch() {
+    const batch = this.data.recFilter.batch;
+    if (!batch || this._batchRevoking) return;
+    const s = this.data.stats;
+    // 只有"全部"筛选下 stats 才是整批口径，其他筛选下不引用具体数字，避免说错
+    const exact = this.data.recFilter.status === 'all' && s;
+    const content = exact
+      ? `将撤回本批 ${s.pending_count} 笔未到账：未领取直接作废；已领待确认向微信撤销，资金退回商户余额。` +
+        (s.success_count ? `\n已到账 ${s.success_count} 笔不受影响。` : '')
+      : '将撤回本批所有未到账：未领取直接作废；已领待确认向微信撤销，资金退回商户余额。已到账的不受影响。';
+    wx.showModal({
+      title: '撤回本批未到账',
+      content,
+      confirmText: '全部撤回',
+      confirmColor: '#b8293c',
+      success: (r) => {
+        if (!r.confirm) return;
+        this._batchRevoking = true;
+        wx.showLoading({ title: '撤回中…', mask: true });
+        call('/api/rewards/batch/revoke', 'POST', { batchId: batch })
+          .then((res) => {
+            this._batchRevoking = false;
+            wx.hideLoading();
+            if (res && res.error) return wx.showToast({ title: res.error, icon: 'none' });
+            const parts = [];
+            if (res.revoked) parts.push(`作废未领取 ${res.revoked} 笔`);
+            if (res.canceled) parts.push(`撤销待确认转账 ${res.canceled} 笔`);
+            if (res.skipped) parts.push(`跳过 ${res.skipped} 笔（已到账/已终结）`);
+            if ((res.errors || []).length) parts.push(`失败 ${res.errors.length} 笔，可再点一次重试`);
+            wx.showModal({ title: '本批撤回完成', content: parts.join('\n') || '本批没有可撤回的笔', showCancel: false });
+            this._resetRecords();
+            this.loadRecords();
+            this.loadPeriod();
+          })
+          .catch(() => {
+            this._batchRevoking = false;
+            wx.hideLoading();
+            wx.showToast({ title: '网络错误', icon: 'none' });
+          });
+      },
+    });
+  },
   // 记录详情：对账取证用——完整时间 / 商户单号 rid / 微信转账单号，一键复制
   showRecDetail(e) {
     const r = this.data.records[e.currentTarget.dataset.i];
@@ -590,6 +680,7 @@ Page({
       `创建：${r.createdFull}`,
       `商户单号：${r.rid}`,
       `微信单号：${r.billNo || '—（转账发起后生成）'}`,
+      r.batchId ? `批次号：${r.batchId}` : '',
     ].filter(Boolean);
     const copyVal = r.billNo || r.rid;
     wx.showModal({
@@ -738,7 +829,7 @@ Page({
     wx.showModal({
       title: '移除员工',
       content: '确定移除该员工的发放权限？',
-      confirmColor: '#b3402a',
+      confirmColor: '#b8293c', // 与撤回等危险操作同用 --danger 冷酒红，不许第二种红散落
       success: (r) => {
         if (!r.confirm) return;
         call('/api/admins/remove', 'POST', { openid })
