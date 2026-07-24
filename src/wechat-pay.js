@@ -89,7 +89,9 @@ export async function request(method, urlPath, body = null, opts = {}) {
     'Accept-Language': 'zh-CN',
     'User-Agent': 'wecom-transfer/1.0 (+node)',
   };
-  if (bodyStr) headers['Content-Type'] = 'application/json';
+  // POST 一律声明 JSON：撤销转账等「无请求体的 POST」微信也强制要求 Content-Type: application/json
+  // （否则 HTTP 415 INVALID_REQUEST）；签名仍按实际发送的内容（空串）计算，不受此头影响
+  if (bodyStr || method === 'POST') headers['Content-Type'] = 'application/json';
   // 请求里带了加密字段时，必须告诉微信用的是哪个证书/公钥
   if (opts.serial) headers['Wechatpay-Serial'] = opts.serial;
 

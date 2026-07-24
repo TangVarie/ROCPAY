@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p13-revoke-audit';
+const BUILD = 'p14-cancel-fix-resume';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -924,10 +924,26 @@ app.get('/api/claim/mine', async (req, res) => {
     // 否则"同步时未拿到 unionid / 未同步"的定向客户会一直看不到属于自己的奖励。
     const externalUserid = await resolveCustomer(unionid, openid);
     if (!externalUserid) return res.json({ reward: null, reason: unionid ? 'not_a_customer' : 'no_unionid' });
-    const r = await db.findPendingRewardForTarget(externalUserid);
-    if (!r) return res.json({ reward: null, reason: 'no_pending' });
     // 大额拆单后一人名下会挂多笔：带上待领汇总，前端显示"共 N 笔 · 合计 ¥X"并逐笔串行领取
     const agg = await db.countPendingRewardsForTarget(externalUserid).catch(() => null);
+    // 优先续办「已领取待确认」的在途单：转账已发起、资金已冻结，重开确认页即可到账。
+    // 此前这种单重进后会被当成"没有待领奖励"，客户卡死到微信超时关单
+    const resumable = await db.findResumableTransferForTarget(externalUserid, openid).catch(() => null);
+    if (resumable) {
+      return res.json({
+        reward: { rid: resumable.rid, amountYuan: resumable.amount_fen / 100, remark: resumable.remark },
+        resume: {
+          package_info: resumable.package_info,
+          transfer_bill_no: resumable.transfer_bill_no || '',
+          mchId: config.wechatpay.mchid,
+          appId: config.wechatpay.appid,
+        },
+        // 待领汇总只算 CREATED，这笔在途单要补进去，"共 N 笔"才对得上
+        pending: { count: (agg ? agg.n : 0) + 1, totalYuan: ((agg ? agg.fen : 0) + resumable.amount_fen) / 100 },
+      });
+    }
+    const r = await db.findPendingRewardForTarget(externalUserid);
+    if (!r) return res.json({ reward: null, reason: 'no_pending' });
     res.json({
       reward: { rid: r.rid, amountYuan: r.amount_fen / 100, remark: r.remark },
       pending: agg ? { count: agg.n, totalYuan: agg.fen / 100 } : null,
