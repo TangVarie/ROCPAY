@@ -165,7 +165,7 @@
             </block>
             <view class="psub t-light" wx:else>未连接企微，可直接把小程序转发到客户聊天</view>
             <button class="btn btn-fill btn-block" open-type="share">转发领取入口给客户</button>
-            <view class="textbtn center-self" wx:if="{{batchResult.batchId}}" bindtap="viewBatchLedger">查看本批台账</view>
+            <view class="textbtn center-self" wx:if="{{batchResult.batchId}}" bindtap="viewBatchLedger">查看本批台账 »</view>
             <view class="textbtn center-self" bindtap="newBatch">再发一批</view>
           </view>
         </block>

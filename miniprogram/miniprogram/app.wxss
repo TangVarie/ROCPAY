@@ -1,15 +1,16 @@
 /* ============================================================
-   BYWOOD 设计系统（编辑部硬边版）
+   BYWOOD 设计系统 · 对齐品牌 frontend-kit v2（DESIGN.md + tokens/miniprogram.wxss）
    编辑部亮色块 × BYWOOD 品牌色：藏蓝 #235E8E + 正红 #D9232B
-   画布近白，结构靠色块与留白；无卡片阴影；黑色阶文字；禁 emoji/渐变
-   圆角走 token（接近直角的硬边，块面感 > 卡片感）——2026-07 定稿
+   画布比表面深一档（白块无阴影也能"浮起成形"）；黑色阶文字；禁 emoji/渐变/毛玻璃
+   直角制度（v2.1）：一切容器/按钮/输入/chip/徽标 border-radius: 0，
+   "圆"只存在于状态圆点与圆头笔画（tab-dot、勾选画勾）
    ============================================================ */
 page {
-  /* 圆角 token：全站只允许这四档，硬边编辑部风 */
-  --r-block: 8rpx;   /* 大色块/面板：接近直角 */
-  --r-control: 6rpx; /* 按钮/输入/chip：几乎方 */
-  --r-badge: 4rpx;   /* 徽标 */
-  --r-check: 4rpx;   /* 勾选框 */
+  /* 圆角 token 全部置 0（直角制度）。保留变量名以便个别系统件例外时可局部覆写 */
+  --r-block: 0;
+  --r-control: 0;
+  --r-badge: 0;
+  --r-check: 0;
   /* 品牌 */
   --primary: #235e8e;
   --primary-dark: #1b4a72;
@@ -19,18 +20,18 @@ page {
   --block-red: #d9232b;
   --tint-sky: #e3edf5;
   --tint-blush: #fbe3e3;
-  /* 语义（标签文字用加深档）。danger 用冷酒红，与"奖励/钱"的正红 #d9232b 拉开语义 */
+  /* 语义（标签文字用加深档）。danger 与"奖励/钱"的正红拉开语义，值随 kit v2 */
   --success: #00b578;
   --success-deep: #006b4a;
   --warning: #ff8f1f;
   --warning-deep: #995400;
-  --danger: #b8293c;
-  --danger-dark: #93202f;
-  /* 画布与表面 */
-  --bg: #fafafb;
-  --bg-secondary: #eff1f3;
+  --danger: #d92b3c;
+  --danger-dark: #b02330;
+  /* 画布与表面：画布比表面深一档，白色面板靠明度差成形（无阴影制度的前提） */
+  --bg: #f3f4f6;
+  --bg-secondary: #eaecef;
   --surface: #ffffff;
-  --fill: rgba(0, 0, 0, 0.04);
+  --fill: rgba(0, 0, 0, 0.045);
   /* 黑色阶文字（禁纯黑）。
      hint(0.45) 是信息性辅助文字（时间/提示/说明）的下限档，白底约 3.4:1；
      faint(0.3) 白底仅 ~2.1:1，只许用于纯装饰（水印、占位符），不许承载信息或交互 */
@@ -48,8 +49,8 @@ page {
 
   background: var(--bg);
   color: var(--text);
-  font-size: 28rpx;
-  font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+  font-size: 30rpx; /* 正文 15px 档（kit 字号阶梯） */
+  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   line-height: 1.6;
 }
 
@@ -103,13 +104,13 @@ page {
    垂直居中用 flex，不用 line-height=height（后者在部分真机上文字偏上/偏下，
    就是"宽按钮文字总对不齐"的根源） */
 .btn {
-  height: 92rpx;
+  height: 96rpx; /* 主 CTA 48px 档 */
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: normal;
   border-radius: var(--r-control);
-  font-size: 30rpx;
+  font-size: 32rpx;
   font-weight: 600;
   border: none;
   text-align: center;
@@ -149,14 +150,14 @@ page {
   transform-origin: 0 0;
 }
 
-/* ---- 状态标签：语义色/10 底 + 加深档文字，4px 圆角 ---- */
+/* ---- 状态标签：语义色/10 底 + 加深档文字，直角，高 40rpx（kit 徽标规格） ---- */
 .badge {
   display: inline-flex;
   align-items: center;
-  font-size: 22rpx;
+  font-size: 24rpx;
   font-weight: 600;
   line-height: 1;
-  padding: 8rpx 14rpx;
+  padding: 8rpx 12rpx;
   border-radius: var(--r-badge);
   background: var(--fill);
   color: var(--text);
@@ -165,19 +166,20 @@ page {
 }
 .badge-success { background: rgba(0, 181, 120, 0.1); color: var(--success-deep); }
 .badge-warning { background: rgba(255, 143, 31, 0.1); color: var(--warning-deep); }
-.badge-danger { background: rgba(184, 41, 60, 0.1); color: var(--danger-dark); }
+.badge-danger { background: rgba(217, 43, 60, 0.1); color: var(--danger-dark); }
 .badge-blue { background: rgba(35, 94, 142, 0.1); color: var(--primary); }
 
-/* ---- 输入 ----
+/* ---- 输入（kit 定式：直角 + border-strong 描边 + 高 96rpx/48px）----
    小程序 input 是原生组件：必须给固定 height（并配 line-height），
    只给 padding 会按默认高度渲染，出现"被压扁/文字切顶"的错位。 */
 .input {
-  background: var(--fill);
+  background: var(--surface);
+  border: 1px solid var(--border-strong); /* 物理像素，避免 1rpx 在部分机型被吞 */
   border-radius: var(--r-control);
-  height: 84rpx;
-  line-height: 84rpx;
-  padding: 0 26rpx;
-  font-size: 28rpx;
+  height: 96rpx;
+  line-height: 96rpx;
+  padding: 0 24rpx;
+  font-size: 30rpx;
   color: var(--text-dark);
   box-sizing: border-box;
   min-width: 0; /* 在 flex 行里允许正确收缩而不是溢出 */
@@ -214,14 +216,14 @@ page {
   line-height: 1.05;
   letter-spacing: -8rpx;
   white-space: nowrap;
-  color: rgba(35, 94, 142, 0.07); /* 藏蓝极淡 */
+  color: rgba(35, 94, 142, 0.08); /* 藏蓝极淡（kit 装饰透明度 8–12% 档下限） */
   margin-left: -6rpx; /* 轻微出血，版面感 */
 }
 .wm-num { font-size: 150rpx; letter-spacing: -4rpx; }
-.wm-red { color: rgba(217, 35, 43, 0.06); }
+.wm-red { color: rgba(217, 35, 43, 0.08); }
 .wm-line {
   margin-top: 8rpx;
-  font-size: 22rpx;
+  font-size: 24rpx;
   letter-spacing: 6rpx;
   color: var(--text-faint);
 }
@@ -246,25 +248,31 @@ page {
    ============================================================ */
 @media (prefers-color-scheme: dark) {
   page {
-    --primary: #4c8fc7; /* 亮一档：暗底上作文字/描边可读（原藏蓝在暗底只有 ~2:1） */
-    --primary-dark: #3b74a5;
-    --tint-sky: #1c2a38;
-    --tint-blush: #362128;
+    /* 深色 token 值 = kit v2 官方翻转表（DESIGN.md §2 / tokens/miniprogram.wxss） */
+    --primary: #3f7fb2;
+    --primary-dark: #346892;
+    --accent: #e8575c;
+    --money: #e8575c;
+    --block-red: #c22329;
+    --tint-sky: #1e3b54;
+    --tint-blush: #442228;
+    --success: #21b183;
     --success-deep: #4ad39f;
+    --warning: #ffa24d;
     --warning-deep: #ffb266;
-    --danger: #e05a70;
+    --danger: #e8575c;
     --danger-dark: #f08a9a;
-    --bg: #151619;
-    --bg-secondary: #1d1f23;
-    --surface: #1f2126;
-    --fill: rgba(255, 255, 255, 0.08);
+    --bg: #0f1318;
+    --bg-secondary: #151a20;
+    --surface: #1b222b;
+    --fill: rgba(255, 255, 255, 0.06);
     --text-dark: rgba(255, 255, 255, 0.92);
-    --text: rgba(255, 255, 255, 0.68);
+    --text: rgba(255, 255, 255, 0.7);
     --text-light: rgba(255, 255, 255, 0.55);
     --text-hint: rgba(255, 255, 255, 0.45);
-    --text-faint: rgba(255, 255, 255, 0.3);
-    --border: rgba(255, 255, 255, 0.12);
-    --border-strong: #3a3d44;
+    --text-faint: rgba(255, 255, 255, 0.34);
+    --border: rgba(255, 255, 255, 0.1);
+    --border-strong: #2b3440;
   }
   /* 线性图标是黑描边 data URI，CSS 改不了 stroke：整体反相，黑/30 → 白/30 */
   .li { filter: invert(1); }
