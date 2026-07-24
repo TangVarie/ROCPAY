@@ -133,6 +133,11 @@ Page({
       };
       if (me.isAdmin) this.loadAdminHome(); // 管理员进门：拉仪表数据（额度剩余 + 近24h发放）
       if (mine && mine.reward) {
+        // 在途单续办：上次转账已发起但确认页没走完，后端带回 package_info——
+        // 预置成 _pendingTransfer，点领取直接重开微信确认页（不再 POST，POST 也会 404）
+        this._pendingTransfer = mine.resume
+          ? { mchId: mine.resume.mchId, appId: mine.resume.appId, package_info: mine.resume.package_info }
+          : null;
         this.setData({
           ...base,
           mode: 'mine',
@@ -141,7 +146,7 @@ Page({
           minePendCount: (mine.pending && mine.pending.count) || 1,
           minePendYuan: mine.pending ? Number(mine.pending.totalYuan).toFixed(2) : '',
           status: 'idle',
-          message: '',
+          message: mine.resume ? '上次确认收款未完成，点击领取继续即可到账' : '',
         });
       } else {
         // 把"为什么没有奖励"讲清楚：身份没认出来（unionid 桥断了）和"确实没有待领"是两回事，
@@ -318,6 +323,9 @@ Page({
     call('/api/claim/mine', 'GET')
       .then((mine) => {
         if (mine && mine.reward) {
+          this._pendingTransfer = mine.resume
+            ? { mchId: mine.resume.mchId, appId: mine.resume.appId, package_info: mine.resume.package_info }
+            : null;
           this.setData({
             mode: 'mine',
             mineAmt: Number(mine.reward.amountYuan).toFixed(2),
@@ -325,7 +333,7 @@ Page({
             minePendCount: (mine.pending && mine.pending.count) || 1,
             minePendYuan: mine.pending ? Number(mine.pending.totalYuan).toFixed(2) : '',
             status: 'idle',
-            message: '',
+            message: mine.resume ? '上次确认收款未完成，点击领取继续即可到账' : '',
             celebrate: false, // 新的一笔回到领取态
           });
         } else {

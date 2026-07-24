@@ -883,6 +883,27 @@ export async function findPendingRewardForTarget(externalUserid) {
   return rows.length ? rows[0] : null;
 }
 
+/**
+ * 找该客户「已领取但还没确认收款」的在途转账：package_info 可重新拉起微信确认页。
+ * 场景：客户点了领取（转账已发起、资金冻结），确认页没拉起来/被关掉后退出重进——
+ * 没有这条查询，客户只会看到"暂时没有你的奖励"，钱一直挂到超时关单。
+ * 限定领取人本人（claimer_openid）：确认页只对发起领取的 openid 有效。
+ */
+export async function findResumableTransferForTarget(externalUserid, claimerOpenid) {
+  if (!pool || !externalUserid || !claimerOpenid) return null;
+  const [rows] = await pool.execute(
+    `SELECT r.rid, r.amount_fen, r.remark, t.package_info, t.transfer_bill_no
+       FROM rewards r
+       JOIN transfers t ON t.out_bill_no = r.rid
+      WHERE r.target_external_userid = :t AND r.status = 'CLAIMED'
+        AND t.state = 'WAIT_USER_CONFIRM' AND t.claimer_openid = :o
+        AND t.package_info IS NOT NULL
+      ORDER BY r.created_at ASC LIMIT 1`,
+    { t: externalUserid, o: claimerOpenid }
+  );
+  return rows.length ? rows[0] : null;
+}
+
 /** 某客户名下待领奖励汇总（大额拆单后一人多笔，前端显示"共 N 笔 · 合计"用） */
 export async function countPendingRewardsForTarget(externalUserid) {
   if (!pool || !externalUserid) return { n: 0, fen: 0 };
@@ -1038,6 +1059,7 @@ export const db = {
   bindCustomerByUnionid,
   bindCustomerOpenid,
   findPendingRewardForTarget,
+  findResumableTransferForTarget,
   countPendingRewardsForTarget,
   getRewardTarget,
   getReward,
