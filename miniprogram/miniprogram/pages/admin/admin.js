@@ -706,7 +706,7 @@ Page({
       title: '撤回本批未到账',
       content,
       confirmText: '全部撤回',
-      confirmColor: '#b8293c',
+      confirmColor: '#d92b3c',
       success: (r) => {
         if (!r.confirm) return;
         this._batchRevoking = true;
@@ -832,7 +832,7 @@ Page({
       title: '撤回这笔奖励',
       content: `¥${yuan}${who ? ' · ' + who : ''}\n撤回后客户不可再领取；已发起待确认的转账将向微信撤销，资金退回商户余额。`,
       confirmText: '撤回',
-      confirmColor: '#b8293c',
+      confirmColor: '#d92b3c',
       success: (r) => {
         if (!r.confirm) return;
         call('/api/rewards/revoke', 'POST', { rid })
@@ -928,7 +928,7 @@ Page({
       title: '停用员工',
       content: '停用后立即失去发放权限；资料与企微配置保留，可随时重新启用。',
       confirmText: '停用',
-      confirmColor: '#b8293c',
+      confirmColor: '#d92b3c',
       success: (r) => { if (r.confirm) doIt(); },
     });
   },
@@ -937,7 +937,7 @@ Page({
     wx.showModal({
       title: '移除员工',
       content: '确定移除该员工的发放权限？',
-      confirmColor: '#b8293c', // 与撤回等危险操作同用 --danger 冷酒红，不许第二种红散落
+      confirmColor: '#d92b3c', // 与撤回等危险操作同用 --danger（kit v2 #d92b3c），不许第二种红散落
       success: (r) => {
         if (!r.confirm) return;
         call('/api/admins/remove', 'POST', { openid })

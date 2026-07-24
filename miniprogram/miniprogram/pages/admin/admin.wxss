@@ -29,7 +29,6 @@
   position: absolute;
   left: 24rpx; right: 24rpx; bottom: 0;
   height: 6rpx;
-  border-radius: 3rpx;
   background: var(--primary);
 }
 
@@ -37,11 +36,11 @@
 .chips { display: flex; gap: 16rpx; }
 .chips-inline { flex: 1; }
 .chip {
-  height: 64rpx;
-  line-height: 64rpx;
+  height: 80rpx;
+  line-height: 80rpx;
   padding: 0 32rpx;
   border-radius: var(--r-control);
-  font-size: 27rpx;
+  font-size: 28rpx;
   font-weight: 500;
   background: var(--fill);
   color: var(--text);
@@ -49,18 +48,20 @@
 }
 .chip:active { opacity: 0.8; }
 .chip.on { background: var(--primary); color: #ffffff; font-weight: 600; }
-.chips-note { font-size: 24rpx; margin: 12rpx 4rpx 24rpx; }
+.chips-note { font-size: 26rpx; margin: 12rpx 4rpx 24rpx; }
 
 /* 白底描边块内部版式 */
 .panel + .panel { margin-top: 24rpx; }
 .prow { display: flex; align-items: center; justify-content: space-between; }
-.ptitle { font-size: 32rpx; font-weight: 600; }
-.psub { font-size: 24rpx; margin-top: 8rpx; line-height: 1.6; }
+.ptitle { font-size: 34rpx; font-weight: 600; }
+/* 品牌双箭图形语言：区块标题前标单个蓝 »（字号同标题、字重 800，一屏 ≤3 处） */
+.ptitle::before { content: '» '; color: var(--primary); font-weight: 800; }
+.psub { font-size: 26rpx; margin-top: 8rpx; line-height: 1.6; }
 .psub.center { text-align: center; margin-top: 16rpx; }
 
 /* 文字按钮（触控热区 ≥44px 由 padding 保证） */
 .textbtn {
-  font-size: 27rpx;
+  font-size: 28rpx;
   font-weight: 600;
   color: var(--primary);
   padding: 16rpx 12rpx;
@@ -76,10 +77,10 @@
 .searchinput { flex: 1; }
 .searchbtn {
   flex: none;
-  height: 84rpx;
+  height: 96rpx;
 
   padding: 0 36rpx;
-  font-size: 27rpx;
+  font-size: 28rpx;
   margin: 0;
 }
 .ph { color: var(--text-faint); }
@@ -95,9 +96,9 @@
 .cust:last-of-type::after { display: none; }
 .cust-main { flex: 1; min-width: 0; }
 .cust-name { font-size: 30rpx; font-weight: 500; }
-.cust-sub { font-size: 22rpx; margin-top: 2rpx; }
+.cust-sub { font-size: 24rpx; margin-top: 2rpx; }
 
-/* 勾选框：方形 8px 圆角，选中品牌蓝 */
+/* 勾选框：直角方形，选中品牌蓝（画勾是圆头笔画，直角制度的合法例外） */
 .cb {
   width: 40rpx;
   height: 40rpx;
@@ -123,9 +124,10 @@
 /* 面板内空态 */
 .pempty { padding: 48rpx 24rpx 32rpx; display: flex; flex-direction: column; align-items: center; }
 .pempty-icon { width: 80rpx; height: 80rpx; margin-bottom: 20rpx; }
+.pempty-spin { margin-bottom: 20rpx; } /* 加载态双箭动效：尺寸由 .chev-spinner 自带，只补下边距 */
 .pempty-t1 { font-size: 30rpx; font-weight: 600; }
-.pempty-t2 { font-size: 24rpx; margin-top: 6rpx; text-align: center; }
-.pempty-btn { margin-top: 32rpx; width: 300rpx; height: 80rpx; font-size: 27rpx; }
+.pempty-t2 { font-size: 26rpx; margin-top: 6rpx; text-align: center; }
+.pempty-btn { margin-top: 32rpx; width: 300rpx; height: 80rpx; font-size: 28rpx; }
 
 /* 已选条 */
 .pickbar {
@@ -136,13 +138,13 @@
   justify-content: space-between;
 }
 .pickbar-r { display: flex; align-items: center; gap: 8rpx; }
-.pickbtn { height: 76rpx; padding: 0 36rpx; font-size: 27rpx; margin: 0; }
+.pickbtn { height: 80rpx; padding: 0 36rpx; font-size: 28rpx; margin: 0; }
 
-/* 统一填充：行内文字按钮与 84rpx 输入框等高，避免跨组件 center 对不齐 */
+/* 统一填充：行内文字按钮与 96rpx 输入框等高，避免跨组件 center 对不齐 */
 .fillall { display: flex; align-items: center; gap: 14rpx; margin: 24rpx 0 8rpx; }
 .fa-amt { width: 180rpx; flex: none; text-align: center; }
 .fa-note { flex: 1; }
-.fillall .textbtn { height: 84rpx; line-height: 84rpx; padding-top: 0; padding-bottom: 0; }
+.fillall .textbtn { height: 96rpx; line-height: 96rpx; padding-top: 0; padding-bottom: 0; }
 
 /* 逐人行 */
 .frow {
@@ -154,33 +156,33 @@
 .frow-name {
   flex: 1;
   min-width: 0;
-  font-size: 28rpx;
+  font-size: 30rpx;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.frow-amt { width: 150rpx; flex: none; height: 76rpx; line-height: 76rpx; padding: 0 16rpx; text-align: center; font-size: 28rpx; }
-.frow-note { width: 190rpx; flex: none; height: 76rpx; line-height: 76rpx; padding: 0 18rpx; font-size: 26rpx; }
+.frow-amt { width: 150rpx; flex: none; height: 88rpx; line-height: 88rpx; padding: 0 16rpx; text-align: center; font-size: 30rpx; }
+.frow-note { width: 190rpx; flex: none; height: 88rpx; line-height: 88rpx; padding: 0 18rpx; font-size: 28rpx; }
 /* 可交互元素不许用 faint（白底 ~2.1:1，低于 WCAG 组件 3:1 底线），用 light 档 */
 .frow-del { flex: none; font-size: 24rpx; color: var(--text-light); padding: 16rpx 8rpx; }
 .frow-del:active { color: var(--danger); }
 /* 校验失败的行：浅红底高亮 + 金额框加深，配合 pageScrollTo 定位，30 人时不用自己翻着找 */
-.frow-err { background: rgba(184, 41, 60, 0.06); border-radius: var(--r-control); }
-.frow-err .frow-amt { background: rgba(184, 41, 60, 0.12); }
+.frow-err { background: rgba(217, 43, 60, 0.06); }
+.frow-err .frow-amt { background: rgba(217, 43, 60, 0.12); }
 .submitbtn { margin-top: 28rpx; }
 
 /* 语义横幅：语义色/10 底 + 黑字 */
 .banner {
   border-radius: var(--r-block);
   padding: 26rpx 30rpx;
-  font-size: 27rpx;
+  font-size: 30rpx;
   line-height: 1.6;
   margin-bottom: 24rpx;
 }
 .banner-success { background: rgba(0, 181, 120, 0.1); }
-.banner-danger { background: rgba(184, 41, 60, 0.08); }
-.banner-line { font-size: 24rpx; margin-top: 6rpx; }
+.banner-danger { background: rgba(217, 43, 60, 0.08); }
+.banner-line { font-size: 26rpx; margin-top: 6rpx; }
 .reward-ok { margin: 24rpx 0 20rpx; }
 
 /* 群发文案（textarea 多行：解除单行 input 的固定高度） */
@@ -195,15 +197,15 @@
 
 /* 表单
    原生 input 与 view 文字是两套排版度量，align-items:center 混排必然微错位。
-   解法：标签做成与输入框等高(84rpx)的行盒，行内基线自然对齐 */
+   解法：标签做成与输入框等高(96rpx)的行盒，行内基线自然对齐 */
 .field { display: flex; align-items: center; margin: 24rpx 0; }
 .flabel {
   width: 140rpx;
   flex: none;
-  font-size: 27rpx;
+  font-size: 28rpx;
   color: var(--text-light);
-  height: 84rpx;
-  line-height: 84rpx;
+  height: 96rpx;
+  line-height: 96rpx;
 }
 .finput { flex: 1; }
 
@@ -217,24 +219,24 @@
 }
 /* 批次视图操作行：整批撤回入口，紧贴汇总块右缘 */
 .batch-actions { display: flex; justify-content: flex-end; margin: -16rpx 0 20rpx; }
-.sm-label { font-size: 24rpx; color: var(--text-light); }
-.sm-num { font-size: 72rpx; font-weight: 700; color: var(--text-dark); line-height: 1.15; margin-top: 8rpx; }
-.sm-sub { font-size: 22rpx; color: var(--text-light); margin-top: 6rpx; }
+.sm-label { font-size: 26rpx; color: var(--text-light); }
+.sm-num { font-size: 80rpx; font-weight: 700; color: var(--text-dark); line-height: 1.15; margin-top: 8rpx; }
+.sm-sub { font-size: 24rpx; color: var(--text-light); margin-top: 6rpx; }
 .stat-side { flex: 1; display: flex; flex-direction: column; gap: 20rpx; }
 .stat-mini { padding: 22rpx 26rpx; }
-.smm-label { font-size: 22rpx; color: var(--text-light); }
-.smm-num { font-size: 44rpx; font-weight: 700; line-height: 1.2; margin-top: 2rpx; }
+.smm-label { font-size: 24rpx; color: var(--text-light); }
+.smm-num { font-size: 42rpx; font-weight: 700; line-height: 1.2; margin-top: 2rpx; }
 
 /* ---- 记录 · 实时可用余额主块 ---- */
 .bal { margin-bottom: 20rpx; }
 .bal-top { display: flex; align-items: center; justify-content: space-between; }
-.bal-label { font-size: 24rpx; color: rgba(255, 255, 255, 0.85); }
-.bal-refresh { font-size: 24rpx; color: rgba(255, 255, 255, 0.9); padding: 8rpx 4rpx 8rpx 24rpx; }
+.bal-label { font-size: 26rpx; color: rgba(255, 255, 255, 0.85); }
+.bal-refresh { font-size: 26rpx; color: rgba(255, 255, 255, 0.9); padding: 8rpx 4rpx 8rpx 24rpx; }
 .bal-refresh:active { opacity: 0.6; }
 .bal-actions { display: flex; align-items: center; }
 .bal-actions .bal-refresh { padding: 8rpx 0 8rpx 28rpx; } /* 充值/校准两个动作并排 */
 .bal-num { font-size: 80rpx; font-weight: 700; color: #ffffff; line-height: 1.15; margin-top: 10rpx; }
-.bal-sub { font-size: 22rpx; color: rgba(255, 255, 255, 0.8); margin-top: 8rpx; }
+.bal-sub { font-size: 24rpx; color: rgba(255, 255, 255, 0.8); margin-top: 8rpx; }
 .bal-low { color: #ffb0b0; font-weight: 700; } /* 剩余告罄/超支：浅红提醒 */
 
 /* 台账搜索条：与筛选 chips 同区，下边距收紧 */
@@ -247,7 +249,7 @@
   line-height: 64rpx;
   padding: 0 22rpx;
   border-radius: var(--r-control);
-  font-size: 24rpx;
+  font-size: 26rpx;
   background: var(--fill);
   color: var(--text);
 }
@@ -256,12 +258,12 @@
 .fchip-target { background: var(--accent); } /* 单人筛选中：点一下清除 */
 
 /* 记录行撤回 + 批次入口 + 加载更多。撤回是危险操作：热区拉到 ≥64rpx 高，误触成本高于视觉紧凑 */
-.rec-revoke { font-size: 24rpx; font-weight: 600; color: var(--danger); padding: 18rpx 8rpx; margin: -8rpx -4rpx; }
+.rec-revoke { font-size: 26rpx; font-weight: 600; color: var(--danger); padding: 18rpx 8rpx; margin: -8rpx -4rpx; }
 .rec-revoke:active { opacity: 0.6; }
-.rec-batch { font-size: 22rpx; font-weight: 500; color: var(--primary); padding: 14rpx 8rpx; margin: -6rpx -4rpx; }
+.rec-batch { font-size: 24rpx; font-weight: 500; color: var(--primary); padding: 14rpx 8rpx; margin: -6rpx -4rpx; }
 .rec-batch:active { opacity: 0.6; }
 .loadmore { text-align: center; padding: 28rpx 0 8rpx; }
-.loadmore-hint { text-align: center; padding: 16rpx 24rpx 8rpx; font-size: 24rpx; line-height: 1.5; }
+.loadmore-hint { text-align: center; padding: 16rpx 24rpx 8rpx; font-size: 26rpx; line-height: 1.5; }
 
 /* 记录行：画布直排 + 发丝线 */
 .rec {
@@ -275,11 +277,11 @@
 .rec-line1 { display: flex; align-items: baseline; gap: 14rpx; }
 .rec-amt { font-size: 34rpx; font-weight: 600; }
 /* 客户名 = 单人往来入口：主色示意可点，点击后台账只看这个人 */
-.rec-who { font-size: 25rpx; color: var(--primary); font-weight: 500; }
+.rec-who { font-size: 26rpx; color: var(--primary); font-weight: 500; }
 .rec-who:active { opacity: 0.6; }
-.rec-remark { font-size: 23rpx; margin-top: 2rpx; }
+.rec-remark { font-size: 24rpx; margin-top: 2rpx; }
 .rec-r { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 8rpx; }
-.rec-time { font-size: 22rpx; }
+.rec-time { font-size: 24rpx; }
 
 /* 员工行 */
 .staff {
@@ -291,11 +293,11 @@
 }
 .staff:last-of-type::after { display: none; }
 .staff-l { flex: 1; min-width: 0; }
-.staff-name { font-size: 29rpx; font-weight: 500; display: flex; align-items: center; gap: 12rpx; flex-wrap: wrap; }
-.staff-oid { font-size: 22rpx; word-break: break-all; margin-top: 4rpx; }
+.staff-name { font-size: 30rpx; font-weight: 500; display: flex; align-items: center; gap: 12rpx; flex-wrap: wrap; }
+.staff-oid { font-size: 24rpx; word-break: break-all; margin-top: 4rpx; }
 /* 员工行操作列：编辑 / 停用|启用 / 移除 */
 .staff-actions { flex: none; display: flex; align-items: center; }
-.staff-act { font-size: 24rpx; padding: 16rpx 10rpx; }
+.staff-act { font-size: 26rpx; padding: 16rpx 10rpx; }
 
 /* 状态页（空/提示） */
 .state {
@@ -318,7 +320,7 @@
   line-height: 64rpx;
   padding: 0 20rpx;
   border-radius: var(--r-control);
-  font-size: 23rpx;
+  font-size: 26rpx;
   background: var(--fill);
   color: var(--text);
 }
@@ -327,11 +329,11 @@
 .lvchip-n { margin-left: 4rpx; opacity: 0.75; }
 .rk { display: flex; align-items: center; gap: 20rpx; padding: 26rpx 4rpx; }
 .rk:active { background: rgba(0, 0, 0, 0.04); }
-.rk-no { width: 56rpx; flex: none; font-size: 32rpx; font-weight: 700; color: var(--text-hint); text-align: center; }
+.rk-no { width: 56rpx; flex: none; font-size: 34rpx; font-weight: 700; color: var(--text-hint); text-align: center; }
 .rk-top { color: var(--primary); } /* 前三名主色 */
 .rk-main { flex: 1; min-width: 0; }
-.rk-name { display: flex; align-items: center; gap: 12rpx; flex-wrap: wrap; font-size: 29rpx; font-weight: 500; }
-.rk-sub { font-size: 22rpx; margin-top: 2rpx; }
+.rk-name { display: flex; align-items: center; gap: 12rpx; flex-wrap: wrap; font-size: 30rpx; font-weight: 500; }
+.rk-sub { font-size: 24rpx; margin-top: 2rpx; }
 .rk-amt { flex: none; font-size: 30rpx; font-weight: 600; }
 
 /* 深色模式：行按压反馈从黑幕改白幕（token 覆盖在 app.wxss，这里只补硬编码的 active 态） */

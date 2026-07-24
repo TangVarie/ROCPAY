@@ -1,9 +1,9 @@
 <view class="page">
 
-  <!-- 身份未知：先给加载态，避免管理员打开先闪出"你还不是发放员" -->
+  <!-- 身份未知：先给加载态（品牌双箭动效），避免管理员打开先闪出"你还不是发放员" -->
   <block wx:if="{{!ready}}">
     <view class="state">
-      <view class="li li-users state-icon"></view>
+      <view class="chev-spinner state-icon" aria-label="加载中"></view>
       <view class="state-t1">正在进入工作台</view>
       <view class="state-t2">正在确认你的身份</view>
     </view>
@@ -84,7 +84,7 @@
             <button class="btn btn-fill pempty-btn" bindtap="searchCustomers">重新加载</button>
           </view>
           <view class="pempty" wx:elif="{{!custLoaded}}">
-            <view class="li li-users pempty-icon"></view>
+            <view class="chev-spinner pempty-spin" aria-label="加载中"></view>
             <view class="pempty-t1 t-dark">正在加载客户…</view>
           </view>
           <view class="pempty" wx:elif="{{custQ}}">
@@ -165,7 +165,7 @@
             </block>
             <view class="psub t-light" wx:else>未连接企微，可直接把小程序转发到客户聊天</view>
             <button class="btn btn-fill btn-block" open-type="share">转发领取入口给客户</button>
-            <view class="textbtn center-self" wx:if="{{batchResult.batchId}}" bindtap="viewBatchLedger">查看本批台账</view>
+            <view class="textbtn center-self" wx:if="{{batchResult.batchId}}" bindtap="viewBatchLedger">查看本批台账 »</view>
             <view class="textbtn center-self" bindtap="newBatch">再发一批</view>
           </view>
         </block>
@@ -297,7 +297,7 @@
         <button class="btn btn-fill state-btn" bindtap="reloadRecords">重新加载</button>
       </view>
       <view class="state" wx:elif="{{!recLoaded}}">
-        <view class="li li-inbox state-icon"></view>
+        <view class="chev-spinner state-icon" aria-label="加载中"></view>
         <view class="state-t1">正在加载记录…</view>
       </view>
       <view class="state" wx:else>
@@ -346,7 +346,7 @@
         <button class="btn btn-fill state-btn" bindtap="reloadRank">重新加载</button>
       </view>
       <view class="state" wx:elif="{{!rankLoaded}}">
-        <view class="li li-users state-icon"></view>
+        <view class="chev-spinner state-icon" aria-label="加载中"></view>
         <view class="state-t1">正在加载榜单…</view>
       </view>
       <view class="state" wx:else>

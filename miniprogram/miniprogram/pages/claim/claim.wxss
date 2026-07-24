@@ -20,7 +20,7 @@
   justify-content: center;
   color: #ffffff;
 }
-.rb-sign { font-size: 44rpx; margin-right: 8rpx; font-weight: 600; }
+.rb-sign { font-size: 42rpx; margin-right: 8rpx; font-weight: 600; }
 .rb-num { font-size: 120rpx; line-height: 1.05; font-weight: 700; }
 .rb-remark {
   font-size: 26rpx;
@@ -96,7 +96,7 @@
 }
 .state-detail {
   margin-top: 16rpx;
-  font-size: 22rpx;
+  font-size: 24rpx;
   color: var(--text-hint);
   text-align: center;
   word-break: break-all;
@@ -138,20 +138,20 @@
 /* ===== 操作端主页（管理员进门即仪表盘） ===== */
 .ahome-lede { padding: 24rpx 4rpx 28rpx; }
 .ah-hero { margin-bottom: 20rpx; }
-.ah-label { font-size: 24rpx; color: rgba(255, 255, 255, 0.85); }
-.ah-num { font-size: 84rpx; font-weight: 700; color: #ffffff; line-height: 1.15; margin-top: 8rpx; }
-.ah-sub { font-size: 22rpx; color: rgba(255, 255, 255, 0.8); margin-top: 8rpx; }
+.ah-label { font-size: 26rpx; color: rgba(255, 255, 255, 0.85); }
+.ah-num { font-size: 80rpx; font-weight: 700; color: #ffffff; line-height: 1.15; margin-top: 8rpx; }
+.ah-sub { font-size: 24rpx; color: rgba(255, 255, 255, 0.8); margin-top: 8rpx; }
 .ah-low { color: #ffb0b0; } /* 额度告罄浅红 */
 /* 异常警示块：浅红底 + 冷酒红标题，进门可见、点击直达失败筛选 */
 .ah-alert { margin-bottom: 20rpx; padding: 26rpx 30rpx; }
 .ah-alert:active { opacity: 0.85; }
 .ah-alert-t { font-size: 30rpx; font-weight: 700; color: var(--danger-dark); }
-.ah-alert-s { font-size: 22rpx; color: var(--text-light); margin-top: 4rpx; }
+.ah-alert-s { font-size: 24rpx; color: var(--text-light); margin-top: 4rpx; }
 .ah-minis { display: flex; gap: 20rpx; margin-bottom: 28rpx; }
 .ah-mini { flex: 1; padding: 22rpx 26rpx; }
-.ahm-label { font-size: 22rpx; color: var(--text-light); }
-.ahm-num { font-size: 40rpx; font-weight: 700; line-height: 1.2; margin-top: 2rpx; }
-.ah-tips { margin-top: 20rpx; text-align: center; font-size: 22rpx; letter-spacing: 1rpx; }
+.ahm-label { font-size: 24rpx; color: var(--text-light); }
+.ahm-num { font-size: 42rpx; font-weight: 700; line-height: 1.2; margin-top: 2rpx; }
+.ah-tips { margin-top: 20rpx; text-align: center; font-size: 24rpx; letter-spacing: 1rpx; }
 
 /* ===== 到账仪式感（克制版：纯 CSS，无渐变无阴影） ===== */
 /* 描边画勾：与 .cb.on::after 同款，弹性放大入场 */
@@ -175,9 +175,14 @@
   40% { transform: scale(1.02); }
   100% { transform: scale(1); }
 }
+/* 尊重系统「减弱动态效果」：庆祝动效停用，到账状态仍由色块变蓝表达 */
+@media (prefers-reduced-motion: reduce) {
+  .reward-block.celebrate { animation: none; }
+  .rb-check { animation: none; }
+}
 
 /* ===== 合作档案 · 等级卡（开屏与领取页都展示） ===== */
 .lvcard { margin-top: 24rpx; }
 .lv-line1 { display: flex; align-items: center; gap: 16rpx; flex-wrap: wrap; }
-.lv-nums { font-size: 25rpx; }
-.lv-next { font-size: 22rpx; margin-top: 10rpx; }
+.lv-nums { font-size: 26rpx; }
+.lv-next { font-size: 24rpx; margin-top: 10rpx; }
