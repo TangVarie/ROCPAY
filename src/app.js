@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p17-deliver-hardening';
+const BUILD = 'p18-deliver-indeterminate';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -704,7 +704,14 @@ app.post('/api/customers/sync', async (req, res) => {
 // 企微硬性语义：不传 sender 时，任务派给客户跟进人里「最后聊过天」的那个，与谁点按钮无关——
 // 客户加了多个员工时任务会漂移（A 发起、任务落到 B）。所以这里按跟进关系分组、逐组带 sender：
 //   发起人跟进的客户 → 派给发起人；其他客户 → 派给各自跟进人；查不到跟进关系 → 交企微默认派发。
-const deliverRecent = new Map(); // clientKey -> {at, payload} 群发防重：多组派发偶尔超客户端 15s 超时，重点一次直接回放结果，客户不收第二条
+// 群发防重表：clientKey -> {at, payload}（已完成，回放）| {at, promise}（处理中，等待）
+// | {at, indeterminate}（提交结果未知，拦截盲目重试）。三类条目统一 10 分钟过期——
+// 包括万一悬死的 in-flight（所有企微外呼均有超时，悬死只在有 bug 时发生，过期是兜底）
+const deliverRecent = new Map();
+function pruneDeliver() {
+  const now = Date.now();
+  for (const [k, v] of deliverRecent) if (now - v.at > 10 * 60_000) deliverRecent.delete(k);
+}
 app.post('/api/deliver', async (req, res) => {
   const openid = getOpenid(req);
   if (!isAdmin(openid)) return res.status(403).json({ error: '无权限' });
@@ -717,15 +724,33 @@ app.post('/api/deliver', async (req, res) => {
   const ckRaw = String((req.body || {}).clientKey || '');
   const clientKey = /^[a-f0-9]{16,64}$/i.test(ckRaw) ? ckRaw.toLowerCase() : '';
   if (clientKey) {
+    pruneDeliver();
     const hit = deliverRecent.get(clientKey);
     if (hit) {
       if (hit.payload) return res.json({ ...hit.payload, duplicate: true });
+      if (hit.indeterminate) {
+        // 上一次提交结果未知（超时/响应丢失，企微可能已建任务）：拦下盲目重试防重复打扰客户
+        return res.status(409).json({
+          error: '上一次群发提交结果未知（可能已创建任务）：请先到企微「客户联系」确认是否已有本次群发；10 分钟后可重试，或用「转发领取入口」补发',
+          resultUnknown: true,
+        });
+      }
       // 同键请求仍在处理中（多组派发超过客户端 15s 超时后的重试恰好撞上）：
-      // 等原请求完成后回放结果，绝不并行执行第二遍——这正是防重要堵的竞态窗口
+      // 等原请求完成后回放结果，绝不并行执行第二遍——这正是防重要堵的竞态窗口。
+      // 最多等 30s（所有企微外呼均有超时，正常一定会settle）；等不到不动预占，让调用方稍后再来
+      let timer;
       try {
-        const payload = await hit.promise;
+        const payload = await Promise.race([
+          hit.promise,
+          new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('PENDING_TIMEOUT')), 30_000); }),
+        ]);
+        clearTimeout(timer);
         return res.json({ ...payload, duplicate: true });
-      } catch (_) {
+      } catch (e) {
+        clearTimeout(timer);
+        if (e && e.message === 'PENDING_TIMEOUT') {
+          return res.status(503).json({ error: '上一次群发仍在处理中，请稍后再试' });
+        }
         return res.status(500).json({ error: '上一次群发提交失败，请重试' });
       }
     }
@@ -814,18 +839,29 @@ app.post('/api/deliver', async (req, res) => {
           `[wecom] 群发任务已创建 sender=${s} 客户=${list.length} 失败=${fails.length} msgid=${r.msgid || ''}`
         );
       } catch (e) {
-        errors.push({ sender: s, count: list.length, error: e.message });
-        failList.push(...list); // 整组未建成任务的客户也计入失败名单，前端可按名单重试
-        console.error(`[wecom] 群发任务创建失败 sender=${s} 客户=${list.length}：`, e.message);
+        // 企微带 errcode = 明确拒绝，任务确定没建，客户进重试名单可安全重发；
+        // 超时/网络中断/非 JSON 响应 = 提交结果未知，任务可能已建——不进重试名单，防重复打扰
+        const determinate = !!e.errcode;
+        errors.push({ sender: s, count: list.length, error: e.message, indeterminate: !determinate });
+        if (determinate) failList.push(...list);
+        console.error(`[wecom] 群发任务创建失败 sender=${s} 客户=${list.length} 结果${determinate ? '确定' : '未知'}：`, e.message);
       }
     }
     if (!tasks.length) {
-      const msg = '群发任务全部创建失败：' + ((errors[0] || {}).error || '未知错误');
+      const anyIndet = errors.some((er) => er.indeterminate);
+      const msg =
+        '群发任务全部创建失败：' + ((errors[0] || {}).error || '未知错误') +
+        (anyIndet ? '。部分提交结果未知（可能已创建任务）：请先到企微「客户联系」确认，10 分钟内重试会被拦截' : '');
       if (clientKey) {
-        deliverRecent.delete(clientKey); // 失败释放预占：同键重试可真正重新执行
+        if (anyIndet) {
+          // 结果未知不释放：保留拦截位（10 分钟过期），同键盲目重试会被上面的 409 挡住
+          deliverRecent.set(clientKey, { at: Date.now(), indeterminate: true });
+        } else {
+          deliverRecent.delete(clientKey); // 明确失败才释放预占：同键重试可真正重新执行
+        }
         settleErr(new Error(msg));
       }
-      return res.status(500).json({ error: msg });
+      return res.status(500).json({ error: msg, resultUnknown: anyIndet || undefined });
     }
     const payload = {
       ok: true,
@@ -840,7 +876,7 @@ app.post('/api/deliver', async (req, res) => {
     if (clientKey) {
       deliverRecent.set(clientKey, { at: Date.now(), payload });
       settleOk(payload); // 唤醒并发等待的同键请求
-      for (const [k, v] of deliverRecent) if (v.payload && Date.now() - v.at > 10 * 60_000) deliverRecent.delete(k);
+      pruneDeliver();
     }
     res.json(payload);
   } catch (e) {

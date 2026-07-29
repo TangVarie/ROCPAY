@@ -440,7 +440,10 @@ Page({
           lines.push(who + '：' + okCount + ' 位客户' + (t.failCount ? '（' + t.failCount + ' 位未能创建）' : ''));
         });
         (res.errors || []).forEach((er) => {
-          lines.push((er.sender ? '员工 ' + er.sender : '默认组') + '：创建失败——' + er.error);
+          lines.push(
+            (er.sender ? '员工 ' + er.sender : '默认组') + '：创建失败——' + er.error +
+            (er.indeterminate ? '（提交结果未知，可能已创建：请先到企微「客户联系」确认，确认没有再用转发补发）' : '')
+          );
         });
         this.setData({
           notifyDone: true,
