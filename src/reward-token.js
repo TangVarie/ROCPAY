@@ -26,7 +26,9 @@ export function createRewardToken({ fen, remark = '', name = '', rid }) {
   if (!Number.isSafeInteger(fen) || fen <= 0) throw new Error('奖励金额必须是大于 0 的安全整数（单位：分）');
   if (rid != null && !/^[A-Za-z0-9_-]{1,32}$/.test(rid)) throw new Error('奖励单号格式错误');
   const theRid = rid || crypto.randomUUID().replace(/-/g, ''); // 32位，直接当商户单号 out_bill_no
-  const exp = Math.floor(Date.now() / 1000) + config.app.rewardTtlHours * 3600;
+  // 整体取整：REWARD_TTL_HOURS 允许小数（如 1.5），TTL×3600 可能非整——
+  // 不取整的话 verifyRewardToken 的整数校验会把自己刚签发的令牌拒收
+  const exp = Math.floor(Date.now() / 1000 + config.app.rewardTtlHours * 3600);
   const payload = { rid: theRid, fen, remark, name, exp };
   const data = b64url(JSON.stringify(payload));
   const sig = hmac(data);

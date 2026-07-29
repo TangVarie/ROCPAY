@@ -972,7 +972,8 @@ app.post('/api/rewards/batch', async (req, res) => {
   const people = []; // 每人汇总：{externalUserid, totalYuan, bills}
   // batchId：拆单后的所有笔共用，台账按批查看/按批撤回的锚点（clientKey 模式下即幂等键本身）
   for (const p of plans) {
-    const exp = Math.floor(Date.now() / 1000) + config.app.rewardTtlHours * 3600;
+    // 整体取整，与 createRewardToken 的 exp 口径一致（TTL 允许小数）
+    const exp = Math.floor(Date.now() / 1000 + config.app.rewardTtlHours * 3600);
     let ok = 0;
     for (let j = 0; j < p.bills.length; j++) {
       const billFen = p.bills[j];
