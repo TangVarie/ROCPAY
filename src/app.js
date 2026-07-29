@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p19-deliver-followups';
+const BUILD = 'p20-deliver-settle-bound';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -710,16 +710,12 @@ app.post('/api/customers/sync', async (req, res) => {
 const deliverRecent = new Map();
 function pruneDeliver() {
   const now = Date.now();
+  // 只清理已 settle 的条目（回放缓存/拦截位，10 分钟过期）。in-flight 一律不碰：
+  // 处理端自带 120s 总预算，必然在有限时间内 settle 并替换/清理自己的条目——
+  // 任何"按时间窗猜测存活性"的清理都会留下被撞上边界后并行执行的口子，
+  // 此前 10/30 分钟两版时间窗策略先后被评审击穿，教训是生命周期只跟 settle 挂钩、不跟钟表挂钩
   for (const [k, v] of deliverRecent) {
-    if (v.promise) {
-      // in-flight 绝不删除：删了会让同键重试与仍在执行的原请求并行跑出重复任务
-      // （组数多时每组 6s 上限累加，原请求合法运行超 10 分钟是可能的）。
-      // 超过 30 分钟硬上限视为悬死，转"结果未知"拦截位——只挡不放，
-      // 原请求若最终完成，其成功/失败路径会自然覆盖或清理这个键
-      if (now - v.at > 30 * 60_000) deliverRecent.set(k, { at: now, indeterminate: true });
-    } else if (now - v.at > 10 * 60_000) {
-      deliverRecent.delete(k); // 已完成/结果未知的条目 10 分钟过期
-    }
+    if (!v.promise && now - v.at > 10 * 60_000) deliverRecent.delete(k);
   }
 }
 app.post('/api/deliver', async (req, res) => {
@@ -731,6 +727,11 @@ app.post('/api/deliver', async (req, res) => {
     ? [...new Set(req.body.externalUserids.filter(Boolean))]
     : [];
   if (!externalUserids.length) return res.status(400).json({ error: '请选择要通知的客户' });
+  // 上限：批量发放单次 ≤200 人，正常流量到不了这里；不设上限的话派发组数无界，
+  // 单请求执行时长也随之无界，防重条目的"必然 settle"保证会被击穿
+  if (externalUserids.length > 400) {
+    return res.status(400).json({ error: '单次群发最多 400 位客户，请分批发送' });
+  }
   const ckRaw = String((req.body || {}).clientKey || '');
   const clientKey = /^[a-f0-9]{16,64}$/i.test(ckRaw) ? ckRaw.toLowerCase() : '';
   if (clientKey) {
@@ -824,6 +825,10 @@ app.post('/api/deliver', async (req, res) => {
     const tasks = [];
     const errors = [];
     const failList = [];
+    // 总预算：保证本请求必然在有限时间内 settle（防重条目生命周期依赖这一点）。
+    // 超预算的组不提交、按"确定失败（未提交，可安全重试）"入重试名单
+    const DELIVER_BUDGET_MS = 120_000;
+    const startAt = Date.now();
     for (const [s, list] of groups) {
       if (!s) {
         // 派发员工无法确定（发起人未配企微账号 + 客户跟进关系未同步）：显式失败并计入
@@ -831,6 +836,13 @@ app.post('/api/deliver', async (req, res) => {
         errors.push({ sender: '', count: list.length, error: '未能确定派发员工：请先「从企微同步」刷新跟进关系，或让超管为发起人配置企微账号' });
         failList.push(...list);
         console.warn(`[wecom] 群发跳过 ${list.length} 位客户：无跟进关系且发起人未配置企微账号`);
+        continue;
+      }
+      if (Date.now() - startAt > DELIVER_BUDGET_MS) {
+        // 超总预算：该组未提交（确定失败，可安全重试），只记录不再外呼——settle 有界的保证所在
+        errors.push({ sender: s, count: list.length, error: '本次处理超时，该组未提交，可直接重试' });
+        failList.push(...list);
+        console.warn(`[wecom] 群发超预算跳过 sender=${s} 客户=${list.length}`);
         continue;
       }
       const body = { ...base, external_userid: list, sender: s };
