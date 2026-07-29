@@ -387,6 +387,7 @@ Page({
         this.setData({ loading: false });
         if (res && res.error) return this.setData({ sendErr: res.error });
         this._batchKey = null; // 本批已确认落地，下一批换新键
+        this._notifyKey = null; // 新批结果 = 新的群发意图：绝不复用上一批的群发防重键（会命中旧缓存导致本批不建任务）
         // 拆单后同一客户出现多笔 → 通知名单去重，每人只发一张卡片
         const targets = [...new Set((res.created || []).map((c) => c.externalUserid))];
         const labelOf = {};
@@ -458,6 +459,7 @@ Page({
 
   newBatch() {
     this._batchKey = null; // 新一批 = 新意图，换新幂等键
+    this._notifyKey = null; // 弃掉未完成的群发重试意图，防止新批复用旧键命中旧缓存
     this.setData({ step: 'pick', selected: [], selectedMap: {}, batchResult: null, sendErr: '', errIdx: -1, notifyDone: false, notifyResult: null });
   },
 
