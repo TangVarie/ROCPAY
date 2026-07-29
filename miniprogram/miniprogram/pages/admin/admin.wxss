@@ -239,6 +239,12 @@
 .bal-sub { font-size: 24rpx; color: rgba(255, 255, 255, 0.8); margin-top: 8rpx; }
 .bal-low { color: #ffb0b0; font-weight: 700; } /* 剩余告罄/超支：浅红提醒 */
 
+/* 充值/校准输入面板（自绘，替代桌面端不支持的 showModal editable） */
+.quota-panel { margin-bottom: 20rpx; }
+.quota-row { display: flex; gap: 16rpx; margin-top: 20rpx; }
+.quota-input { flex: 1; }
+.quota-btn { flex: none; height: 96rpx; padding: 0 36rpx; font-size: 28rpx; margin: 0; }
+
 /* 台账搜索条：与筛选 chips 同区，下边距收紧 */
 .rec-search { margin: 0 0 16rpx; }
 
