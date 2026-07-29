@@ -61,8 +61,10 @@ function buildAuthorization(method, urlPath, body) {
 
 // AES-256-GCM 解密（平台证书下载、回调报文解密都用它）
 export function decryptAesGcm({ ciphertext, nonce, associated_data }) {
+  if (!ciphertext || !nonce) throw new Error('加密报文缺少 ciphertext 或 nonce');
   const key = Buffer.from(config.wechatpay.apiV3Key, 'utf8'); // 32 字节
   const buf = Buffer.from(ciphertext, 'base64');
+  if (buf.length < 17) throw new Error('加密报文长度无效');
   const authTag = buf.subarray(buf.length - 16);
   const data = buf.subarray(0, buf.length - 16);
   const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(nonce, 'utf8'));

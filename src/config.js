@@ -157,6 +157,30 @@ export const config = {
 
 // ---------- 启动即校验，尽早报错 ----------
 
+function assertFiniteNumber(name, value, { min, max, integer = false } = {}) {
+  if (!Number.isFinite(value) || (integer && !Number.isInteger(value)) ||
+      (min != null && value < min) || (max != null && value > max)) {
+    const range = `${min != null ? ` >= ${min}` : ''}${max != null ? ` <= ${max}` : ''}`;
+    throw new Error(`[配置错误] ${name} 必须是${integer ? '整数' : '数字'}${range}，当前值为 ${value}`);
+  }
+}
+
+assertFiniteNumber('PORT', config.port, { min: 1, max: 65535, integer: true });
+assertFiniteNumber('REWARD_TTL_HOURS', config.app.rewardTtlHours, { min: 1 });
+assertFiniteNumber('MIN_AMOUNT_YUAN', config.app.minAmountYuan, { min: 0.01 });
+assertFiniteNumber('MAX_AMOUNT_YUAN', config.app.maxAmountYuan, { min: config.app.minAmountYuan });
+assertFiniteNumber('SPLIT_CAP_YUAN', config.app.splitCapYuan, {
+  min: config.app.minAmountYuan,
+  max: config.app.maxAmountYuan,
+});
+assertFiniteNumber('PER_USER_DAILY_CAP_YUAN', config.app.perUserDailyCapYuan, {
+  min: config.app.minAmountYuan,
+});
+if (config.db.enabled) {
+  assertFiniteNumber('MYSQL_PORT', config.db.port, { min: 1, max: 65535, integer: true });
+  assertFiniteNumber('MYSQL_POOL_SIZE', config.db.connectionLimit, { min: 1, max: 100, integer: true });
+}
+
 // 1) 商户私钥：环境变量 PEM 或 文件，二者至少有一个
 if (!config.wechatpay.privateKeyPem && !existsSync(config.wechatpay.privateKeyPath)) {
   throw new Error(

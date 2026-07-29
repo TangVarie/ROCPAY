@@ -14,6 +14,7 @@ const BASE = 'https://qyapi.weixin.qq.com/cgi-bin';
 export const wecomEnabled = config.wecom.enabled;
 
 let tokenCache = { token: '', exp: 0 };
+let tokenPromise = null;
 
 // 企微接口统一加超时（默认 6s）：防止企微慢/不通时，调用方（如客户开首页）无限等待
 async function fetchWT(url, opts = {}, ms = 6000) {
@@ -31,14 +32,28 @@ export async function getToken() {
   if (!wecomEnabled) throw new Error('企微未配置（需 WECOM_CORPID + WECOM_CONTACT_SECRET）');
   const now = Date.now();
   if (tokenCache.token && now < tokenCache.exp) return tokenCache.token;
-  const url = `${BASE}/gettoken?corpid=${encodeURIComponent(config.wecom.corpid)}&corpsecret=${encodeURIComponent(
-    config.wecom.contactSecret
-  )}`;
-  const res = await fetchWT(url);
-  const data = await res.json();
-  if (data.errcode) throw new Error(`企微 gettoken 失败：${data.errcode} ${data.errmsg}`);
-  tokenCache = { token: data.access_token, exp: now + (Number(data.expires_in || 7200) - 300) * 1000 };
-  return tokenCache.token;
+  if (tokenPromise) return tokenPromise;
+  tokenPromise = (async () => {
+    const url = `${BASE}/gettoken?corpid=${encodeURIComponent(config.wecom.corpid)}&corpsecret=${encodeURIComponent(
+      config.wecom.contactSecret
+    )}`;
+    const res = await fetchWT(url);
+    const data = await parseResponse(res, 'gettoken');
+    if (data.errcode) throw new Error(`企微 gettoken 失败：${data.errcode} ${data.errmsg}`);
+    if (!data.access_token) throw new Error('企微 gettoken 返回缺少 access_token');
+    const ttl = Math.max(Number(data.expires_in) || 7200, 301);
+    tokenCache = { token: data.access_token, exp: Date.now() + (ttl - 300) * 1000 };
+    return tokenCache.token;
+  })();
+  try { return await tokenPromise; } finally { tokenPromise = null; }
+}
+
+async function parseResponse(res, action) {
+  const text = await res.text();
+  let data;
+  try { data = text ? JSON.parse(text) : {}; } catch { throw new Error(`企微 ${action} 返回了非 JSON 响应`); }
+  if (!res.ok) throw new Error(`企微 ${action} HTTP ${res.status}：${data.errmsg || text.slice(0, 200)}`);
+  return data;
 }
 
 async function call(method, path, { query = {}, body } = {}) {
@@ -49,7 +64,7 @@ async function call(method, path, { query = {}, body } = {}) {
     headers: body ? { 'Content-Type': 'application/json' } : {},
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await res.json();
+  const data = await parseResponse(res, path);
   if (data.errcode) {
     if (data.errcode === 42001 || data.errcode === 40014) tokenCache = { token: '', exp: 0 }; // token 失效，下次重取
     const err = new Error(`企微 ${path} 失败：${data.errcode} ${data.errmsg}`);
@@ -99,11 +114,11 @@ export async function uploadImageMedia(buffer, filename = 'cover.png') {
   const token = await getToken();
   const form = new FormData();
   form.append('media', new Blob([buffer], { type: 'image/png' }), filename);
-  const res = await fetch(`${BASE}/media/upload?access_token=${encodeURIComponent(token)}&type=image`, {
+  const res = await fetchWT(`${BASE}/media/upload?access_token=${encodeURIComponent(token)}&type=image`, {
     method: 'POST',
     body: form,
-  });
-  const data = await res.json();
+  }, 15000);
+  const data = await parseResponse(res, 'media/upload');
   if (data.errcode) throw new Error(`企微 media/upload 失败：${data.errcode} ${data.errmsg}`);
   return data.media_id;
 }
