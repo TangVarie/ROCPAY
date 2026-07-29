@@ -20,14 +20,15 @@ const TRANSFER_PATH = '/v3/fund-app/mch-transfer/transfer-bills';
  * @returns {Promise<{out_bill_no:string, transfer_bill_no:string, state:string, package_info:string, create_time:string}>}
  */
 export async function createTransferBill({ outBillNo, openid, amountFen, remark, name, sceneReportInfos }) {
-  amountFen = Math.round(Number(amountFen));
-  if (!Number.isInteger(amountFen) || amountFen <= 0) {
+  amountFen = Number(amountFen);
+  if (!Number.isSafeInteger(amountFen) || amountFen <= 0) {
     throw new Error('转账金额必须是大于0的整数（单位：分）');
   }
   if (amountFen > config.app.maxAmountYuan * 100) {
     throw new Error(`转账金额超过上限 ${config.app.maxAmountYuan} 元`);
   }
-  if (!openid) throw new Error('缺少收款人 openid');
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(String(outBillNo || ''))) throw new Error('商户单号格式错误');
+  if (!openid || typeof openid !== 'string') throw new Error('缺少收款人 openid');
 
   // 场景报备信息：优先用调用方传的 → 环境变量 WECHATPAY_SCENE_REPORT_INFOS 配置的 → 默认(场景1000)。
   // 不同转账场景要求的 info_type 不同（如 1000现金营销=活动名称/奖励说明，1005佣金报酬=岗位类型/报酬说明），

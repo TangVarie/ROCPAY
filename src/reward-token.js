@@ -23,6 +23,8 @@ function hmac(dataStr) {
 // 生成令牌。fen=金额(分)，remark=备注，name=收款人姓名(可选)
 // rid 可由调用方传入（幂等场景：同一 clientKey 确定性派生同一 rid），不传则随机生成
 export function createRewardToken({ fen, remark = '', name = '', rid }) {
+  if (!Number.isSafeInteger(fen) || fen <= 0) throw new Error('奖励金额必须是大于 0 的安全整数（单位：分）');
+  if (rid != null && !/^[A-Za-z0-9_-]{1,32}$/.test(rid)) throw new Error('奖励单号格式错误');
   const theRid = rid || crypto.randomUUID().replace(/-/g, ''); // 32位，直接当商户单号 out_bill_no
   const exp = Math.floor(Date.now() / 1000) + config.app.rewardTtlHours * 3600;
   const payload = { rid: theRid, fen, remark, name, exp };
@@ -33,18 +35,31 @@ export function createRewardToken({ fen, remark = '', name = '', rid }) {
 
 // 校验令牌，返回载荷；失败抛错
 export function verifyRewardToken(token) {
-  if (!token || typeof token !== 'string' || !token.includes('.')) {
+  if (!token || typeof token !== 'string') {
     throw new Error('领取令牌格式错误');
   }
-  const [data, sig] = token.split('.');
+  const parts = token.split('.');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) throw new Error('领取令牌格式错误');
+  const [data, sig] = parts;
   const expect = hmac(data);
   const a = Buffer.from(sig);
   const b = Buffer.from(expect);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
     throw new Error('领取令牌签名无效');
   }
-  const payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
-  if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp) {
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
+  } catch {
+    throw new Error('领取令牌载荷无效');
+  }
+  if (!payload || typeof payload !== 'object' ||
+      !/^[A-Za-z0-9_-]{1,32}$/.test(payload.rid || '') ||
+      !Number.isSafeInteger(payload.fen) || payload.fen <= 0 ||
+      !Number.isSafeInteger(payload.exp) || payload.exp <= 0) {
+    throw new Error('领取令牌载荷无效');
+  }
+  if (Math.floor(Date.now() / 1000) >= payload.exp) {
     throw new Error('领取链接已过期');
   }
   return payload; // { rid, fen, remark, name, exp }
