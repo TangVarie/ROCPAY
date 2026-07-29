@@ -388,6 +388,7 @@ Page({
         if (res && res.error) return this.setData({ sendErr: res.error });
         this._batchKey = null; // 本批已确认落地，下一批换新键
         this._notifyKey = null; // 新批结果 = 新的群发意图：绝不复用上一批的群发防重键（会命中旧缓存导致本批不建任务）
+        this._notifySeq = (this._notifySeq || 0) + 1; // 群发代际+1：上一批仍在飞行的群发回调作废
         // 拆单后同一客户出现多笔 → 通知名单去重，每人只发一张卡片
         const targets = [...new Set((res.created || []).map((c) => c.externalUserid))];
         const labelOf = {};
@@ -425,9 +426,13 @@ Page({
     // 幂等键：多组派发偶尔超 15s 超时，重点一次时服务端直接回放已建任务（客户不收第二条）；
     // 拿到响应后清键，下次点击（重发失败名单）是新意图
     if (!this._notifyKey) this._notifyKey = this._newKey();
+    // 代际守卫：回调回来时若批次已切换（点了"再发一批"/新批已创建），整体作废——
+    // 否则旧回调会把 notifyDone/notifyResult/清键动作砸在新批次的状态上
+    const seq = (this._notifySeq = this._notifySeq || 0);
     this.setData({ notifying: true, sendErr: '' });
     call('/api/deliver', 'POST', { externalUserids: targets, text: this.data.notifyText, clientKey: this._notifyKey })
       .then((res) => {
+        if ((this._notifySeq || 0) !== seq) return; // 批次已换代：丢弃过期回调
         this.setData({ notifying: false });
         if (res && res.error) return this.setData({ sendErr: res.error });
         this._notifyKey = null;
@@ -457,13 +462,18 @@ Page({
           showCancel: false,
         });
       })
-      .catch((e) => this.setData({ notifying: false, sendErr: '通知失败：' + (e.errMsg || e.message || '') + '（可放心重试，已创建的任务不会重复）' }));
+      .catch((e) => {
+        if ((this._notifySeq || 0) !== seq) return; // 批次已换代：丢弃过期回调
+        this.setData({ notifying: false, sendErr: '通知失败：' + (e.errMsg || e.message || '') + '（可放心重试，已创建的任务不会重复）' });
+      });
   },
 
   newBatch() {
     this._batchKey = null; // 新一批 = 新意图，换新幂等键
     this._notifyKey = null; // 弃掉未完成的群发重试意图，防止新批复用旧键命中旧缓存
-    this.setData({ step: 'pick', selected: [], selectedMap: {}, batchResult: null, sendErr: '', errIdx: -1, notifyDone: false, notifyResult: null });
+    this._notifySeq = (this._notifySeq || 0) + 1; // 群发代际+1：飞行中的旧群发回调对新批作废
+    // notifying 一并复位：被弃批次的请求即使还在飞行，也不该锁住新批的群发按钮
+    this.setData({ step: 'pick', selected: [], selectedMap: {}, batchResult: null, sendErr: '', errIdx: -1, notifying: false, notifyDone: false, notifyResult: null });
   },
 
   // ============ 链接快发（副） ============
