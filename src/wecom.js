@@ -57,7 +57,15 @@ async function parseResponse(res, action) {
 }
 
 async function call(method, path, { query = {}, body } = {}) {
-  const token = await getToken();
+  let token;
+  try {
+    token = await getToken();
+  } catch (e) {
+    // 取 token 阶段失败 = 业务请求根本没发出：给非幂等调用方（如群发）一个明确信号——
+    // 这类失败可安全重试，不属于"提交结果未知"
+    e.preSubmit = true;
+    throw e;
+  }
   const qs = new URLSearchParams({ access_token: token, ...query }).toString();
   const res = await fetchWT(`${BASE}${path}?${qs}`, {
     method,

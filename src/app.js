@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p18-deliver-indeterminate';
+const BUILD = 'p19-deliver-followups';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -710,7 +710,17 @@ app.post('/api/customers/sync', async (req, res) => {
 const deliverRecent = new Map();
 function pruneDeliver() {
   const now = Date.now();
-  for (const [k, v] of deliverRecent) if (now - v.at > 10 * 60_000) deliverRecent.delete(k);
+  for (const [k, v] of deliverRecent) {
+    if (v.promise) {
+      // in-flight 绝不删除：删了会让同键重试与仍在执行的原请求并行跑出重复任务
+      // （组数多时每组 6s 上限累加，原请求合法运行超 10 分钟是可能的）。
+      // 超过 30 分钟硬上限视为悬死，转"结果未知"拦截位——只挡不放，
+      // 原请求若最终完成，其成功/失败路径会自然覆盖或清理这个键
+      if (now - v.at > 30 * 60_000) deliverRecent.set(k, { at: now, indeterminate: true });
+    } else if (now - v.at > 10 * 60_000) {
+      deliverRecent.delete(k); // 已完成/结果未知的条目 10 分钟过期
+    }
+  }
 }
 app.post('/api/deliver', async (req, res) => {
   const openid = getOpenid(req);
@@ -839,9 +849,11 @@ app.post('/api/deliver', async (req, res) => {
           `[wecom] 群发任务已创建 sender=${s} 客户=${list.length} 失败=${fails.length} msgid=${r.msgid || ''}`
         );
       } catch (e) {
-        // 企微带 errcode = 明确拒绝，任务确定没建，客户进重试名单可安全重发；
-        // 超时/网络中断/非 JSON 响应 = 提交结果未知，任务可能已建——不进重试名单，防重复打扰
-        const determinate = !!e.errcode;
+        // 企微带 errcode = 明确拒绝；preSubmit = 取 token 阶段失败、请求根本没发出——
+        // 两者任务都确定没建，客户进重试名单可安全重发。
+        // 只有"请求已发出但超时/网络中断/非 JSON 响应" = 提交结果未知，任务可能已建——
+        // 不进重试名单，防重复打扰
+        const determinate = !!e.errcode || !!e.preSubmit;
         errors.push({ sender: s, count: list.length, error: e.message, indeterminate: !determinate });
         if (determinate) failList.push(...list);
         console.error(`[wecom] 群发任务创建失败 sender=${s} 客户=${list.length} 结果${determinate ? '确定' : '未知'}：`, e.message);
