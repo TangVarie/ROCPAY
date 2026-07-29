@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p16-quota-panel-deliver';
+const BUILD = 'p17-deliver-hardening';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -716,8 +716,27 @@ app.post('/api/deliver', async (req, res) => {
   if (!externalUserids.length) return res.status(400).json({ error: '请选择要通知的客户' });
   const ckRaw = String((req.body || {}).clientKey || '');
   const clientKey = /^[a-f0-9]{16,64}$/i.test(ckRaw) ? ckRaw.toLowerCase() : '';
-  if (clientKey && deliverRecent.has(clientKey)) {
-    return res.json({ ...deliverRecent.get(clientKey).payload, duplicate: true });
+  if (clientKey) {
+    const hit = deliverRecent.get(clientKey);
+    if (hit) {
+      if (hit.payload) return res.json({ ...hit.payload, duplicate: true });
+      // 同键请求仍在处理中（多组派发超过客户端 15s 超时后的重试恰好撞上）：
+      // 等原请求完成后回放结果，绝不并行执行第二遍——这正是防重要堵的竞态窗口
+      try {
+        const payload = await hit.promise;
+        return res.json({ ...payload, duplicate: true });
+      } catch (_) {
+        return res.status(500).json({ error: '上一次群发提交失败，请重试' });
+      }
+    }
+  }
+  // 预占：外呼企微前先把键登记为 in-flight，并发同键请求只能等待上面那条路
+  let settleOk = null;
+  let settleErr = null;
+  if (clientKey) {
+    const pending = new Promise((resolve, reject) => { settleOk = resolve; settleErr = reject; });
+    pending.catch(() => {}); // 没有等待方时不产生 unhandledRejection
+    deliverRecent.set(clientKey, { at: Date.now(), promise: pending });
   }
   const text = String((req.body || {}).text || '').trim() ||
     '你有一笔奖励待领取，请打开我们的小程序查看～';
@@ -771,29 +790,42 @@ app.post('/api/deliver', async (req, res) => {
     const errors = [];
     const failList = [];
     for (const [s, list] of groups) {
-      const body = { ...base, external_userid: list };
-      if (s) body.sender = s;
+      if (!s) {
+        // 派发员工无法确定（发起人未配企微账号 + 客户跟进关系未同步）：显式失败并计入
+        // 可重试名单，而不是提交"企微默认派发"——那会漂移到"最近聊天"的员工，无人点发送
+        errors.push({ sender: '', count: list.length, error: '未能确定派发员工：请先「从企微同步」刷新跟进关系，或让超管为发起人配置企微账号' });
+        failList.push(...list);
+        console.warn(`[wecom] 群发跳过 ${list.length} 位客户：无跟进关系且发起人未配置企微账号`);
+        continue;
+      }
+      const body = { ...base, external_userid: list, sender: s };
       try {
         const r = await wecom.addMsgTemplate(body);
         const fails = r.fail_list || [];
         failList.push(...fails);
         tasks.push({
-          sender: s, // '' = 企微默认派发
-          senderSelf: !!s && s === senderUid,
+          sender: s,
+          senderSelf: s === senderUid,
           count: list.length,
           failCount: fails.length,
           msgid: r.msgid || '',
         });
         console.log(
-          `[wecom] 群发任务已创建 sender=${s || '(企微默认)'} 客户=${list.length} 失败=${fails.length} msgid=${r.msgid || ''}`
+          `[wecom] 群发任务已创建 sender=${s} 客户=${list.length} 失败=${fails.length} msgid=${r.msgid || ''}`
         );
       } catch (e) {
         errors.push({ sender: s, count: list.length, error: e.message });
-        console.error(`[wecom] 群发任务创建失败 sender=${s || '(企微默认)'} 客户=${list.length}：`, e.message);
+        failList.push(...list); // 整组未建成任务的客户也计入失败名单，前端可按名单重试
+        console.error(`[wecom] 群发任务创建失败 sender=${s} 客户=${list.length}：`, e.message);
       }
     }
     if (!tasks.length) {
-      return res.status(500).json({ error: '群发任务全部创建失败：' + ((errors[0] || {}).error || '未知错误') });
+      const msg = '群发任务全部创建失败：' + ((errors[0] || {}).error || '未知错误');
+      if (clientKey) {
+        deliverRecent.delete(clientKey); // 失败释放预占：同键重试可真正重新执行
+        settleErr(new Error(msg));
+      }
+      return res.status(500).json({ error: msg });
     }
     const payload = {
       ok: true,
@@ -807,10 +839,15 @@ app.post('/api/deliver', async (req, res) => {
     };
     if (clientKey) {
       deliverRecent.set(clientKey, { at: Date.now(), payload });
-      for (const [k, v] of deliverRecent) if (Date.now() - v.at > 10 * 60_000) deliverRecent.delete(k);
+      settleOk(payload); // 唤醒并发等待的同键请求
+      for (const [k, v] of deliverRecent) if (v.payload && Date.now() - v.at > 10 * 60_000) deliverRecent.delete(k);
     }
     res.json(payload);
   } catch (e) {
+    if (clientKey) {
+      deliverRecent.delete(clientKey); // 失败释放预占：同键重试可真正重新执行
+      if (settleErr) settleErr(e);
+    }
     console.error('[wecom] /api/deliver 异常：', e.message);
     res.status(500).json({ error: e.message });
   }
