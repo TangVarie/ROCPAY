@@ -154,11 +154,11 @@
             <block wx:if="{{wecomOn}}">
               <textarea class="input notify-ta" value="{{notifyText}}" bindinput="onNotifyText" maxlength="200" auto-height />
               <button class="btn btn-blue btn-block" bindtap="sendNotify" loading="{{notifying}}"
-                      disabled="{{notifyDone}}">{{notifyDone?'已创建群发，去企微点发送':'企微群发通知'}}</button>
+                      disabled="{{notifyDone && !(notifyResult && notifyResult.failCount)}}">{{notifyDone ? (notifyResult && notifyResult.failCount ? '重试 ' + notifyResult.failCount + ' 位未进入群发的客户' : '已创建群发，去企微点发送') : '企微群发通知'}}</button>
               <view class="err" wx:if="{{sendErr}}">{{sendErr}}</view>
               <block wx:if="{{notifyResult}}">
                 <view class="psub t-dark" wx:for="{{notifyResult.lines}}" wx:key="*this">任务派发：{{item}}</view>
-                <view class="psub t-light" wx:if="{{notifyResult.failCount}}">{{notifyResult.failCount}} 位客户未进入群发（本月接收已达上限或跟进关系变动），可用下方「转发领取入口」补发</view>
+                <view class="psub t-light" wx:if="{{notifyResult.failCount}}">{{notifyResult.failCount}} 位客户未进入群发（多为跟进关系未同步或本月接收已达上限）——建议先「从企微同步」刷新跟进关系后点上方按钮重试，或用下方「转发领取入口」补发</view>
               </block>
               <view class="psub t-light">任务按"谁跟进谁发"派给对应员工，在企微「消息-客户联系」提醒里点一次发送即可送达</view>
               <view class="psub t-light" wx:if="{{!myWecomUserid}}">提示：让超管在「员工」里给你配置企微账号后，你跟进的客户任务会直接派给你</view>
@@ -204,8 +204,8 @@
           <text class="bal-label">可发额度 · 剩余</text>
           <!-- 台账计算器，发放员/管理员都可记（后端同样只要求 isAdmin） -->
           <view class="bal-actions">
-            <text class="bal-refresh" data-mode="add" bindtap="adjustQuota">充值</text>
-            <text class="bal-refresh" data-mode="set" bindtap="adjustQuota">校准</text>
+            <text class="bal-refresh" data-mode="add" bindtap="openQuotaPanel">充值</text>
+            <text class="bal-refresh" data-mode="set" bindtap="openQuotaPanel">校准</text>
           </view>
         </view>
         <block wx:if="{{period.hasQuota}}">
@@ -216,6 +216,21 @@
           <view class="bal-num num">— —</view>
           <view class="bal-sub">点「充值」记入账户余额，之后自动算剩余</view>
         </block>
+      </view>
+
+      <!-- 充值/校准输入面板：页面内自绘（桌面端小程序不支持 showModal editable，弹窗无输入框） -->
+      <view class="panel quota-panel" wx:if="{{quotaPanel}}">
+        <view class="prow">
+          <view class="ptitle t-dark">{{quotaPanel.mode === 'set' ? '校准余额' : '充值'}}</view>
+          <view class="textbtn textbtn-plain" bindtap="cancelQuotaPanel">取消</view>
+        </view>
+        <view class="psub t-light">{{quotaPanel.mode === 'set' ? '与商户平台核对后，把可发剩余直接设为账户实际余额' : '充值金额会累加进可发额度（自动携带上期结余）'}}</view>
+        <view class="quota-row">
+          <input class="input quota-input num" type="digit" focus="{{true}}"
+                 placeholder="{{quotaPanel.mode === 'set' ? '账户实际剩余(元)' : '本次充值金额(元)'}}" placeholder-class="ph"
+                 value="{{quotaPanel.value}}" bindinput="onQuotaInput" bindconfirm="confirmQuotaPanel" />
+          <button class="btn btn-blue quota-btn" bindtap="confirmQuotaPanel" loading="{{quotaSaving}}" disabled="{{quotaSaving}}">{{quotaPanel.mode === 'set' ? '设为剩余' : '加进额度'}}</button>
+        </view>
       </view>
 
       <!-- 台账搜索：备注 / 客户名 / 金额 / 单号（回车或点搜索生效） -->

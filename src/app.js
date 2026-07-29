@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p15-idempotency';
+const BUILD = 'p16-quota-panel-deliver';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -704,6 +704,7 @@ app.post('/api/customers/sync', async (req, res) => {
 // 企微硬性语义：不传 sender 时，任务派给客户跟进人里「最后聊过天」的那个，与谁点按钮无关——
 // 客户加了多个员工时任务会漂移（A 发起、任务落到 B）。所以这里按跟进关系分组、逐组带 sender：
 //   发起人跟进的客户 → 派给发起人；其他客户 → 派给各自跟进人；查不到跟进关系 → 交企微默认派发。
+const deliverRecent = new Map(); // clientKey -> {at, payload} 群发防重：多组派发偶尔超客户端 15s 超时，重点一次直接回放结果，客户不收第二条
 app.post('/api/deliver', async (req, res) => {
   const openid = getOpenid(req);
   if (!isAdmin(openid)) return res.status(403).json({ error: '无权限' });
@@ -713,6 +714,11 @@ app.post('/api/deliver', async (req, res) => {
     ? [...new Set(req.body.externalUserids.filter(Boolean))]
     : [];
   if (!externalUserids.length) return res.status(400).json({ error: '请选择要通知的客户' });
+  const ckRaw = String((req.body || {}).clientKey || '');
+  const clientKey = /^[a-f0-9]{16,64}$/i.test(ckRaw) ? ckRaw.toLowerCase() : '';
+  if (clientKey && deliverRecent.has(clientKey)) {
+    return res.json({ ...deliverRecent.get(clientKey).payload, duplicate: true });
+  }
   const text = String((req.body || {}).text || '').trim() ||
     '你有一笔奖励待领取，请打开我们的小程序查看～';
   try {
@@ -752,6 +758,11 @@ app.post('/api/deliver', async (req, res) => {
       let s = '';
       if (senderUid && fus.includes(senderUid)) s = senderUid; // 发起人自己跟进的 → 派给发起人
       else if (fus.length) s = [...fus].sort()[0]; // 其他 → 固定取字典序第一个跟进人，派发确定可预期
+      // 本地查不到跟进关系（多为客户档案未同步）：兜底派给发起人本人——
+      // 宁可显式失败（企微判定非跟进人会进 fail_list，前端看得见、可同步后重试），
+      // 也不交企微默认派发：那会把任务黑箱漂移到"最近聊过天"的员工那里，
+      // 他不知道要去点【发送】，客户收不到，发起人还以为群发没问题
+      else s = senderUid;
       if (!groups.has(s)) groups.set(s, []);
       groups.get(s).push(eu);
     }
@@ -784,7 +795,7 @@ app.post('/api/deliver', async (req, res) => {
     if (!tasks.length) {
       return res.status(500).json({ error: '群发任务全部创建失败：' + ((errors[0] || {}).error || '未知错误') });
     }
-    res.json({
+    const payload = {
       ok: true,
       withCard,
       senderConfigured: !!senderUid, // 发起人是否已配置企微账号映射
@@ -793,7 +804,12 @@ app.post('/api/deliver', async (req, res) => {
       failCount: failList.length,
       failList,
       msgid: tasks[0].msgid, // 旧版小程序兼容字段
-    });
+    };
+    if (clientKey) {
+      deliverRecent.set(clientKey, { at: Date.now(), payload });
+      for (const [k, v] of deliverRecent) if (Date.now() - v.at > 10 * 60_000) deliverRecent.delete(k);
+    }
+    res.json(payload);
   } catch (e) {
     console.error('[wecom] /api/deliver 异常：', e.message);
     res.status(500).json({ error: e.message });

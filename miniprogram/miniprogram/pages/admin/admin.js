@@ -60,6 +60,8 @@ Page({
     recHasMore: false,
     recLoading: false,
     failAlert: 0, // 转账失败/被关闭（不含主动撤回）的笔数：记录 Tab 红点，对钱的异常不能靠"想起来去看"
+    quotaPanel: null, // 充值/校准输入面板 {mode:'add'|'set', value}；null=收起
+    quotaSaving: false,
 
     // ---- 客户榜 ----
     rank: [],
@@ -416,17 +418,24 @@ Page({
   sendNotify() {
     const r = this.data.batchResult;
     if (!r || !r.targets.length || this.data.notifying) return;
+    // 已创建过且有失败名单：本次只重发失败的那批，成功的客户不收第二条
+    const prevFail = (this.data.notifyDone && this.data.notifyResult && this.data.notifyResult.failList) || [];
+    const targets = prevFail.length ? prevFail : r.targets;
+    // 幂等键：多组派发偶尔超 15s 超时，重点一次时服务端直接回放已建任务（客户不收第二条）；
+    // 拿到响应后清键，下次点击（重发失败名单）是新意图
+    if (!this._notifyKey) this._notifyKey = this._newKey();
     this.setData({ notifying: true, sendErr: '' });
-    call('/api/deliver', 'POST', { externalUserids: r.targets, text: this.data.notifyText })
+    call('/api/deliver', 'POST', { externalUserids: targets, text: this.data.notifyText, clientKey: this._notifyKey })
       .then((res) => {
         this.setData({ notifying: false });
         if (res && res.error) return this.setData({ sendErr: res.error });
+        this._notifyKey = null;
         // 任务按客户跟进人分组派发（企微规则：谁跟进谁发）。把"派给了谁"讲清楚，
         // 不然任务落在别的员工那里，发起人以为群发没生效
         const lines = [];
         (res.tasks || []).forEach((t) => {
           const okCount = t.count - (t.failCount || 0);
-          const who = t.senderSelf ? '你' : t.sender ? '员工 ' + t.sender : '按企微默认跟进人';
+          const who = t.senderSelf ? '你' : t.sender ? '员工 ' + t.sender : '按企微默认跟进人（可能派给最近聊天的员工，请留意）';
           lines.push(who + '：' + okCount + ' 位客户' + (t.failCount ? '（' + t.failCount + ' 位未能创建）' : ''));
         });
         (res.errors || []).forEach((er) => {
@@ -434,7 +443,7 @@ Page({
         });
         this.setData({
           notifyDone: true,
-          notifyResult: { lines, failCount: res.failCount || 0 },
+          notifyResult: { lines, failCount: res.failCount || 0, failList: res.failList || [] },
         });
         wx.showModal({
           title: '群发任务已创建',
@@ -444,7 +453,7 @@ Page({
           showCancel: false,
         });
       })
-      .catch((e) => this.setData({ notifying: false, sendErr: '通知失败：' + (e.errMsg || e.message || '') }));
+      .catch((e) => this.setData({ notifying: false, sendErr: '通知失败：' + (e.errMsg || e.message || '') + '（可放心重试，已创建的任务不会重复）' }));
   },
 
   newBatch() {
@@ -513,34 +522,39 @@ Page({
       },
     });
   },
-  // 充值（累加，携带上期结余）/ 校准（把剩余设为账户实际余额）
-  adjustQuota(e) {
+  // 充值（累加，携带上期结余）/ 校准（把剩余设为账户实际余额）。
+  // 用页面内自绘输入面板而不是 wx.showModal editable：桌面端（Windows/Mac）小程序
+  // 不支持 editable，弹窗里根本不显示输入框——"电脑上点充值看不到输入框"的根因
+  openQuotaPanel(e) {
     const mode = e.currentTarget.dataset.mode === 'set' ? 'set' : 'add';
+    this.setData({ quotaPanel: { mode, value: '' } });
+  },
+  onQuotaInput(e) { this.setData({ 'quotaPanel.value': e.detail.value }); },
+  cancelQuotaPanel() { this.setData({ quotaPanel: null }); },
+  confirmQuotaPanel() {
+    if (!this.data.quotaPanel || this.data.quotaSaving) return;
+    const { mode, value } = this.data.quotaPanel;
     const isSet = mode === 'set';
-    wx.showModal({
-      title: isSet ? '校准余额' : '充值',
-      editable: true,
-      content: '',
-      placeholderText: isSet ? '账户实际剩余(元)' : '本次充值金额(元)',
-      confirmText: isSet ? '设为剩余' : '加进额度',
-      success: (r) => {
-        if (!r.confirm) return;
-        const raw = (r.content || '').trim(); // 空/纯空格不能当 0 静默提交
-        if (raw === '') return wx.showToast({ title: '请输入金额', icon: 'none' });
-        const yuan = Number(raw);
-        if (Number.isNaN(yuan) || yuan < 0 || (!isSet && yuan <= 0)) {
-          return wx.showToast({ title: '请输入正确金额', icon: 'none' });
-        }
-        // opKey：这次确认的幂等键。响应丢失后的重复提交只会记一次账
-        call('/api/period/adjust', 'POST', { mode, yuan, opKey: this._newKey() })
-          .then((res) => {
-            if (res && res.error) return wx.showToast({ title: res.error, icon: 'none' });
-            wx.showToast({ title: isSet ? '已校准' : '已充值', icon: 'success' });
-            this.applyPeriod(res);
-          })
-          .catch(() => wx.showToast({ title: '网络错误，请刷新核对剩余后再试', icon: 'none' }));
-      },
-    });
+    const raw = String(value || '').trim(); // 空/纯空格不能当 0 静默提交
+    if (raw === '') return wx.showToast({ title: '请输入金额', icon: 'none' });
+    const yuan = Number(raw);
+    if (Number.isNaN(yuan) || yuan < 0 || (!isSet && yuan <= 0)) {
+      return wx.showToast({ title: '请输入正确金额', icon: 'none' });
+    }
+    this.setData({ quotaSaving: true });
+    // opKey：这次确认的幂等键。响应丢失后的重复提交只会记一次账
+    call('/api/period/adjust', 'POST', { mode, yuan, opKey: this._newKey() })
+      .then((res) => {
+        this.setData({ quotaSaving: false });
+        if (res && res.error) return wx.showToast({ title: res.error, icon: 'none' });
+        this.setData({ quotaPanel: null });
+        wx.showToast({ title: isSet ? '已校准' : '已充值', icon: 'success' });
+        this.applyPeriod(res);
+      })
+      .catch(() => {
+        this.setData({ quotaSaving: false });
+        wx.showToast({ title: '网络错误，请刷新核对剩余后再试', icon: 'none' });
+      });
   },
 
   // 台账：more=true 追加下一页，否则按当前筛选重查。列表与汇总同口径（stats 即筛选范围的消耗）。
