@@ -170,15 +170,39 @@ Page({
     return full.slice(0, 4) === nowYear ? full.slice(5, 16) : full.slice(0, 16);
   },
 
-  // 异常笔数（FAIL/CLOSED，不含主动撤回）：failed 筛选的 stats.total 减去 cancelled_count。
-  // 静默失败：角标是提醒不是数据源，拉不到不打扰
+  // 异常笔数：只统计「知悉水位」之后新出现的失败/关闭单（后端 /api/alerts 口径）。
+  // 处理完点"标记已处理"即清零，之后的新失败重新提醒。静默失败：角标是提醒不是数据源
   loadAlerts() {
-    call('/api/rewards?limit=1&status=failed', 'GET')
+    call('/api/alerts', 'GET')
       .then((res) => {
-        if (!res || !res.stats) return;
-        this.setData({ failAlert: Math.max(0, (res.stats.total || 0) - (res.stats.cancelled_count || 0)) });
+        if (!res || res.error || typeof res.count !== 'number') return;
+        this.setData({ failAlert: res.count });
       })
       .catch(() => {});
+  },
+  // 标记异常为已处理：记知悉水位 → 角标与主页警示清零；历史失败单在「失败/撤回」筛选里仍可查
+  ackAlerts() {
+    if (this._acking) return;
+    wx.showModal({
+      title: '标记为已处理',
+      content: `将 ${this.data.failAlert} 笔异常标记为已处理：角标与主页警示清零，之后新出现的失败会重新提醒。历史失败单仍可在「失败/撤回」筛选里随时查看。`,
+      confirmText: '标记',
+      success: (r) => {
+        if (!r.confirm) return;
+        this._acking = true;
+        call('/api/alerts/ack', 'POST', {})
+          .then((res) => {
+            this._acking = false;
+            if (res && res.error) return wx.showToast({ title: res.error, icon: 'none' });
+            this.setData({ failAlert: 0 });
+            wx.showToast({ title: '已标记', icon: 'success' });
+          })
+          .catch(() => {
+            this._acking = false;
+            wx.showToast({ title: '网络错误', icon: 'none' });
+          });
+      },
+    });
   },
 
   switchTab(e) {
@@ -617,6 +641,7 @@ Page({
             updatedFull: (r.transfer_updated_at || '').replace('T', ' '), // 转账状态最后更新时间
             billNo: r.transfer_bill_no || '', // 微信转账单号：与商户平台逐笔勾稽的凭据
             batchId: r.batch_id || '', // 批次号：非空说明来自一次批量发放，可整批查看/撤回
+            failReason: r.fail_reason || '', // 微信侧失败原因：详情直接可见，不用跑商户平台
             revokedAt: (r.revoked_at || '').replace('T', ' '), // 撤回审计：谁在什么时候撤的
             revokedBy: r.revoked_by_name || (r.revoked_by ? '（已移除的员工）' : ''),
           };
@@ -773,6 +798,7 @@ Page({
       `备注：${r.sub}`,
       `创建：${r.createdFull}`,
       r.updatedFull && r.updatedFull !== r.createdFull ? `状态更新：${r.updatedFull}` : '',
+      r.failReason ? `失败原因：${r.failReason}` : '',
       r.revokedAt ? `撤回：${r.revokedAt}${r.revokedBy ? ' · ' + r.revokedBy : ''}` : '',
       `商户单号：${r.rid}`,
       `微信单号：${r.billNo || '—（转账发起后生成）'}`,

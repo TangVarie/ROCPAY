@@ -543,7 +543,7 @@ export async function listRewards({ limit = 50, offset = 0, status, days, target
             a.name AS created_by_name,
             ra.name AS revoked_by_name,
             t.claimer_openid, t.transfer_bill_no, t.state AS transfer_state,
-            t.updated_at AS transfer_updated_at
+            t.fail_reason, t.updated_at AS transfer_updated_at
        FROM rewards r
        LEFT JOIN transfers t ON t.out_bill_no = r.rid
        LEFT JOIN customers c ON c.external_userid = r.target_external_userid
@@ -924,6 +924,17 @@ export async function countPendingRewardsForTarget(externalUserid) {
   return { n: Number(rows[0].n), fen: Number(rows[0].fen) };
 }
 
+/** 「知悉水位」之后新出现的失败/关闭单数量（异常角标口径；水位为空则统计全部） */
+export async function countUnackedFailures(ackAt) {
+  if (!pool) return 0;
+  const cond = ackAt ? 'AND updated_at > :ack' : '';
+  const [[row]] = await pool.execute(
+    `SELECT COUNT(*) AS n FROM rewards WHERE status IN ('FAIL','CLOSED') ${cond}`,
+    ackAt ? { ack: ackAt } : {}
+  );
+  return Number(row.n);
+}
+
 /** 取一笔奖励的关键字段（撤回/领取拦截用） */
 export async function getReward(rid) {
   if (!pool || !rid) return null;
@@ -1049,6 +1060,7 @@ export const db = {
   saveNotifyEvent,
   listRewards,
   getStats,
+  countUnackedFailures,
   getSetting,
   setSetting,
   getPeriodStats,

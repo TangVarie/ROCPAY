@@ -206,14 +206,13 @@ Page({
         });
       })
       .catch(() => {});
-    // 异常警示：转账失败/被关闭（不含主动撤回）的笔数。对钱的异常，被动发现 = 事故，进门就要看见
-    call('/api/rewards?limit=1&status=failed', 'GET')
+    // 异常警示：与工作台角标同口径（/api/alerts，「知悉水位」之后新出现的失败/关闭单）。
+    // 对钱的异常，被动发现 = 事故，进门就要看见；处理完在工作台标记已处理即清零
+    call('/api/alerts', 'GET')
       .then((r) => {
-        if (!r || !r.stats) return;
+        if (!r || r.error || typeof r.count !== 'number') return;
         this.setData({
-          adminHome: Object.assign({ hasQuota: false }, this.data.adminHome, {
-            failCount: Math.max(0, (r.stats.total || 0) - (r.stats.cancelled_count || 0)),
-          }),
+          adminHome: Object.assign({ hasQuota: false }, this.data.adminHome, { failCount: r.count }),
         });
       })
       .catch(() => {});
