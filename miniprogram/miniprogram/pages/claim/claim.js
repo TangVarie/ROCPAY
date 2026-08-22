@@ -164,6 +164,12 @@ Page({
 
   retry() { this.checkMine(); },
 
+  // 从工作台返回时刷新仪表：额度/异常角标可能已变（如刚点了"标记已处理"），
+  // 本页在页面栈里被缓存，不刷新会一直显示旧警示。首次进入时 mode 还是 loading，天然跳过
+  onShow() {
+    if (this.data.isAdmin && this.data.mode === 'empty') this.loadAdminHome();
+  },
+
   goAdmin() {
     wx.navigateTo({ url: '/pages/admin/admin' });
   },

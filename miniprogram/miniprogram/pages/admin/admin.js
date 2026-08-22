@@ -641,7 +641,9 @@ Page({
             updatedFull: (r.transfer_updated_at || '').replace('T', ' '), // 转账状态最后更新时间
             billNo: r.transfer_bill_no || '', // 微信转账单号：与商户平台逐笔勾稽的凭据
             batchId: r.batch_id || '', // 批次号：非空说明来自一次批量发放，可整批查看/撤回
-            failReason: r.fail_reason || '', // 微信侧失败原因：详情直接可见，不用跑商户平台
+            // 微信侧失败原因：只在当前确为失败/关闭时展示——乱序回调把 FAIL 纠正为 SUCCESS 后
+            // 库里可能残留旧原因（后端 SUCCESS 写入已清，此处再兜一层），不给到账单贴失败标签
+            failReason: st === 'FAIL' || st === 'CLOSED' ? r.fail_reason || '' : '',
             revokedAt: (r.revoked_at || '').replace('T', ' '), // 撤回审计：谁在什么时候撤的
             revokedBy: r.revoked_by_name || (r.revoked_by ? '（已移除的员工）' : ''),
           };

@@ -261,8 +261,11 @@
         <view class="fchip fchip-target on" wx:if="{{recFilter.batch}}" bindtap="clearBatchFilter">本批发放 ✕</view>
       </view>
 
-      <!-- 失败筛选下的知悉出口：处理完标记一下，角标/主页警示清零；历史单永远可查 -->
-      <view class="alert-actions" wx:if="{{recFilter.status === 'failed' && failAlert > 0}}">
+      <!-- 失败筛选下的知悉出口：处理完标记一下，角标/主页警示清零；历史单永远可查。
+           只在无附加筛选（时间/月份/单人/批次/关键词）时出现——筛选子集下看到的不是全部异常，
+           不该允许一键推进全局水位把被筛掉的失败也悄悄知悉掉 -->
+      <view class="alert-actions"
+            wx:if="{{recFilter.status === 'failed' && failAlert > 0 && !recFilter.days && !recFilter.month && !recFilter.target && !recFilter.batch && !recFilter.q}}">
         <view class="textbtn" bindtap="ackAlerts">标记 {{failAlert}} 笔异常为已处理 »</view>
       </view>
 
