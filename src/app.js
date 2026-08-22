@@ -17,7 +17,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p20-deliver-settle-bound';
+const BUILD = 'p21-alert-ack';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -406,6 +406,32 @@ app.get('/api/leaderboard', async (req, res) => {
       out.levels = LEVELS.map((L) => ({ lv: L.lv, name: L.name, minYuan: L.minFen / 100 }));
     }
     res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 异常提醒（记录 Tab 角标 / 主页警示）：只统计「知悉水位」之后新出现的失败/关闭单。
+// 此前口径是历史总数——失败/关闭是终态永远不变，提醒处理完也消不掉，把统计当了待办。
+// 现在：处理完点「标记已处理」记水位即清零，之后的新失败重新提醒；历史单台账永远可查
+app.get('/api/alerts', async (req, res) => {
+  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  try {
+    const ackAt = await db.getSetting('fail_ack_at', null);
+    res.json({ count: await db.countUnackedFailures(ackAt), ackAt: ackAt || '' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post('/api/alerts/ack', async (req, res) => {
+  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  try {
+    // UTC 格式化，与库内 DATETIME（timezone 'Z'）同基准可比
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    await db.setSetting('fail_ack_at', now);
+    res.json({ ok: true, ackAt: now });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

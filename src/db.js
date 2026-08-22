@@ -412,7 +412,7 @@ export async function updateTransferState({ outBillNo, state, transferBillNo, fa
        VALUES (:out_bill_no, :claimer_openid, :amount_fen, :transfer_bill_no, :state, :fail_reason)
        ON DUPLICATE KEY UPDATE
          transfer_bill_no=COALESCE(VALUES(transfer_bill_no), transfer_bill_no),
-         fail_reason=COALESCE(VALUES(fail_reason), fail_reason),
+         fail_reason=IF(:state_success=1, NULL, COALESCE(VALUES(fail_reason), fail_reason)),
          state=${STATE_GUARD('VALUES(state)')},
          updated_at=CURRENT_TIMESTAMP`,
       {
@@ -424,6 +424,8 @@ export async function updateTransferState({ outBillNo, state, transferBillNo, fa
         fail_reason: failReason || null,
         new_terminal: newTerminal,
         state_nonempty: state ? 1 : 0,
+        // SUCCESS 纠正早前 FAIL（乱序回调/对账）时清掉旧失败原因，不给已到账的单留污名
+        state_success: String(state || '').toUpperCase() === 'SUCCESS' ? 1 : 0,
       }
     );
   } else {
@@ -432,7 +434,7 @@ export async function updateTransferState({ outBillNo, state, transferBillNo, fa
       `UPDATE transfers
          SET state=${STATE_GUARD(':state')},
              transfer_bill_no=COALESCE(:transfer_bill_no, transfer_bill_no),
-             fail_reason=COALESCE(:fail_reason, fail_reason),
+             fail_reason=IF(:state_success=1, NULL, COALESCE(:fail_reason, fail_reason)),
              updated_at=CURRENT_TIMESTAMP
        WHERE out_bill_no=:out_bill_no`,
       {
@@ -442,6 +444,7 @@ export async function updateTransferState({ outBillNo, state, transferBillNo, fa
         fail_reason: failReason || null,
         new_terminal: newTerminal,
         state_nonempty: state ? 1 : 0,
+        state_success: String(state || '').toUpperCase() === 'SUCCESS' ? 1 : 0,
       }
     );
   }
@@ -543,7 +546,7 @@ export async function listRewards({ limit = 50, offset = 0, status, days, target
             a.name AS created_by_name,
             ra.name AS revoked_by_name,
             t.claimer_openid, t.transfer_bill_no, t.state AS transfer_state,
-            t.updated_at AS transfer_updated_at
+            t.fail_reason, t.updated_at AS transfer_updated_at
        FROM rewards r
        LEFT JOIN transfers t ON t.out_bill_no = r.rid
        LEFT JOIN customers c ON c.external_userid = r.target_external_userid
@@ -924,6 +927,19 @@ export async function countPendingRewardsForTarget(externalUserid) {
   return { n: Number(rows[0].n), fen: Number(rows[0].fen) };
 }
 
+/** 「知悉水位」之后新出现的失败/关闭单数量（异常角标口径；水位为空则统计全部）。
+    用 >= 而不是 >：水位与 updated_at 都是秒级精度，ack 同一秒内之后新出现的失败
+    用 > 会被永久排除——宁可让同一秒里刚知悉的单多提醒一次（再点一次即清），绝不静默丢新失败 */
+export async function countUnackedFailures(ackAt) {
+  if (!pool) return 0;
+  const cond = ackAt ? 'AND updated_at >= :ack' : '';
+  const [[row]] = await pool.execute(
+    `SELECT COUNT(*) AS n FROM rewards WHERE status IN ('FAIL','CLOSED') ${cond}`,
+    ackAt ? { ack: ackAt } : {}
+  );
+  return Number(row.n);
+}
+
 /** 取一笔奖励的关键字段（撤回/领取拦截用） */
 export async function getReward(rid) {
   if (!pool || !rid) return null;
@@ -1049,6 +1065,7 @@ export const db = {
   saveNotifyEvent,
   listRewards,
   getStats,
+  countUnackedFailures,
   getSetting,
   setSetting,
   getPeriodStats,

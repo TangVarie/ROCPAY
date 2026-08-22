@@ -219,6 +219,8 @@
 }
 /* 批次视图操作行：整批撤回入口，紧贴汇总块右缘 */
 .batch-actions { display: flex; justify-content: flex-end; margin: -16rpx 0 20rpx; }
+/* 失败筛选下的"标记已处理"操作行 */
+.alert-actions { display: flex; justify-content: flex-end; margin: -4rpx 0 12rpx; }
 .sm-label { font-size: 26rpx; color: var(--text-light); }
 .sm-num { font-size: 80rpx; font-weight: 700; color: var(--text-dark); line-height: 1.15; margin-top: 8rpx; }
 .sm-sub { font-size: 24rpx; color: var(--text-light); margin-top: 6rpx; }
