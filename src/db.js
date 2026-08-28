@@ -27,7 +27,10 @@ if (dbEnabled) {
     enableKeepAlive: true,
     keepAliveInitialDelay: 10_000,
     charset: 'utf8mb4',
-    timezone: 'Z', // 统一按 UTC 存取，避免时区错乱
+    // 只影响【JS Date 对象】的序列化/反序列化，管不到 MySQL 自动盖的时间戳——
+    // CURRENT_TIMESTAMP/NOW() 按库服务器时区（云托管为北京时间）生成。所以：
+    // 与 NOW() 比较的时间一律取库时钟（getDbNow / FROM_UNIXTIME），不要用应用时钟的 UTC
+    timezone: 'Z',
     namedPlaceholders: true,
     dateStrings: true, // DATETIME 直接返回字符串，前端好显示
   };
@@ -288,9 +291,13 @@ export async function ping() {
   }
 }
 
-// 把 exp(unix秒) 转成 DATETIME 可接受的 Date；无则 null
-function expToDate(exp) {
-  return exp ? new Date(Number(exp) * 1000) : null;
+// 把 exp(unix秒) 规整成 FROM_UNIXTIME 可用的整数；无则 null（FROM_UNIXTIME(NULL)=NULL）。
+// 有效期必须经 FROM_UNIXTIME 写入而不是 JS Date：Date 会被驱动按 UTC 序列化，而所有
+// `expires_at > NOW()` 的比较（额度回流/领取校验/过期标签）用的是库服务器时区（北京时间）
+// 的 NOW()——两边基准差 8 小时，过期判定会提前 8 小时触发。FROM_UNIXTIME 按会话时区
+// 转换 unix 秒，天然与 NOW() 同基准。
+function expSec(exp) {
+  return exp ? Math.floor(Number(exp)) : null;
 }
 
 // 转账状态 → 奖励状态（只在终态时回写 rewards.status）。
@@ -326,7 +333,7 @@ export async function saveReward({ rid, amountFen, remark, name, createdBy, exp,
   if (!pool) return;
   await pool.execute(
     `INSERT INTO rewards (rid, amount_fen, remark, recipient_name, target_external_userid, batch_id, created_by, status, expires_at)
-     VALUES (:rid, :amount_fen, :remark, :recipient_name, :target, :batch_id, :created_by, 'CREATED', :expires_at)
+     VALUES (:rid, :amount_fen, :remark, :recipient_name, :target, :batch_id, :created_by, 'CREATED', FROM_UNIXTIME(:exp_ts))
      ON DUPLICATE KEY UPDATE amount_fen=VALUES(amount_fen), remark=VALUES(remark),
        recipient_name=VALUES(recipient_name), target_external_userid=VALUES(target_external_userid),
        created_by=VALUES(created_by)`,
@@ -338,7 +345,7 @@ export async function saveReward({ rid, amountFen, remark, name, createdBy, exp,
       target: targetExternalUserid || null,
       batch_id: batchId || null,
       created_by: clip(createdBy || '', 64),
-      expires_at: expToDate(exp),
+      exp_ts: expSec(exp),
     }
   );
 }
@@ -365,14 +372,14 @@ export async function recordClaim({
     await conn.beginTransaction();
     await conn.execute(
       `INSERT INTO rewards (rid, amount_fen, remark, recipient_name, status, expires_at)
-       VALUES (:rid, :amount_fen, :remark, :recipient_name, 'CLAIMED', :expires_at)
+       VALUES (:rid, :amount_fen, :remark, :recipient_name, 'CLAIMED', FROM_UNIXTIME(:exp_ts))
        ON DUPLICATE KEY UPDATE status=IF(status='CREATED','CLAIMED',status)`,
       {
         rid,
         amount_fen: amountFen,
         remark: clip(remark || '', 64),
         recipient_name: name ? clip(name, 64) : null,
-        expires_at: expToDate(exp),
+        exp_ts: expSec(exp),
       }
     );
     // transfers 主键=out_bill_no：不覆盖首个领取人；state 单调（不回退终态）
@@ -493,7 +500,7 @@ export async function saveNotifyEvent({ eventType, outBillNo, transferBillNo, st
 //   status: all|created(待领取·未过期)|expired(已过期未领)|waiting(待确认)|success|failed(含失败/关闭/撤回)
 //   days:   只看近 N 天（0=全部）；target: 只看某个客户（单人资金往来）；batch: 只看某一批次
 //   q:      关键词（备注模糊 / 单号 rid 精确 / 金额精确(元) / 客户备注名·昵称）
-//   month:  只看某个自然月（YYYY-MM；边界按库内 UTC 时间，与 days 的 NOW() 口径一致）
+//   month:  只看某个自然月（YYYY-MM；边界按库内时间——库服务器时区，与 days 的 NOW() 口径一致）
 // 过期口径与额度回流(QUOTA_CONSUMED_SQL)/领取校验一致：CREATED 且 expires_at 已过。
 // 过期单从未发起转账（钱没动过），所以不并入 failed，单独一档。
 const EXPIRED_SQL = `(r.status = 'CREATED' AND r.expires_at IS NOT NULL AND r.expires_at <= NOW())`;
