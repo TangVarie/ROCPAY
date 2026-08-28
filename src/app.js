@@ -384,7 +384,13 @@ app.get('/api/leaderboard', async (req, res) => {
     const wantLv = req.query.lv != null && req.query.lv !== '' ? Number(req.query.lv) : null;
     const b = wantLv != null ? buckets.find((x) => x.lv === wantLv) : null;
     const [rows, distRes] = await Promise.all([
-      db.getLeaderboard({ limit: LIMIT, offset, minFen: b ? b.minFen : null, maxFen: b ? b.maxFen : null }),
+      db.getLeaderboard({
+        limit: LIMIT,
+        offset,
+        minFen: b ? b.minFen : null,
+        maxFen: b ? b.maxFen : null,
+        viewerUserid: adminWecomUserid(getOpenid(req)), // 榜单名字优先显示查看者自己起的备注
+      }),
       offset === 0 ? db.getLeaderboardDist(buckets) : Promise.resolve(null), // 分布只在第一页算一次
     ]);
     const list = rows.map((r, i) => {
@@ -500,7 +506,8 @@ app.get('/api/rewards', async (req, res) => {
       month: String(req.query.month || ''),
     };
     const [list, stats] = await Promise.all([
-      db.listRewards({ limit, offset, ...filters }),
+      // 客户名个性化：小程序内按操作员工显示各自的备注；?key= 对账模式没有 openid，退回兜底单值
+      db.listRewards({ limit, offset, ...filters, viewerUserid: adminWecomUserid(getOpenid(req)) }),
       db.getStats(filters),
     ]);
     res.json({ list, stats });
@@ -664,6 +671,7 @@ app.get('/api/customers', async (req, res) => {
       db.searchCustomers({
         q,
         followUserid: String(req.query.follow || '').trim(),
+        viewerUserid: adminWecomUserid(getOpenid(req)), // 备注按操作员工个性化（''=未配企微账号，退回单值）
         limit,
         offset,
       }),

@@ -111,19 +111,21 @@ const DDL = [
      KEY idx_admins_role (role)
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='员工/管理员'`,
 
-  // 客户↔跟进员工 多对多。customers.follow_userid 只有一列，同一客户加了多个员工时
-  // 后同步的会覆盖先同步的；群发按 sender 分组必须知道完整的跟进关系，所以单独建表。
+  // 客户↔跟进员工 多对多。customers.follow_userid/remark 都只有一列，同一客户加了多个员工时
+  // 后同步的会覆盖先同步的；群发按 sender 分组要完整跟进关系、每个员工要看到自己起的备注，
+  // 所以这张表按 (客户, 跟进人) 存关系 + 各自的备注名。
   `CREATE TABLE IF NOT EXISTS customer_follows (
      external_userid VARCHAR(64) NOT NULL COMMENT '企微外部联系人ID',
      userid          VARCHAR(64) NOT NULL COMMENT '跟进员工的企微userid',
+     remark          VARCHAR(64) NOT NULL DEFAULT '' COMMENT '该跟进人给客户起的备注名(每人各自一份)',
      synced_at       DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
      PRIMARY KEY (external_userid, userid),
      KEY idx_cf_userid (userid)
-   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='客户-跟进员工多对多(群发sender分组用)'`,
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='客户-跟进员工多对多(群发sender分组+每人备注)'`,
 
   `CREATE TABLE IF NOT EXISTS customers (
      external_userid VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '企微外部联系人ID',
-     remark          VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '员工给客户的备注名(搜索主字段)',
+     remark          VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注名兜底单值(最后同步的跟进人的；每人各自的在customer_follows.remark)',
      name            VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '客户微信昵称',
      avatar          VARCHAR(512) NULL COMMENT '头像',
      corp_name       VARCHAR(128) NULL COMMENT '客户所在企业(如有)',
@@ -237,6 +239,12 @@ export async function migrate() {
     'rewards',
     'revoked_at',
     "revoked_at DATETIME NULL COMMENT '撤回操作时间' AFTER revoked_by"
+  );
+  // 老库补列：每个跟进人各自的客户备注名（补列后需重跑一次「从企微同步」回填）
+  await ensureColumn(
+    'customer_follows',
+    'remark',
+    "remark VARCHAR(64) NOT NULL DEFAULT '' COMMENT '该跟进人给客户起的备注名(每人各自一份)' AFTER userid"
   );
   await seedSuperAdmins(config.app.adminOpenids);
 }
@@ -514,11 +522,15 @@ function rewardFilterSql({ status = 'all', days = 0, target = '', batch = '', q 
   const kw = String(q || '').trim();
   if (kw) {
     // 客户名走子查询而不是 JOIN：getStats 不带 customers 表也能用同一段 WHERE，两边口径不劈叉
+    // 客户备注既匹配兜底单值(customers.remark)，也匹配任一跟进人各自的备注(customer_follows.remark)——
+    // 员工用自己起的备注搜台账必须能搜到，即使兜底单值被别的跟进人覆盖
     const ors = [
       `r.remark LIKE :kw_like`,
       `r.rid = :kw`,
       `r.target_external_userid IN
          (SELECT external_userid FROM customers WHERE remark LIKE :kw_like OR name LIKE :kw_like)`,
+      `r.target_external_userid IN
+         (SELECT external_userid FROM customer_follows WHERE remark LIKE :kw_like)`,
     ];
     params.kw_like = `%${kw}%`;
     params.kw = kw;
@@ -537,17 +549,19 @@ function rewardFilterSql({ status = 'all', days = 0, target = '', batch = '', q 
   return { where: conds.length ? `WHERE ${conds.join(' AND ')}` : '', params };
 }
 
-export async function listRewards({ limit = 50, offset = 0, status, days, target, batch, q, month } = {}) {
+export async function listRewards({ limit = 50, offset = 0, status, days, target, batch, q, month, viewerUserid = '' } = {}) {
   if (!pool) return [];
   const lim = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
   const off = Math.max(parseInt(offset, 10) || 0, 0);
   const { where, params } = rewardFilterSql({ status, days, target, batch, q, month });
+  // 客户名个性化：优先显示查看者(企微userid)自己给客户起的备注，兜底单值次之
+  params.viewer = viewerUserid || '';
   const [rows] = await pool.execute(
     `SELECT r.rid, r.amount_fen, r.remark, r.created_by, r.status,
             ${EXPIRED_SQL} AS is_expired,
             r.created_at, r.expires_at, r.target_external_userid, r.batch_id,
             r.revoked_by, r.revoked_at,
-            c.remark AS target_remark, c.name AS target_name,
+            COALESCE(NULLIF(vf.remark, ''), c.remark) AS target_remark, c.name AS target_name,
             a.name AS created_by_name,
             ra.name AS revoked_by_name,
             t.claimer_openid, t.transfer_bill_no, t.state AS transfer_state,
@@ -555,6 +569,8 @@ export async function listRewards({ limit = 50, offset = 0, status, days, target
        FROM rewards r
        LEFT JOIN transfers t ON t.out_bill_no = r.rid
        LEFT JOIN customers c ON c.external_userid = r.target_external_userid
+       LEFT JOIN customer_follows vf
+         ON vf.external_userid = r.target_external_userid AND vf.userid = :viewer
        LEFT JOIN admins a ON a.openid = r.created_by
        LEFT JOIN admins ra ON ra.openid = r.revoked_by
       ${where}
@@ -779,14 +795,15 @@ export async function upsertCustomer(c) {
       unionid: c.unionid || null,
     }
   );
-  // 跟进关系是多对多（客户可能加了多个员工），customers.follow_userid 会被后同步的覆盖，
-  // 这里把每条 (客户, 跟进人) 都记入 customer_follows，群发按 sender 分组时用
+  // 跟进关系是多对多（客户可能加了多个员工），customers.follow_userid/remark 会被后同步的覆盖，
+  // 这里把每条 (客户, 跟进人) 连同该跟进人自己起的备注一起记入 customer_follows：
+  // 群发按 sender 分组用关系，搜索/展示按操作员工优先取各自的备注（不再被别人的覆盖）
   if (c.followUserid) {
     await pool.execute(
-      `INSERT INTO customer_follows (external_userid, userid)
-       VALUES (:eu, :uid)
-       ON DUPLICATE KEY UPDATE synced_at=CURRENT_TIMESTAMP`,
-      { eu: c.externalUserid, uid: c.followUserid }
+      `INSERT INTO customer_follows (external_userid, userid, remark)
+       VALUES (:eu, :uid, :remark)
+       ON DUPLICATE KEY UPDATE remark=VALUES(remark), synced_at=CURRENT_TIMESTAMP`,
+      { eu: c.externalUserid, uid: c.followUserid, remark: clip(c.remark || '', 64) }
     );
   }
 }
@@ -820,27 +837,42 @@ export async function getFollowMap(eus = []) {
   return map;
 }
 
-/** 搜索客户（按备注名/昵称 LIKE）。返回是否已开过小程序(opened)。 */
-export async function searchCustomers({ q = '', followUserid = '', limit = 50, offset = 0 } = {}) {
+/**
+ * 搜索客户（按备注名/昵称 LIKE）。返回是否已开过小程序(opened)。
+ * 备注按操作员工个性化：viewerUserid=操作者的企微 userid（admins.wecom_userid 映射）。
+ *   展示：自己起的备注(customer_follows) → 兜底单值(customers.remark)；
+ *   匹配：自己的备注/兜底单值/昵称，搜不到时任一跟进人的备注也算命中（同事备注兜底可搜）；
+ *   排序：命中自己备注的排前面。未配置 wecom_userid 时 viewer 为空串，自然退回单值行为。
+ */
+export async function searchCustomers({ q = '', followUserid = '', viewerUserid = '', limit = 50, offset = 0 } = {}) {
   if (!pool) return [];
   const lim = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
   const off = Math.max(parseInt(offset, 10) || 0, 0);
   const where = [];
-  const params = {};
+  const params = { viewer: viewerUserid || '' };
   if (q) {
-    where.push('(remark LIKE :q OR name LIKE :q)');
+    where.push(`(vf.remark LIKE :q OR c.remark LIKE :q OR c.name LIKE :q
+      OR EXISTS (SELECT 1 FROM customer_follows af
+                  WHERE af.external_userid = c.external_userid AND af.remark LIKE :q))`);
     params.q = `%${q}%`;
   }
   if (followUserid) {
-    where.push('follow_userid = :fu');
+    where.push('c.follow_userid = :fu');
     params.fu = followUserid;
   }
   const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  // 搜索时命中自己备注的排最前；ORDER BY 里的 remark 是个性化后的别名（我的备注优先）
+  const rankSql = q ? '(vf.remark IS NOT NULL AND vf.remark LIKE :q) DESC, ' : '';
   const [rows] = await pool.query(
-    `SELECT external_userid, remark, name, avatar, corp_name, tags, follow_userid,
-            (openid IS NOT NULL) AS opened
-       FROM customers ${whereSql}
-      ORDER BY remark ASC, name ASC
+    `SELECT c.external_userid,
+            COALESCE(NULLIF(vf.remark, ''), c.remark) AS remark,
+            c.name, c.avatar, c.corp_name, c.tags, c.follow_userid,
+            (c.openid IS NOT NULL) AS opened
+       FROM customers c
+       LEFT JOIN customer_follows vf
+         ON vf.external_userid = c.external_userid AND vf.userid = :viewer
+      ${whereSql}
+      ORDER BY ${rankSql}remark ASC, name ASC
       LIMIT ${lim} OFFSET ${off}`,
     params
   );
@@ -1004,21 +1036,24 @@ export async function getClaimerProfile(openid) {
 /** 客户等级总榜：按真实到账（SUCCESS）以领取人 openid 聚合，联客户档案取名字 */
 // 客户等级榜（分页）。minFen/maxFen 用累计到账金额做区间筛选（对应等级门槛），
 // 由调用方按 LEVELS 换算传入；不传则全部。DESC 排序 + LIMIT/OFFSET 真分页，几千客户也能翻到底。
-export async function getLeaderboard({ limit = 50, offset = 0, minFen = null, maxFen = null } = {}) {
+export async function getLeaderboard({ limit = 50, offset = 0, minFen = null, maxFen = null, viewerUserid = '' } = {}) {
   if (!pool) return [];
   const lim = Math.max(1, Math.min(parseInt(limit, 10) || 50, 200));
   const off = Math.max(parseInt(offset, 10) || 0, 0);
   const having = [];
-  const params = {};
+  // 备注个性化：优先显示查看者自己起的备注（customer_follows），兜底单值次之
+  const params = { viewer: viewerUserid || '' };
   if (minFen != null) { having.push('fen >= :minFen'); params.minFen = Math.round(minFen); }
   if (maxFen != null) { having.push('fen < :maxFen'); params.maxFen = Math.round(maxFen); }
   const havingSql = having.length ? 'HAVING ' + having.join(' AND ') : '';
   const [rows] = await pool.query(
     `SELECT t.claimer_openid, COUNT(*) AS n, COALESCE(SUM(t.amount_fen),0) AS fen,
             MAX(c.external_userid) AS external_userid,
-            MAX(c.remark) AS remark, MAX(c.name) AS name
+            COALESCE(NULLIF(MAX(vf.remark), ''), MAX(c.remark)) AS remark, MAX(c.name) AS name
        FROM transfers t
        LEFT JOIN customers c ON c.openid = t.claimer_openid
+       LEFT JOIN customer_follows vf
+         ON vf.external_userid = c.external_userid AND vf.userid = :viewer
       WHERE t.state = 'SUCCESS'
       GROUP BY t.claimer_openid
       ${havingSql}
