@@ -2,7 +2,9 @@
 
   <!-- 识别中：品牌双箭加载动效（蓝→红依次亮起） -->
   <view class="state" wx:if="{{mode==='loading'}}">
-    <view class="chev-spinner state-icon" aria-label="加载中"></view>
+    <view class="band-spinner state-icon" aria-label="加载中">
+        <view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view>
+      </view>
     <view class="state-t1">正在为你查看奖励</view>
     <view class="state-t2">通常只需要一两秒</view>
   </view>
@@ -57,7 +59,7 @@
       <view class="lv-next t-hint" wx:if="{{profile.nextText}}">{{profile.nextText}}</view>
     </view>
 
-    <!-- 下半版面：品牌大字报（到账后用正红呼应奖励色） -->
+    <!-- 下半版面：品牌大字报（到账后用赭石呼应奖励色） -->
     <view class="wm-zone">
       <view class="wm {{status==='ok' ? 'wm-red' : ''}} num">ROC</view>
       <view class="wm-line">梨响 ROC · 奖励，说到做到</view>
@@ -79,7 +81,7 @@
       </view>
 
       <!-- 资金异常主动亮出来：失败/被关闭（不含主动撤回），点击直达失败台账 -->
-      <view class="block tint-blush ah-alert" wx:if="{{adminHome && adminHome.failCount > 0}}" bindtap="goFailed">
+      <view class="block ah-alert" wx:if="{{adminHome && adminHome.failCount > 0}}" bindtap="goFailed">
         <view class="ah-alert-t">待处理异常 <text class="num">{{adminHome.failCount}}</text> 笔</view>
         <view class="ah-alert-s">转账失败或被关闭，点击查看失败台账</view>
       </view>

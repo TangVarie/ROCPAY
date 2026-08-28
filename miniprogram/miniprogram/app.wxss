@@ -1,8 +1,10 @@
 /* ============================================================
-   BYWOOD 设计系统 · 对齐品牌 frontend-kit v2（DESIGN.md + tokens/miniprogram.wxss）
-   编辑部亮色块 × BYWOOD 品牌色：藏蓝 #235E8E + 正红 #D9232B
+   BYWOOD 设计系统 · 对齐 v5.0.1（DESIGN.md + BRAND.md + tokens/miniprogram.wxss）
+   编辑部亮色块 × BYWOOD 品牌色（v5 换届）：藏青 #1C4F62 + 赭石 #B8502F
+   —— 旧藏蓝 #235E8E × 正红 #D9232B 双色制随标志换山形整体退役（BRAND.md §2）
+   蓝=动作与结构，赭=价值与增长（金额/收益/高亮），语义色只表状态
    画布比表面深一档（白块无阴影也能"浮起成形"）；黑色阶文字；禁 emoji/渐变/毛玻璃
-   直角制度（v2.1）：一切容器/按钮/输入/chip/徽标 border-radius: 0，
+   直角制度：一切容器/按钮/输入/chip/徽标 border-radius: 0，
    "圆"只存在于状态圆点与圆头笔画（tab-dot、勾选画勾）
    ============================================================ */
 page {
@@ -11,16 +13,19 @@ page {
   --r-control: 0;
   --r-badge: 0;
   --r-check: 0;
-  /* 品牌 */
-  --primary: #235e8e;
-  --primary-dark: #1b4a72;
-  --accent: #d9232b;
-  --money: #d9232b;
-  --block-blue: #235e8e;
-  --block-red: #d9232b;
-  --tint-sky: #e3edf5;
-  --tint-blush: #fbe3e3;
-  /* 语义（标签文字用加深档）。danger 与"奖励/钱"的正红拉开语义，值随 kit v2 */
+  /* 品牌（v5 palette.json screen 节）。
+     --primary 供色块/按钮底（深色模式不翻转，白字恒 8.96:1）；
+     --primary-onbg 供品牌色"文字/细指示"（浅色=主色本尊，深色翻提亮档保对比） */
+  --primary: #1c4f62;
+  --primary-dark: #123a48;
+  --primary-onbg: #1c4f62;
+  --accent: #b8502f;
+  --money: #b8502f;
+  --block-blue: #1c4f62;
+  --block-red: #b8502f;
+  --tint-sky: #e3efef;
+  --tint-blush: #f8eae2;
+  /* 语义（标签文字用加深档）。语义色只表状态，与赭石"价值/金额"不同源不混用 */
   --success: #00b578;
   --success-deep: #006b4a;
   --warning: #ff8f1f;
@@ -120,7 +125,7 @@ page {
 .btn:active { transform: scale(0.98); }
 .btn-blue { background: var(--primary); color: #ffffff; }
 .btn-blue:active { background: var(--primary-dark); }
-.btn-blue[disabled] { background: rgba(35, 94, 142, 0.35); color: rgba(255, 255, 255, 0.9); }
+.btn-blue[disabled] { background: rgba(28, 79, 98, 0.35); color: rgba(255, 255, 255, 0.9); }
 .btn-fill { background: var(--fill); color: var(--text-dark); }
 .btn-fill:active { background: rgba(0, 0, 0, 0.08); }
 .btn-red { background: var(--danger); color: #ffffff; }
@@ -167,7 +172,7 @@ page {
 .badge-success { background: rgba(0, 181, 120, 0.1); color: var(--success-deep); }
 .badge-warning { background: rgba(255, 143, 31, 0.1); color: var(--warning-deep); }
 .badge-danger { background: rgba(217, 43, 60, 0.1); color: var(--danger-dark); }
-.badge-blue { background: rgba(35, 94, 142, 0.1); color: var(--primary); }
+.badge-blue { background: rgba(28, 79, 98, 0.1); color: var(--primary-onbg); }
 .badge-muted { background: var(--fill); color: var(--text-light); } /* 已过期等中性态：灰底灰字，明暗模式随变量翻转 */
 
 /* ---- 输入（kit 定式：直角 + border-strong 描边 + 高 96rpx/48px）----
@@ -217,11 +222,11 @@ page {
   line-height: 1.05;
   letter-spacing: -8rpx;
   white-space: nowrap;
-  color: rgba(35, 94, 142, 0.08); /* 藏蓝极淡（kit 装饰透明度 8–12% 档下限） */
+  color: rgba(28, 79, 98, 0.08); /* 藏青极淡（v5 装饰透明度 8–12% 档下限） */
   margin-left: -6rpx; /* 轻微出血，版面感 */
 }
 .wm-num { font-size: 150rpx; letter-spacing: -4rpx; }
-.wm-red { color: rgba(217, 35, 43, 0.08); }
+.wm-red { color: rgba(184, 80, 47, 0.08); } /* 赭石极淡（到账后呼应奖励块） */
 .wm-line {
   margin-top: 8rpx;
   font-size: 24rpx;
@@ -229,36 +234,27 @@ page {
   color: var(--text-faint);
 }
 
-/* ---- 品牌双箭加载动效（kit v2 .chev-spinner 的 WXSS 移植，代替泛用转圈）----
-   规格沿用标志几何：38×28 视窗、stroke 7、圆头圆角、固定朝右、蓝前红后，
-   蓝 → 红依次亮起（红滞后 0.18s）。小程序无内联 SVG，用双层 data-URI 背景实现 */
-.chev-spinner {
-  position: relative;
-  width: 76rpx;
-  height: 56rpx;
+/* ---- 品牌山形弧带加载动效（v5 .band-spinner，双箭 .chev-spinner 已随旧标退役）----
+   四条横条自上而下递增宽度、由下至上逐层点亮，复刻山形的层叠感；
+   只用主色一色做明暗递进（小程序无内联 SVG，用横条近似，规格随 tokens/miniprogram.wxss）。
+   颜色走 --primary-onbg：浅色=藏青、深色自动翻提亮档，无需第二套深色实现 */
+.band-spinner {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
 }
-.chev-spinner::before,
-.chev-spinner::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: contain;
-  animation: chevPulse 1.1s infinite;
+.band-spinner .band {
+  height: 6rpx;
+  background: var(--primary-onbg);
+  animation: bandRise 1.2s infinite;
 }
-.chev-spinner::before {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 38 28'%3E%3Cpath d='M5 4 L15 14 L5 24' fill='none' stroke='%23235e8e' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-}
-.chev-spinner::after {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 38 28'%3E%3Cpath d='M21 4 L31 14 L21 24' fill='none' stroke='%23d9232b' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  animation-delay: 0.18s;
-}
-@keyframes chevPulse {
-  0%, 100% { opacity: 0.25; }
+.band-spinner .band-1 { width: 40rpx; animation-delay: 0.36s; }
+.band-spinner .band-2 { width: 64rpx; animation-delay: 0.24s; }
+.band-spinner .band-3 { width: 88rpx; animation-delay: 0.12s; }
+.band-spinner .band-4 { width: 112rpx; animation-delay: 0s; }
+@keyframes bandRise {
+  0%, 100% { opacity: 0.22; }
   35% { opacity: 1; }
 }
 
@@ -275,29 +271,31 @@ page {
 .stagger-in > view:nth-child(5) { animation-delay: 220ms; }
 .stagger-in > view:nth-child(6) { animation-delay: 275ms; }
 
-/* 尊重系统「减弱动态效果」（kit v2）：入场/庆祝动效停用；
+/* 尊重系统「减弱动态效果」：入场/庆祝动效停用；
    加载是功能性动效——放慢而不是停掉 */
 @media (prefers-reduced-motion: reduce) {
   .stagger-in > view { animation: none; }
-  .chev-spinner::before,
-  .chev-spinner::after { animation-duration: 1.5s; }
+  .band-spinner .band { animation-duration: 1.8s; }
 }
 
 /* ============================================================
    深色模式（app.json darkmode:true + theme.json 管导航栏；这里翻转 token）
-   原则：品牌色块（藏蓝/正红大块 + 白字）不动，只翻画布/表面/文字黑阶/分隔；
+   原则（v5 DESIGN.md §2）：品牌深色块（藏青/赭石大块 + 白字）不动——
+   --primary/--block-blue/--block-red 恒定，白字对比 8.96:1 两种模式都成立；
+   只翻画布/表面/文字黑阶/分隔/浅调块，品牌色"文字"走 --primary-onbg 提亮档。
    语义"加深档"文字在暗底上反向改亮档，danger 文字同理提亮保对比
    ============================================================ */
 @media (prefers-color-scheme: dark) {
   page {
-    /* 深色 token 值 = kit v2 官方翻转表（DESIGN.md §2 / tokens/miniprogram.wxss） */
-    --primary: #3f7fb2;
-    --primary-dark: #346892;
-    --accent: #e8575c;
-    --money: #e8575c;
-    --block-red: #c22329;
-    --tint-sky: #1e3b54;
-    --tint-blush: #442228;
+    /* 推导色注释（BRAND.md §2 取值/推导制度）：
+       primary-onbg #3d90ae = 藏青 HSL 提亮至 L46/S48（暗底文字与细指示，~4.8:1）；
+       accent #d97e55 = 赭石提亮档（暗底金额/链接文字，~6:1）；
+       tint 深形态 = 同色相降明度（浅调块在暗底的对应物，块内文字色阶自动翻转可读） */
+    --primary-onbg: #3d90ae;
+    --accent: #d97e55;
+    --money: #d97e55;
+    --tint-sky: #173a44;
+    --tint-blush: #3f2a1e;
     --success: #21b183;
     --success-deep: #4ad39f;
     --warning: #ffa24d;
@@ -318,16 +316,9 @@ page {
   }
   /* 线性图标是黑描边 data URI，CSS 改不了 stroke：整体反相，黑/30 → 白/30 */
   .li { filter: invert(1); }
-  /* 双箭加载动效换深色档描边（kit 深色 primary/accent），data URI 无法吃 token 只能整图替换 */
-  .chev-spinner::before {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 38 28'%3E%3Cpath d='M5 4 L15 14 L5 24' fill='none' stroke='%233f7fb2' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  }
-  .chev-spinner::after {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 38 28'%3E%3Cpath d='M21 4 L31 14 L21 24' fill='none' stroke='%23e8575c' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  }
   .cb { border-color: rgba(255, 255, 255, 0.25); }
   .btn-fill:active { background: rgba(255, 255, 255, 0.12); }
-  /* 大字报水印：品牌色极淡在暗底上不可见，换亮调同样极淡 */
-  .wm { color: rgba(126, 179, 220, 0.1); }
-  .wm-red { color: rgba(226, 96, 103, 0.09); }
+  /* 大字报水印：品牌色极淡在暗底上不可见，换亮调同样极淡（青/赭提亮档） */
+  .wm { color: rgba(110, 175, 195, 0.1); }
+  .wm-red { color: rgba(217, 126, 85, 0.09); }
 }

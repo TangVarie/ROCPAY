@@ -434,8 +434,11 @@ app.post('/api/alerts/ack', async (req, res) => {
   if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
   try {
-    // UTC 格式化，与库内 DATETIME（timezone 'Z'）同基准可比
-    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    // 水位必须取【数据库时钟】：rewards.updated_at 由 MySQL CURRENT_TIMESTAMP 按库服务器
+    // 时区（云托管为北京时间）生成，此前用应用时钟的 UTC 写水位，两边差 8 小时——
+    // 失败落库后的 8 小时内 updated_at >= 水位 恒成立，怎么标记都清不掉（线上实测复现）
+    const now = await db.getDbNow();
+    if (!now) return res.status(500).json({ error: '取数据库时间失败，请重试' });
     await db.setSetting('fail_ack_at', now);
     res.json({ ok: true, ackAt: now });
   } catch (e) {

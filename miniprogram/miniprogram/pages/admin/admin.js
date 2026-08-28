@@ -393,7 +393,7 @@ Page({
       title: '确认发放',
       content,
       confirmText: '确认发放',
-      confirmColor: '#235e8e',
+      confirmColor: '#1c4f62', // v5 藏青主色（系统弹窗吃不到 CSS token，只能写值）
       success: (r) => { if (r.confirm) this._doSubmitBatch(); },
     });
   },
@@ -999,7 +999,7 @@ Page({
     wx.showModal({
       title: '移除员工',
       content: '确定移除该员工的发放权限？',
-      confirmColor: '#d92b3c', // 与撤回等危险操作同用 --danger（kit v2 #d92b3c），不许第二种红散落
+      confirmColor: '#d92b3c', // 与撤回等危险操作同用 --danger（v5 语义色 #d92b3c），不许第二种红散落
       success: (r) => {
         if (!r.confirm) return;
         call('/api/admins/remove', 'POST', { openid })
