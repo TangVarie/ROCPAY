@@ -111,3 +111,22 @@ CREATE TABLE IF NOT EXISTS settings (
   v          TEXT         NULL COMMENT '设置值',
   updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通用键值设置(如打款周期)';
+
+-- ============================================================
+--  老库升级（幂等，可重复执行）
+--  CREATE TABLE IF NOT EXISTS 对已存在的表不会补新列；DB_AUTO_MIGRATE=true（默认）
+--  时后端启动会自动补列，无需执行本段；关闭自动迁移、手动维护表结构的库，
+--  升级时请连同上文一起执行本段（MySQL 无 ADD COLUMN IF NOT EXISTS，
+--  这里用 information_schema 判断后动态执行，已有该列时自动跳过）。
+-- ============================================================
+
+-- customer_follows.remark：每个跟进人各自的客户备注名（执行后需重跑一次「从企微同步」回填）
+SET @cf_has_remark := (
+  SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema = DATABASE() AND table_name = 'customer_follows' AND column_name = 'remark');
+SET @cf_ddl := IF(@cf_has_remark = 0,
+  'ALTER TABLE customer_follows ADD COLUMN remark VARCHAR(64) NOT NULL DEFAULT '''' COMMENT ''该跟进人给客户起的备注名(每人各自一份)'' AFTER userid',
+  'SELECT ''customer_follows.remark 已存在，跳过'' AS note');
+PREPARE cf_stmt FROM @cf_ddl;
+EXECUTE cf_stmt;
+DEALLOCATE PREPARE cf_stmt;

@@ -808,6 +808,36 @@ export async function upsertCustomer(c) {
   }
 }
 
+/** DB 时钟的当前时间（DATETIME 字符串）。同步水位用 DB 时钟，避免应用与库时钟漂移误删 */
+export async function getDbNow() {
+  if (!pool) return '';
+  const [[row]] = await pool.query(`SELECT NOW() AS t`);
+  return row && row.t ? String(row.t) : '';
+}
+
+/**
+ * 清理某员工「本轮同步没再出现」的跟进行：该员工全量翻页完成后，
+ * synced_at 早于本轮起始水位的行 = 企微已不再返回的 (客户,员工) 关系（转接/删除），
+ * 连同旧备注一起退场，不再参与个性化展示与搜索。返回删除行数。
+ */
+export async function pruneCustomerFollows(userid, sinceDbTime) {
+  if (!pool || !userid || !sinceDbTime) return 0;
+  const [r] = await pool.execute(
+    `DELETE FROM customer_follows WHERE userid = :uid AND synced_at < :since`,
+    { uid: userid, since: sinceDbTime }
+  );
+  return (r && r.affectedRows) || 0;
+}
+
+/** 全量同步收尾：删除不在员工名单里的所有跟进行（离职/被移出「客户联系」的员工整体退场）。
+ *  只允许在「自动发现全员」的全量同步末尾调用——指定 userids 子集同步时绝不能用（会误删他人）。 */
+export async function pruneFollowsNotIn(userids = []) {
+  if (!pool || !userids.length) return 0;
+  const ph = userids.map(() => '?').join(',');
+  const [r] = await pool.query(`DELETE FROM customer_follows WHERE userid NOT IN (${ph})`, userids);
+  return (r && r.affectedRows) || 0;
+}
+
 /**
  * 查一批客户的完整跟进人列表：external_userid -> [userid...]。
  * customer_follows 还没数据的客户（改版后未重新同步）退回 customers.follow_userid 单值。
@@ -1117,6 +1147,9 @@ export const db = {
   deleteAdmin,
   countEnabledSupers,
   upsertCustomer,
+  getDbNow,
+  pruneCustomerFollows,
+  pruneFollowsNotIn,
   getFollowMap,
   searchCustomers,
   getLastSyncAt,

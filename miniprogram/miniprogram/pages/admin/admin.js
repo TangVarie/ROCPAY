@@ -268,14 +268,15 @@ Page({
   syncCustomers() {
     if (this.data.syncing) return;
     this.setData({ syncing: true, sendErr: '' });
-    const step = (startIndex, cursor, acc) =>
-      call('/api/customers/sync', 'POST', { startIndex, cursor }).then((res) => {
+    // uidStartAt：后端各员工同步的起始水位（清理已转走跟进关系用），partial 续传时原样带回
+    const step = (startIndex, cursor, uidStartAt, acc) =>
+      call('/api/customers/sync', 'POST', { startIndex, cursor, uidStartAt }).then((res) => {
         if (res && res.error) throw new Error(res.error);
         const total = acc + (res.synced || 0);
-        if (res.partial) return step(res.nextIndex, res.nextCursor || '', total);
+        if (res.partial) return step(res.nextIndex, res.nextCursor || '', res.uidStartAt || '', total);
         return total;
       });
-    step(0, '', 0)
+    step(0, '', '', 0)
       .then((total) => {
         this.setData({ syncing: false });
         wx.showToast({ title: `已同步 ${total} 位客户`, icon: 'success' });
