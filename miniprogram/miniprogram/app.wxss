@@ -168,6 +168,7 @@ page {
 .badge-warning { background: rgba(255, 143, 31, 0.1); color: var(--warning-deep); }
 .badge-danger { background: rgba(217, 43, 60, 0.1); color: var(--danger-dark); }
 .badge-blue { background: rgba(35, 94, 142, 0.1); color: var(--primary); }
+.badge-muted { background: var(--fill); color: var(--text-light); } /* 已过期等中性态：灰底灰字，明暗模式随变量翻转 */
 
 /* ---- 输入（kit 定式：直角 + border-strong 描边 + 高 96rpx/48px）----
    小程序 input 是原生组件：必须给固定 height（并配 line-height），

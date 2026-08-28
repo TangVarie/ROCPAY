@@ -73,20 +73,21 @@ CREATE TABLE IF NOT EXISTS admins (
   KEY idx_admins_role (role)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='员工/管理员';
 
--- 客户↔跟进员工 多对多（customers.follow_userid 只有一列，多跟进时会互相覆盖；
--- 群发按 sender 分组需要完整跟进关系，所以单独记一张表）
+-- 客户↔跟进员工 多对多（customers.follow_userid/remark 都只有一列，多跟进时会互相覆盖；
+-- 群发按 sender 分组需要完整跟进关系，每个员工要看到自己起的备注，所以单独记一张表）
 CREATE TABLE IF NOT EXISTS customer_follows (
   external_userid VARCHAR(64) NOT NULL COMMENT '企微外部联系人ID',
   userid          VARCHAR(64) NOT NULL COMMENT '跟进员工的企微userid',
+  remark          VARCHAR(64) NOT NULL DEFAULT '' COMMENT '该跟进人给客户起的备注名(每人各自一份)',
   synced_at       DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (external_userid, userid),
   KEY idx_cf_userid (userid)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='客户-跟进员工多对多(群发sender分组用)';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='客户-跟进员工多对多(群发sender分组+每人备注)';
 
 -- 企微客户缓存 + 身份映射（P2·按备注名搜索、unionid 定向桥）
 CREATE TABLE IF NOT EXISTS customers (
   external_userid VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '企微外部联系人ID',
-  remark          VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '员工给客户的备注名(搜索主字段)',
+  remark          VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注名兜底单值(最后同步的跟进人的；每人各自的在customer_follows.remark)',
   name            VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '客户微信昵称',
   avatar          VARCHAR(512) NULL,
   corp_name       VARCHAR(128) NULL,
@@ -110,3 +111,22 @@ CREATE TABLE IF NOT EXISTS settings (
   v          TEXT         NULL COMMENT '设置值',
   updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通用键值设置(如打款周期)';
+
+-- ============================================================
+--  老库升级（幂等，可重复执行）
+--  CREATE TABLE IF NOT EXISTS 对已存在的表不会补新列；DB_AUTO_MIGRATE=true（默认）
+--  时后端启动会自动补列，无需执行本段；关闭自动迁移、手动维护表结构的库，
+--  升级时请连同上文一起执行本段（MySQL 无 ADD COLUMN IF NOT EXISTS，
+--  这里用 information_schema 判断后动态执行，已有该列时自动跳过）。
+-- ============================================================
+
+-- customer_follows.remark：每个跟进人各自的客户备注名（执行后需重跑一次「从企微同步」回填）
+SET @cf_has_remark := (
+  SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema = DATABASE() AND table_name = 'customer_follows' AND column_name = 'remark');
+SET @cf_ddl := IF(@cf_has_remark = 0,
+  'ALTER TABLE customer_follows ADD COLUMN remark VARCHAR(64) NOT NULL DEFAULT '''' COMMENT ''该跟进人给客户起的备注名(每人各自一份)'' AFTER userid',
+  'SELECT ''customer_follows.remark 已存在，跳过'' AS note');
+PREPARE cf_stmt FROM @cf_ddl;
+EXECUTE cf_stmt;
+DEALLOCATE PREPARE cf_stmt;

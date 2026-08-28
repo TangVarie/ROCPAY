@@ -268,14 +268,15 @@ Page({
   syncCustomers() {
     if (this.data.syncing) return;
     this.setData({ syncing: true, sendErr: '' });
-    const step = (startIndex, cursor, acc) =>
-      call('/api/customers/sync', 'POST', { startIndex, cursor }).then((res) => {
+    // uidStartAt：后端各员工同步的起始水位（清理已转走跟进关系用），partial 续传时原样带回
+    const step = (startIndex, cursor, uidStartAt, acc) =>
+      call('/api/customers/sync', 'POST', { startIndex, cursor, uidStartAt }).then((res) => {
         if (res && res.error) throw new Error(res.error);
         const total = acc + (res.synced || 0);
-        if (res.partial) return step(res.nextIndex, res.nextCursor || '', total);
+        if (res.partial) return step(res.nextIndex, res.nextCursor || '', res.uidStartAt || '', total);
         return total;
       });
-    step(0, '', 0)
+    step(0, '', '', 0)
       .then((total) => {
         this.setData({ syncing: false });
         wx.showToast({ title: `已同步 ${total} 位客户`, icon: 'success' });
@@ -618,6 +619,9 @@ Page({
         const map = { SUCCESS: '已到账', WAIT_USER_CONFIRM: '待确认', FAIL: '失败', CLOSED: '已关闭', CANCELLED: '已撤回', CANCELING: '撤销中', CREATED: '待领取', CLAIMED: '待确认' };
         const records = res.list.map((r) => {
           const st = r.transfer_state || r.status || 'CREATED';
+          // 过期未领（后端按 expires_at 判定）：链接已不可领、钱没动过、额度已回流——
+          // 灰标"已过期"，和还能领的"待领取"分开，免得看着像钱悬在外面
+          const expired = st === 'CREATED' && !!r.is_expired;
           const by = r.created_by_name || '';
           const full = (r.created_at || '').replace('T', ' ');
           return {
@@ -627,9 +631,10 @@ Page({
             sub: (r.remark || '客户奖励') + (by ? ' · ' + by + ' 发放' : ''),
             who: r.target_remark || r.target_name || (r.target_external_userid ? '定向客户' : ''),
             eu: r.target_external_userid || '',
-            statusText: map[st] || st,
-            cls:
-              st === 'SUCCESS'
+            statusText: expired ? '已过期' : map[st] || st,
+            cls: expired
+              ? 'muted'
+              : st === 'SUCCESS'
                 ? 'ok'
                 : st === 'FAIL' || st === 'CLOSED' || st === 'CANCELLED' || st === 'CANCELING'
                 ? 'fail'

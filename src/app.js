@@ -384,7 +384,13 @@ app.get('/api/leaderboard', async (req, res) => {
     const wantLv = req.query.lv != null && req.query.lv !== '' ? Number(req.query.lv) : null;
     const b = wantLv != null ? buckets.find((x) => x.lv === wantLv) : null;
     const [rows, distRes] = await Promise.all([
-      db.getLeaderboard({ limit: LIMIT, offset, minFen: b ? b.minFen : null, maxFen: b ? b.maxFen : null }),
+      db.getLeaderboard({
+        limit: LIMIT,
+        offset,
+        minFen: b ? b.minFen : null,
+        maxFen: b ? b.maxFen : null,
+        viewerUserid: adminWecomUserid(getOpenid(req)), // 榜单名字优先显示查看者自己起的备注
+      }),
       offset === 0 ? db.getLeaderboardDist(buckets) : Promise.resolve(null), // 分布只在第一页算一次
     ]);
     const list = rows.map((r, i) => {
@@ -488,7 +494,7 @@ app.get('/api/rewards', async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
-    // 台账筛选：status=created|waiting|success|failed，days=近N天，target=某客户（单人往来），
+    // 台账筛选：status=created|expired|waiting|success|failed，days=近N天，target=某客户（单人往来），
     // batch=某一批次，q=关键词（备注/单号/金额/客户名），month=自然月 YYYY-MM
     // 列表和 stats 用同一组筛选 → stats 即"筛选范围内的资金消耗汇总"
     const filters = {
@@ -500,7 +506,8 @@ app.get('/api/rewards', async (req, res) => {
       month: String(req.query.month || ''),
     };
     const [list, stats] = await Promise.all([
-      db.listRewards({ limit, offset, ...filters }),
+      // 客户名个性化：小程序内按操作员工显示各自的备注；?key= 对账模式没有 openid，退回兜底单值
+      db.listRewards({ limit, offset, ...filters, viewerUserid: adminWecomUserid(getOpenid(req)) }),
       db.getStats(filters),
     ]);
     res.json({ list, stats });
@@ -664,6 +671,7 @@ app.get('/api/customers', async (req, res) => {
       db.searchCustomers({
         q,
         followUserid: String(req.query.follow || '').trim(),
+        viewerUserid: adminWecomUserid(getOpenid(req)), // 备注按操作员工个性化（''=未配企微账号，退回单值）
         limit,
         offset,
       }),
@@ -692,21 +700,30 @@ app.post('/api/customers/sync', async (req, res) => {
   const startAt = Date.now();
   try {
     // 不传 userids 时，自动发现所有配置了「客户联系」的员工，全量同步
-    let userids = Array.isArray((req.body || {}).userids) ? req.body.userids.filter(Boolean) : [];
+    const bodyUserids = Array.isArray((req.body || {}).userids) ? req.body.userids.filter(Boolean) : [];
+    const explicit = bodyUserids.length > 0; // 指定子集同步：只动这些员工的行，收尾清理绝不越界
+    let userids = bodyUserids;
     if (!userids.length) userids = await wecom.getFollowUserList();
     if (!userids.length) {
       return res.status(400).json({ error: '企微里没有配置「客户联系」的员工（请在企微后台把负责客户的员工加入客户联系使用范围）' });
     }
     const startIndex = Math.min(Math.max(Number((req.body || {}).startIndex) || 0, 0), userids.length);
     const startCursor = typeof (req.body || {}).cursor === 'string' ? req.body.cursor : '';
+    // 各员工同步的起始水位（DB 时钟，跨 partial 续传由前端带回）：员工全量翻页完成后，
+    // 删掉 synced_at 早于水位的行——企微本轮没再返回的 (客户,员工) 关系（转接/删除）连同旧备注退场。
+    // 续传请求缺水位（老前端）时该员工跳过清理：宁可留旧行等下轮，不冒误删风险
+    const startAtRaw = String((req.body || {}).uidStartAt || '');
+    let uidStartAt = startCursor && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(startAtRaw) ? startAtRaw : '';
     let synced = 0;
+    let pruned = 0;
     for (let i = startIndex; i < userids.length; i++) {
       const uid = userids[i];
       let cursor = i === startIndex ? startCursor : '';
+      if (!cursor) uidStartAt = await db.getDbNow(); // 该员工从头拉：取新水位
       let guard = 0;
       do {
         if (Date.now() - startAt > DEADLINE_MS) {
-          return res.json({ ok: true, partial: true, synced, nextIndex: i, nextCursor: cursor, totalStaff: userids.length });
+          return res.json({ ok: true, partial: true, synced, nextIndex: i, nextCursor: cursor, uidStartAt, totalStaff: userids.length });
         }
         const d = await wecom.batchGetByUser([uid], cursor, 100);
         const contacts = (d.external_contact_list || [])
@@ -719,8 +736,12 @@ app.post('/api/customers/sync', async (req, res) => {
         synced += contacts.length;
         cursor = d.next_cursor || '';
       } while (cursor && ++guard < 200);
+      // cursor 耗尽 = 该员工全量翻页完成，可安全清理；guard 打满属于防御性中断，不清、留待下轮
+      if (!cursor && uidStartAt) pruned += await db.pruneCustomerFollows(uid, uidStartAt);
     }
-    res.json({ ok: true, synced, totalStaff: userids.length });
+    // 自动发现全员的全量同步收尾：名单之外员工（离职/被移出「客户联系」）的跟进行整体退场
+    if (!explicit) pruned += await db.pruneFollowsNotIn(userids);
+    res.json({ ok: true, synced, pruned, totalStaff: userids.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
