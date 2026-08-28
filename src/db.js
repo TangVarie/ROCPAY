@@ -482,15 +482,19 @@ export async function saveNotifyEvent({ eventType, outBillNo, transferBillNo, st
  * 数据最小化：不返回 recipient_name（真实姓名·PII）；如需按单查姓名请单独走审计。
  */
 // 台账筛选条件 → WHERE 子句（listRewards/getStats 共用，保证列表和汇总口径一致）
-//   status: all|created(待领取)|waiting(待确认)|success|failed(含失败/关闭/撤回)
+//   status: all|created(待领取·未过期)|expired(已过期未领)|waiting(待确认)|success|failed(含失败/关闭/撤回)
 //   days:   只看近 N 天（0=全部）；target: 只看某个客户（单人资金往来）；batch: 只看某一批次
 //   q:      关键词（备注模糊 / 单号 rid 精确 / 金额精确(元) / 客户备注名·昵称）
 //   month:  只看某个自然月（YYYY-MM；边界按库内 UTC 时间，与 days 的 NOW() 口径一致）
+// 过期口径与额度回流(QUOTA_CONSUMED_SQL)/领取校验一致：CREATED 且 expires_at 已过。
+// 过期单从未发起转账（钱没动过），所以不并入 failed，单独一档。
+const EXPIRED_SQL = `(r.status = 'CREATED' AND r.expires_at IS NOT NULL AND r.expires_at <= NOW())`;
 function rewardFilterSql({ status = 'all', days = 0, target = '', batch = '', q = '', month = '' } = {}) {
   const conds = [];
   const params = {};
   const st = String(status || 'all');
-  if (st === 'created') conds.push(`r.status = 'CREATED'`);
+  if (st === 'created') conds.push(`r.status = 'CREATED' AND (r.expires_at IS NULL OR r.expires_at > NOW())`);
+  else if (st === 'expired') conds.push(EXPIRED_SQL);
   else if (st === 'waiting') conds.push(`r.status = 'CLAIMED'`);
   else if (st === 'success') conds.push(`r.status = 'SUCCESS'`);
   else if (st === 'failed') conds.push(`r.status IN ('FAIL','CLOSED','CANCELLED')`);
@@ -540,6 +544,7 @@ export async function listRewards({ limit = 50, offset = 0, status, days, target
   const { where, params } = rewardFilterSql({ status, days, target, batch, q, month });
   const [rows] = await pool.execute(
     `SELECT r.rid, r.amount_fen, r.remark, r.created_by, r.status,
+            ${EXPIRED_SQL} AS is_expired,
             r.created_at, r.expires_at, r.target_external_userid, r.batch_id,
             r.revoked_by, r.revoked_at,
             c.remark AS target_remark, c.name AS target_name,

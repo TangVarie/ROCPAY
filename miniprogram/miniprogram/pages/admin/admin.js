@@ -618,6 +618,9 @@ Page({
         const map = { SUCCESS: '已到账', WAIT_USER_CONFIRM: '待确认', FAIL: '失败', CLOSED: '已关闭', CANCELLED: '已撤回', CANCELING: '撤销中', CREATED: '待领取', CLAIMED: '待确认' };
         const records = res.list.map((r) => {
           const st = r.transfer_state || r.status || 'CREATED';
+          // 过期未领（后端按 expires_at 判定）：链接已不可领、钱没动过、额度已回流——
+          // 灰标"已过期"，和还能领的"待领取"分开，免得看着像钱悬在外面
+          const expired = st === 'CREATED' && !!r.is_expired;
           const by = r.created_by_name || '';
           const full = (r.created_at || '').replace('T', ' ');
           return {
@@ -627,9 +630,10 @@ Page({
             sub: (r.remark || '客户奖励') + (by ? ' · ' + by + ' 发放' : ''),
             who: r.target_remark || r.target_name || (r.target_external_userid ? '定向客户' : ''),
             eu: r.target_external_userid || '',
-            statusText: map[st] || st,
-            cls:
-              st === 'SUCCESS'
+            statusText: expired ? '已过期' : map[st] || st,
+            cls: expired
+              ? 'muted'
+              : st === 'SUCCESS'
                 ? 'ok'
                 : st === 'FAIL' || st === 'CLOSED' || st === 'CANCELLED' || st === 'CANCELING'
                 ? 'fail'

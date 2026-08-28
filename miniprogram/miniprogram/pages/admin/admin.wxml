@@ -244,6 +244,7 @@
       <view class="fchips">
         <view class="fchip {{recFilter.status==='all'?'on':''}}" data-k="status" data-v="all" bindtap="pickRecFilter">全部</view>
         <view class="fchip {{recFilter.status==='created'?'on':''}}" data-k="status" data-v="created" bindtap="pickRecFilter">待领取</view>
+        <view class="fchip {{recFilter.status==='expired'?'on':''}}" data-k="status" data-v="expired" bindtap="pickRecFilter">已过期</view>
         <view class="fchip {{recFilter.status==='waiting'?'on':''}}" data-k="status" data-v="waiting" bindtap="pickRecFilter">待确认</view>
         <view class="fchip {{recFilter.status==='success'?'on':''}}" data-k="status" data-v="success" bindtap="pickRecFilter">已到账</view>
         <view class="fchip {{recFilter.status==='failed'?'on':''}}" data-k="status" data-v="failed" bindtap="pickRecFilter">失败/撤回</view>
@@ -304,7 +305,7 @@
             <view class="rec-remark t-light">{{item.sub}}</view>
           </view>
           <view class="rec-r">
-            <text class="badge {{item.cls==='ok'?'badge-success':item.cls==='fail'?'badge-danger':'badge-warning'}}">{{item.statusText}}</text>
+            <text class="badge {{item.cls==='ok'?'badge-success':item.cls==='fail'?'badge-danger':item.cls==='muted'?'badge-muted':'badge-warning'}}">{{item.statusText}}</text>
             <text class="rec-time t-hint num">{{item.createdAt}}</text>
             <text class="rec-batch" wx:if="{{item.batchId && !recFilter.batch}}" data-batch="{{item.batchId}}" catchtap="filterByBatch">查看本批</text>
             <text class="rec-revoke" wx:if="{{item.canRevoke}}" data-rid="{{item.rid}}" data-yuan="{{item.yuan}}" data-who="{{item.who}}" catchtap="revokeReward">撤回</text>

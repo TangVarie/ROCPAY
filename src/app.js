@@ -488,7 +488,7 @@ app.get('/api/rewards', async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
-    // 台账筛选：status=created|waiting|success|failed，days=近N天，target=某客户（单人往来），
+    // 台账筛选：status=created|expired|waiting|success|failed，days=近N天，target=某客户（单人往来），
     // batch=某一批次，q=关键词（备注/单号/金额/客户名），month=自然月 YYYY-MM
     // 列表和 stats 用同一组筛选 → stats 即"筛选范围内的资金消耗汇总"
     const filters = {
