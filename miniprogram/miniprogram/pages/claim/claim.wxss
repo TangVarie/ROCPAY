@@ -27,8 +27,8 @@
   color: #ffffff;
   margin-top: 10rpx;
 }
-/* 大额拆单：共 N 笔 · 合计 提示（红底上白字不降透明度：0.9 白约 4.4:1 踩线，
-   纯白 ~5:1 才过小字 4.5:1；层级差交给字号/字重，不牺牲对比度） */
+/* 大额拆单：共 N 笔 · 合计 提示（赭底上白字不降透明度：纯白对 #B8502F ~4.9:1
+   刚过小字 4.5:1，降透明度即不达标；层级差交给字号/字重，不牺牲对比度） */
 .rb-multi {
   margin-top: 14rpx;
   font-size: 24rpx;
@@ -52,7 +52,7 @@
 }
 .rb-btn::after { border: none; }
 .rb-btn:active { transform: scale(0.98); }
-.rb-btn[disabled] { background: rgba(255, 255, 255, 0.85); color: rgba(217, 35, 43, 0.55); }
+.rb-btn[disabled] { background: rgba(255, 255, 255, 0.85); color: rgba(184, 80, 47, 0.55); }
 .rb-btn-blue { color: var(--block-blue); }
 .rb-btn-blue[disabled] { background: #ffffff; color: var(--block-blue); }
 .rb-tip {
@@ -131,7 +131,7 @@
   flex: none;
   font-size: 26rpx;
   font-weight: 600;
-  color: var(--primary);
+  color: var(--primary-onbg);
   padding: 10rpx 14rpx;
 }
 
@@ -142,8 +142,9 @@
 .ah-num { font-size: 80rpx; font-weight: 700; color: #ffffff; line-height: 1.15; margin-top: 8rpx; }
 .ah-sub { font-size: 24rpx; color: rgba(255, 255, 255, 0.8); margin-top: 8rpx; }
 .ah-low { color: #ffb0b0; } /* 额度告罄浅红 */
-/* 异常警示块：浅红底 + 冷酒红标题，进门可见、点击直达失败筛选 */
-.ah-alert { margin-bottom: 20rpx; padding: 26rpx 30rpx; }
+/* 异常警示块：语义 danger 浅底 + 加深档标题，进门可见、点击直达失败筛选。
+   v5：状态语义不借品牌赭浅调（tint-blush 归"价值/金额"类数据块用） */
+.ah-alert { margin-bottom: 20rpx; padding: 26rpx 30rpx; background: rgba(217, 43, 60, 0.08); }
 .ah-alert:active { opacity: 0.85; }
 .ah-alert-t { font-size: 30rpx; font-weight: 700; color: var(--danger-dark); }
 .ah-alert-s { font-size: 24rpx; color: var(--text-light); margin-top: 4rpx; }
@@ -168,14 +169,14 @@
   from { opacity: 0; transform: rotate(-45deg) scale(0.3); }
   to { opacity: 1; transform: rotate(-45deg) scale(1); }
 }
-/* 色块红转蓝时一次轻微呼吸 */
+/* 色块赭转青时一次轻微呼吸 */
 .reward-block.celebrate { animation: blockBreath 420ms ease-out; }
 @keyframes blockBreath {
   0% { transform: scale(1); }
   40% { transform: scale(1.02); }
   100% { transform: scale(1); }
 }
-/* 尊重系统「减弱动态效果」：庆祝动效停用，到账状态仍由色块变蓝表达 */
+/* 尊重系统「减弱动态效果」：庆祝动效停用，到账状态仍由色块变青表达 */
 @media (prefers-reduced-motion: reduce) {
   .reward-block.celebrate { animation: none; }
   .rb-check { animation: none; }
