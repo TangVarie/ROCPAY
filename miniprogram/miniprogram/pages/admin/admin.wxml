@@ -51,22 +51,20 @@
       <!-- ===== 定向发放 ===== -->
       <block wx:if="{{sendMode==='target'}}">
 
-        <!-- 步骤1 · 选客户（白底描边块）。双来源：企微客户（同步档案）/ 直连客户（openid 名单，免企微） -->
+        <!-- 步骤1 · 选客户（白底描边块）。统一名单一人一行：企微客户与直连客户合并展示
+             （后端 openid 桥去重），操作员按备注选人即可，不必关心这个人从哪个渠道来 -->
         <view class="panel" wx:if="{{step==='pick'}}">
           <view class="prow">
             <view class="ptitle t-dark">选择客户</view>
-            <view class="textbtn" wx:if="{{custSrc==='wecom'}}" bindtap="syncCustomers">{{syncing?'同步中…':'从企微同步'}}</view>
-            <view class="textbtn" wx:else bindtap="toggleDirectAdd">{{dAddOpen?'收起':'添加客户'}}</view>
+            <view class="pactions">
+              <view class="textbtn" wx:if="{{wecomOn}}" bindtap="syncCustomers">{{syncing?'同步中…':'从企微同步'}}</view>
+              <view class="textbtn" bindtap="toggleDirectAdd">{{dAddOpen?'收起':'添加客户'}}</view>
+            </view>
           </view>
-          <!-- 连了企微才有来源可切；未连企微固定直连来源，不出现切换 chips -->
-          <view class="fchips srcchips" wx:if="{{wecomOn}}">
-            <view class="fchip {{custSrc==='wecom'?'on':''}}" data-s="wecom" bindtap="switchCustSrc">企微客户</view>
-            <view class="fchip {{custSrc==='direct'?'on':''}}" data-s="direct" bindtap="switchCustSrc">直连客户</view>
-          </view>
-          <view class="psub t-hint" wx:if="{{custSrc==='wecom' && lastSyncText}}">上次同步 {{lastSyncText}}</view>
+          <view class="psub t-hint" wx:if="{{wecomOn && lastSyncText}}">企微档案上次同步 {{lastSyncText}}</view>
 
-          <!-- 直连客户 · 手动添加（同 openid 再保存 = 改备注） -->
-          <view class="dadd" wx:if="{{custSrc==='direct' && dAddOpen}}">
+          <!-- 手动添加直连客户（同 openid 再保存 = 改备注），保存后立即出现在名单里 -->
+          <view class="dadd" wx:if="{{dAddOpen}}">
             <input class="input dadd-input" placeholder="客户 openid（客户打开小程序领取页可复制）" placeholder-class="ph"
                    value="{{dNewOpenid}}" bindinput="onDNewOpenid" />
             <input class="input dadd-input" placeholder="备注名（选填，如 张老板）" placeholder-class="ph"
@@ -75,30 +73,28 @@
           </view>
 
           <view class="searchbar">
-            <input class="input searchinput" placeholder="{{custSrc==='direct' ? '搜备注名 / openid' : '搜客户备注名'}}" placeholder-class="ph" value="{{custQ}}"
+            <input class="input searchinput" placeholder="搜备注名 / 客户名 / openid" placeholder-class="ph" value="{{custQ}}"
                    bindinput="onCustQ" confirm-type="search" bindconfirm="searchCustomers" />
             <button class="btn btn-blue searchbtn" bindtap="searchCustomers">搜索</button>
           </view>
 
-          <!-- 来源一：企微客户 -->
-          <block wx:if="{{custSrc==='wecom'}}">
           <block wx:if="{{custList.length}}">
-            <view class="cust hairline-b" wx:for="{{custList}}" wx:key="external_userid"
-                  data-key="{{item.external_userid}}" data-kind="eu" data-label="{{item.label}}" bindtap="toggleCust">
-              <view class="cb {{selectedMap[item.external_userid]?'on':''}}"></view>
+            <view class="cust hairline-b" wx:for="{{custList}}" wx:key="key"
+                  data-key="{{item.key}}" data-kind="{{item.kind}}" data-label="{{item.label}}" bindtap="toggleCust">
+              <view class="cb {{selectedMap[item.key]?'on':''}}"></view>
               <view class="cust-main">
                 <view class="cust-name t-dark">{{item.label}}</view>
                 <view class="cust-sub t-hint" wx:if="{{item.sub}}">{{item.sub}}</view>
               </view>
-              <text class="badge {{item.opened?'badge-blue':''}}">{{item.opened?'开过小程序':'未开过'}}</text>
+              <text class="badge {{item.active?'badge-blue':''}}">{{item.kind==='eu' ? (item.active?'开过小程序':'未开过') : (item.active?'领过奖励':'手动添加')}}</text>
+              <view class="frow-del" wx:if="{{item.kind==='oid'}}" data-oid="{{item.key}}" data-label="{{item.label}}" catchtap="removeDirect">移除</view>
             </view>
             <view class="loadmore textbtn" wx:if="{{custHasMore}}" bindtap="loadMoreCustomers">{{custLoading ? '加载中…' : '加载更多'}}</view>
-            <view class="loadmore-hint t-hint" wx:if="{{custCapped}}">匹配较多，仅显示前 500 位，请输入更完整的备注名精确查找</view>
           </block>
           <!-- 空态三分：加载失败 / 加载中 / 搜索无结果 / 真没有客户，不许互相冒充 -->
           <view class="pempty" wx:elif="{{custError}}">
             <view class="li li-alert pempty-icon"></view>
-            <view class="pempty-t1 t-dark">客户列表加载失败</view>
+            <view class="pempty-t1 t-dark">客户名单加载失败</view>
             <view class="pempty-t2 t-light">网络开小差了，点下方按钮重试</view>
             <button class="btn btn-fill pempty-btn" bindtap="searchCustomers">重新加载</button>
           </view>
@@ -111,55 +107,15 @@
           <view class="pempty" wx:elif="{{custQ}}">
             <view class="li li-users pempty-icon"></view>
             <view class="pempty-t1 t-dark">没有匹配「{{custQ}}」的客户</view>
-            <view class="pempty-t2 t-light">试试更完整的备注名，或先从企微同步最新客户</view>
+            <view class="pempty-t2 t-light">备注名/客户名可模糊搜，openid 需要完整精确搜{{wecomOn ? '；新客户可先从企微同步' : ''}}</view>
           </view>
           <view class="pempty" wx:else>
             <view class="li li-users pempty-icon"></view>
-            <view class="pempty-t1 t-dark">还没有客户档案</view>
-            <view class="pempty-t2 t-light">{{wecomOn ? '从企微同步后，即可按备注名选人发放' : '连接企微后可一键同步客户档案'}}</view>
+            <view class="pempty-t1 t-dark">还没有客户</view>
+            <view class="pempty-t2 t-light">{{wecomOn ? '从企微同步客户档案，或点「添加客户」录入 openid；客户领取过奖励也会自动进名单' : '点「添加客户」录入 openid（客户打开小程序领取页可复制）；客户领取过奖励也会自动进名单'}}</view>
             <button class="btn btn-fill pempty-btn" wx:if="{{wecomOn}}" bindtap="syncCustomers">从企微同步</button>
-          </view>
-          </block>
-
-          <!-- 来源二：直连客户（openid 名单）。行尾可移除；勾选与企微客户合入同一份已选名单 -->
-          <block wx:if="{{custSrc==='direct'}}">
-          <block wx:if="{{dList.length}}">
-            <view class="cust hairline-b" wx:for="{{dList}}" wx:key="openid"
-                  data-key="{{item.openid}}" data-kind="oid" data-label="{{item.label}}" bindtap="toggleCust">
-              <view class="cb {{selectedMap[item.openid]?'on':''}}"></view>
-              <view class="cust-main">
-                <view class="cust-name t-dark">{{item.label}}</view>
-                <view class="cust-sub t-hint">{{item.sub}}</view>
-              </view>
-              <text class="badge {{item.claimed?'badge-blue':''}}">{{item.claimed?'领过奖励':'手动添加'}}</text>
-              <view class="frow-del" data-oid="{{item.openid}}" data-label="{{item.label}}" catchtap="removeDirect">移除</view>
-            </view>
-            <view class="loadmore textbtn" wx:if="{{dHasMore}}" bindtap="loadMoreDirects">{{dLoading ? '加载中…' : '加载更多'}}</view>
-          </block>
-          <view class="pempty" wx:elif="{{dError}}">
-            <view class="li li-alert pempty-icon"></view>
-            <view class="pempty-t1 t-dark">名单加载失败</view>
-            <view class="pempty-t2 t-light">网络开小差了，点下方按钮重试</view>
-            <button class="btn btn-fill pempty-btn" bindtap="searchCustomers">重新加载</button>
-          </view>
-          <view class="pempty" wx:elif="{{!dLoaded}}">
-            <view class="band-spinner pempty-spin" aria-label="加载中">
-              <view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view>
-            </view>
-            <view class="pempty-t1 t-dark">正在加载名单…</view>
-          </view>
-          <view class="pempty" wx:elif="{{custQ}}">
-            <view class="li li-users pempty-icon"></view>
-            <view class="pempty-t1 t-dark">没有匹配「{{custQ}}」的客户</view>
-            <view class="pempty-t2 t-light">支持按备注名模糊搜、按完整 openid 精确搜</view>
-          </view>
-          <view class="pempty" wx:else>
-            <view class="li li-users pempty-icon"></view>
-            <view class="pempty-t1 t-dark">直连客户名单还是空的</view>
-            <view class="pempty-t2 t-light">点「添加客户」录入 openid（客户打开小程序领取页可复制发你）；客户领取过奖励也会自动进名单</view>
             <button class="btn btn-fill pempty-btn" bindtap="toggleDirectAdd">添加客户</button>
           </view>
-          </block>
 
           <view class="err" wx:if="{{sendErr}}">{{sendErr}}</view>
 

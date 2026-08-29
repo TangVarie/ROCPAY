@@ -732,6 +732,29 @@ app.get('/api/customers', async (req, res) => {
 // （客户打开小程序空态页能看到自己的 openid 并一键复制，发给员工即可）。
 
 // 列表/搜索（备注模糊 / openid 精确）——管理员
+// 统一选人名单：企微客户 + 直连客户一人一行（openid 桥去重，选人页唯一数据源）。
+// /api/customers 与 /api/direct-customers 保留不动：老版小程序（审核期）仍在用
+app.get('/api/pick-customers', async (req, res) => {
+  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  try {
+    const limit = Math.min(Number(req.query.limit) || 60, 200);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const [list, lastSyncAt] = await Promise.all([
+      db.listPickCustomers({
+        q: String(req.query.q || ''),
+        limit,
+        offset,
+        viewerUserid: adminWecomUserid(getOpenid(req)), // 备注个性化：优先显示查看者自己起的
+      }),
+      db.getLastSyncAt().catch(() => null),
+    ]);
+    res.json({ list, hasMore: list.length === limit, lastSyncAt });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/direct-customers', async (req, res) => {
   if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
