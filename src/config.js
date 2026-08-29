@@ -106,6 +106,37 @@ export const config = {
     perUserDailyCapYuan: Number(optional('PER_USER_DAILY_CAP_YUAN', '2000')),
   },
 
+  // 微信小程序服务端能力（订阅消息直达通知）。三件齐才启用，缺任一则静默关闭、走企微群发老路：
+  //   WECHAT_SUBSCRIBE_TEMPLATE_ID  公众平台「订阅消息」里选用的模板 ID
+  //   WECHAT_SUBSCRIBE_DATA         模板字段映射 JSON，值里可用占位符 {remark}/{amount}/{count}/{time}
+  //                                 例：{"thing1":"{remark}","amount2":"¥{amount}","time3":"{time}"}
+  //                                 （每个模板字段 key 不同，必须按你选的模板填）
+  //   鉴权二选一：WECHAT_APPSECRET（小程序密钥，走 access_token）；或在微信云托管开通
+  //   「开放接口服务」后设 WECHAT_CLOUDBASE_OPENAPI=true（免密钥，容器内直连 http://api.weixin.qq.com）
+  weixin: (() => {
+    const templateId = optional('WECHAT_SUBSCRIBE_TEMPLATE_ID');
+    const appSecret = optional('WECHAT_APPSECRET');
+    const cloudbaseOpenapi = optional('WECHAT_CLOUDBASE_OPENAPI', 'false').toLowerCase() === 'true';
+    const subscribeData = (() => {
+      const raw = optional('WECHAT_SUBSCRIBE_DATA');
+      if (!raw) return null;
+      try {
+        const o = JSON.parse(raw);
+        return o && typeof o === 'object' && !Array.isArray(o) ? o : null;
+      } catch {
+        return null;
+      }
+    })();
+    return {
+      appSecret,
+      cloudbaseOpenapi,
+      subscribeTemplateId: templateId,
+      subscribeData,
+      subscribePage: optional('WECHAT_SUBSCRIBE_PAGE', 'pages/claim/claim'),
+      subscribeEnabled: !!(templateId && subscribeData && (appSecret || cloudbaseOpenapi)),
+    };
+  })(),
+
   // 企业微信（P2·客户列表/群发/unionid定向）。留空则企微功能不启用，不影响现有链路。
   wecom: (() => {
     const corpid = optional('WECOM_CORPID');

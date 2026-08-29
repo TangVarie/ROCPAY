@@ -105,6 +105,16 @@ CREATE TABLE IF NOT EXISTS customers (
   KEY idx_customers_follow (follow_userid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='企微客户缓存+身份映射';
 
+-- 订阅消息授权配额（小程序直达通知）：客户点一次「允许」granted+1，后端发一条 used+1
+CREATE TABLE IF NOT EXISTS subscribe_quota (
+  openid      VARCHAR(64)  NOT NULL COMMENT '客户小程序openid',
+  template_id VARCHAR(64)  NOT NULL COMMENT '订阅消息模板ID',
+  granted     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '累计授权次数',
+  used        INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '累计已发送次数',
+  updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (openid, template_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='小程序订阅消息授权配额';
+
 -- 通用键值设置（如可发额度锚点 quota_base_fen / 锚点已发放 quota_base_paid_fen）
 CREATE TABLE IF NOT EXISTS settings (
   k          VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '设置键',

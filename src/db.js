@@ -146,6 +146,17 @@ const DDL = [
      KEY idx_customers_follow (follow_userid)
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='企微客户缓存+身份映射'`,
 
+  // 订阅消息授权配额：客户在小程序点一次「允许」= granted+1；后端发一条 = used+1。
+  // 微信侧同样按次计数，本表是本地记账（避免明知发不出去还白调接口），以先耗尽者为准
+  `CREATE TABLE IF NOT EXISTS subscribe_quota (
+     openid      VARCHAR(64)  NOT NULL COMMENT '客户小程序openid',
+     template_id VARCHAR(64)  NOT NULL COMMENT '订阅消息模板ID',
+     granted     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '累计授权次数',
+     used        INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '累计已发送次数',
+     updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+     PRIMARY KEY (openid, template_id)
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='小程序订阅消息授权配额'`,
+
   `CREATE TABLE IF NOT EXISTS settings (
      k          VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '设置键',
      v          TEXT         NULL COMMENT '设置值',
@@ -836,6 +847,82 @@ export async function pruneCustomerFollows(userid, sinceDbTime) {
   return (r && r.affectedRows) || 0;
 }
 
+// ---------------- 订阅消息授权配额（小程序直达通知） ----------------
+
+/** 【客户】在小程序点了一次「允许提醒」：授权配额 +1（幂等 upsert） */
+export async function grantSubscribe(openid, templateId) {
+  if (!pool || !openid || !templateId) return;
+  await pool.execute(
+    `INSERT INTO subscribe_quota (openid, template_id, granted, used)
+     VALUES (:openid, :tid, 1, 0)
+     ON DUPLICATE KEY UPDATE granted = granted + 1`,
+    { openid, tid: templateId }
+  );
+}
+
+/** 原子占用一次配额（used<granted 才占得到）。返回是否占到——占到才去调微信发送 */
+export async function consumeSubscribe(openid, templateId) {
+  if (!pool || !openid || !templateId) return false;
+  const [r] = await pool.execute(
+    `UPDATE subscribe_quota SET used = used + 1
+      WHERE openid = :openid AND template_id = :tid AND used < granted`,
+    { openid, tid: templateId }
+  );
+  return ((r && r.affectedRows) || 0) > 0;
+}
+
+/** 发送失败（非配额类错误）时退回占用的那一次，授权不白丢 */
+export async function refundSubscribe(openid, templateId) {
+  if (!pool || !openid || !templateId) return;
+  await pool.execute(
+    `UPDATE subscribe_quota SET used = IF(used > 0, used - 1, 0)
+      WHERE openid = :openid AND template_id = :tid`,
+    { openid, tid: templateId }
+  );
+}
+
+/** 微信侧回 43101（授权已用完/被撤销）：把本地可用配额对齐清零，避免下次还白调接口 */
+export async function exhaustSubscribe(openid, templateId) {
+  if (!pool || !openid || !templateId) return;
+  await pool.execute(
+    `UPDATE subscribe_quota SET used = granted
+      WHERE openid = :openid AND template_id = :tid`,
+    { openid, tid: templateId }
+  );
+}
+
+/** 一批客户的小程序 openid：external_userid -> openid（没开过小程序的没有映射） */
+export async function getCustomerOpenids(eus = []) {
+  const map = new Map();
+  if (!pool || !eus.length) return map;
+  const ph = eus.map(() => '?').join(',');
+  const [rows] = await pool.query(
+    `SELECT external_userid, openid FROM customers
+      WHERE external_userid IN (${ph}) AND openid IS NOT NULL`,
+    eus
+  );
+  for (const r of rows) map.set(r.external_userid, r.openid);
+  return map;
+}
+
+/** 一批定向客户的待领汇总：eu -> { n 笔数, fen 合计, remark 任一备注 }（通知文案用） */
+export async function pendingSummaryForTargets(eus = []) {
+  const map = new Map();
+  if (!pool || !eus.length) return map;
+  const ph = eus.map(() => '?').join(',');
+  const [rows] = await pool.query(
+    `SELECT target_external_userid AS eu, COUNT(*) AS n,
+            COALESCE(SUM(amount_fen),0) AS fen, MAX(remark) AS remark
+       FROM rewards
+      WHERE target_external_userid IN (${ph}) AND status = 'CREATED'
+        AND (expires_at IS NULL OR expires_at > NOW())
+      GROUP BY target_external_userid`,
+    eus
+  );
+  for (const r of rows) map.set(r.eu, { n: Number(r.n), fen: Number(r.fen), remark: r.remark || '' });
+  return map;
+}
+
 /** 全量同步收尾：删除不在员工名单里的所有跟进行（离职/被移出「客户联系」的员工整体退场）。
  *  只允许在「自动发现全员」的全量同步末尾调用——指定 userids 子集同步时绝不能用（会误删他人）。 */
 export async function pruneFollowsNotIn(userids = []) {
@@ -1157,6 +1244,12 @@ export const db = {
   getDbNow,
   pruneCustomerFollows,
   pruneFollowsNotIn,
+  grantSubscribe,
+  consumeSubscribe,
+  refundSubscribe,
+  exhaustSubscribe,
+  getCustomerOpenids,
+  pendingSummaryForTargets,
   getFollowMap,
   searchCustomers,
   getLastSyncAt,
