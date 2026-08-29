@@ -585,6 +585,11 @@ function rewardFilterSql({ status = 'all', days = 0, target = '', targetOpenid =
          (SELECT external_userid FROM customers WHERE remark LIKE :kw_like OR name LIKE :kw_like)`,
       `r.target_external_userid IN
          (SELECT external_userid FROM customer_follows WHERE remark LIKE :kw_like)`,
+      // 统一备注·反向桥：直连名单里起的备注，也要能搜到同一人的企微定向单（经 customers.openid）
+      `r.target_external_userid IN
+         (SELECT external_userid FROM customers
+           WHERE openid IS NOT NULL AND openid IN
+             (SELECT openid FROM direct_customers WHERE remark LIKE :kw_like))`,
       `r.target_openid IN
          (SELECT openid FROM direct_customers WHERE remark LIKE :kw_like)`,
       // 企微身份桥：开过小程序的客户 customers.openid 已回填——用企微备注/昵称/任一跟进人备注
@@ -1028,9 +1033,13 @@ export async function searchCustomers({ q = '', followUserid = '', viewerUserid 
   const where = [];
   const params = { viewer: viewerUserid || '' };
   if (q) {
+    // 统一备注：企微侧备注/昵称之外，同一人（经 customers.openid 桥）的直连名单备注也命中——
+    // 员工只记得直连侧起的名字时，在企微客户页签同样能搜到这个人
     where.push(`(vf.remark LIKE :q OR c.remark LIKE :q OR c.name LIKE :q
       OR EXISTS (SELECT 1 FROM customer_follows af
-                  WHERE af.external_userid = c.external_userid AND af.remark LIKE :q))`);
+                  WHERE af.external_userid = c.external_userid AND af.remark LIKE :q)
+      OR (c.openid IS NOT NULL AND c.openid IN
+            (SELECT openid FROM direct_customers WHERE remark LIKE :q)))`);
     params.q = `%${q}%`;
   }
   if (followUserid) {
