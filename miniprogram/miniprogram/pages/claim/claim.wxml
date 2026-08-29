@@ -112,6 +112,8 @@
         <view class="li li-gift state-icon"></view>
         <view class="state-t1">暂时没有你的奖励</view>
         <view class="state-t2">{{emptyReason || '收到奖励后，打开这里即可领取'}}</view>
+        <!-- 订阅"奖励提醒"：一次允许=之后有新奖励直达微信服务通知一条（后端未配置时不显示） -->
+        <button class="btn btn-fill state-btn" wx:if="{{subOn}}" bindtap="askSubscribe">有新奖励时提醒我</button>
       </view>
 
       <!-- 合作档案 · 等级（没有奖励时开屏也能看到自己的记录池） -->

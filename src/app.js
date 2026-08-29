@@ -12,6 +12,7 @@ import { createTransferBill, queryTransferByOutBillNo, cancelTransferByOutBillNo
 import { wechatpay } from './wechat-pay.js';
 import { db } from './db.js';
 import { wecom } from './wecom.js';
+import { weixin } from './weixin.js';
 import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 
 const app = express();
@@ -287,8 +288,25 @@ app.get('/api/me', async (req, res) => {
     wecom: wecom.wecomEnabled, // 企微是否已连接（前端据此提示）
     wecomUserid: adminWecomUserid(openid), // 本人的企微账号映射（''=未配置，群发任务会派给客户跟进人）
     db: db.dbEnabled,
+    // 订阅消息直达通知：非空 = 已配置。客户端据此在领取时请求授权；管理端据此显示"小程序直达通知"
+    subscribeTmplId: weixin.subscribeEnabled && db.dbEnabled ? config.weixin.subscribeTemplateId : '',
     profile,
   });
+});
+
+// 【客户】记录一次订阅授权（客户在小程序对模板点了「允许」后调用）。
+// 配额记在客户自己的 openid 名下，只能给自己加——无越权面
+app.post('/api/subscribe/grant', async (req, res) => {
+  const openid = getOpenid(req);
+  if (!openid) return res.status(401).json({ error: '未识别到身份' });
+  if (!weixin.subscribeEnabled) return res.status(503).json({ error: '订阅消息未配置' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  try {
+    await db.grantSubscribe(openid, config.weixin.subscribeTemplateId);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // 部署自检：验证 商户号/证书/私钥/APIv3密钥/出口IP白名单 是否全部有效
@@ -745,6 +763,59 @@ app.post('/api/customers/sync', async (req, res) => {
     // 自动发现全员的全量同步收尾：名单之外员工（离职/被移出「客户联系」）的跟进行整体退场
     if (!explicit) pruned += await db.pruneFollowsNotIn(userids);
     res.json({ ok: true, synced, pruned, totalStaff: userids.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 小程序直达通知：给选中的定向客户直接推微信「服务通知」（订阅消息），点开直达领取页，
+// 不经企微群发、员工无需再点发送。只覆盖两个条件都满足的客户：
+//   ① 开过小程序（customers.openid 已回填）；② 此前在小程序点过「允许提醒」且授权还有余量。
+// 其余客户按原因分列返回，前端引导走企微群发/转发兜底。配额先本地原子占用再调微信，
+// 非配额类失败退回占用；微信回 43101（授权用尽/撤销）则对齐清零本地配额。
+app.post('/api/notify-mini', async (req, res) => {
+  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  if (!weixin.subscribeEnabled) return res.status(503).json({ error: '订阅消息未配置（需 WECHAT_SUBSCRIBE_TEMPLATE_ID/WECHAT_SUBSCRIBE_DATA + 密钥或云托管开放接口）' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  const eus = Array.isArray((req.body || {}).externalUserids)
+    ? [...new Set(req.body.externalUserids.filter(Boolean))]
+    : [];
+  if (!eus.length) return res.status(400).json({ error: '缺少要通知的客户' });
+  if (eus.length > 200) return res.status(400).json({ error: '单次最多通知 200 位客户' });
+  const tid = config.weixin.subscribeTemplateId;
+  try {
+    const [openidMap, pendingMap] = await Promise.all([
+      db.getCustomerOpenids(eus),
+      db.pendingSummaryForTargets(eus),
+    ]);
+    const noOpenid = []; // 没开过小程序：拿不到 openid，发不了
+    const noPending = []; // 名下已无待领（已领完/已过期/已撤回）：不该再催
+    const noQuota = []; // 没订阅过或授权次数用完
+    const failed = []; // 微信侧发送失败（配额已退回，可重试）
+    let sent = 0;
+    for (const eu of eus) {
+      const openid = openidMap.get(eu);
+      if (!openid) { noOpenid.push(eu); continue; }
+      const pending = pendingMap.get(eu);
+      if (!pending || !pending.n) { noPending.push(eu); continue; }
+      if (!(await db.consumeSubscribe(openid, tid))) { noQuota.push(eu); continue; }
+      const r = await weixin.sendRewardNotice({
+        openid,
+        remark: pending.remark,
+        amountYuan: pending.fen / 100,
+        count: pending.n,
+      });
+      if (r.ok) { sent++; continue; }
+      if (r.quotaExhausted) {
+        // 微信侧授权已用尽/被撤销：本地配额对齐清零，归入"未订阅"引导兜底
+        await db.exhaustSubscribe(openid, tid).catch(() => {});
+        noQuota.push(eu);
+      } else {
+        await db.refundSubscribe(openid, tid).catch(() => {}); // 非配额失败：授权不白丢
+        failed.push({ eu, error: r.error });
+      }
+    }
+    res.json({ ok: true, sent, noOpenid, noPending, noQuota, failed });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -36,6 +36,9 @@ Page({
     notifying: false,
     notifyDone: false,
     notifyResult: null, // {lines:[], failCount} 群发任务派发结果（派给谁、几人失败）
+    subMiniOn: false, // 订阅消息直达通知是否可用（后端已配置模板）
+    miniNotifying: false,
+    miniNotify: null, // {sent, lines:[]} 直达通知结果（几人直达、几人要走兜底及原因）
     myWecomUserid: '', // 本人企微账号映射（''=未配置，群发任务派给客户跟进人）
     sendErr: '',
 
@@ -118,6 +121,7 @@ Page({
           splitCapYuan: me.splitCapYuan || 200,
           perUserCapYuan: me.perUserDailyCapYuan || 2000,
           myWecomUserid: me.wecomUserid || '',
+          subMiniOn: !!me.subscribeTmplId, // 后端配置了订阅消息模板才显示"小程序直达通知"
         });
         if (me.isAdmin) {
           this.loadCustomers();
@@ -441,6 +445,35 @@ Page({
       );
   },
 
+  // 小程序直达通知：后端直接给客户微信推「服务通知」（订阅消息），点开直达领取页，
+  // 员工零操作。只覆盖开过小程序且点过「允许提醒」的客户；其余按原因列出，走企微/转发兜底
+  sendMiniNotify() {
+    const r = this.data.batchResult;
+    if (!r || !r.targets.length || this.data.miniNotifying) return;
+    const seq = (this._notifySeq = this._notifySeq || 0); // 与群发共用代际：换批后旧回调作废
+    this.setData({ miniNotifying: true, sendErr: '' });
+    call('/api/notify-mini', 'POST', { externalUserids: r.targets })
+      .then((res) => {
+        if ((this._notifySeq || 0) !== seq) return;
+        this.setData({ miniNotifying: false });
+        if (res && res.error) return this.setData({ sendErr: res.error });
+        const labelOf = {};
+        this.data.selected.forEach((s) => (labelOf[s.external_userid] = s.label));
+        const nm = (l) => (l || []).map((eu) => labelOf[eu] || eu).join('、');
+        const lines = [`已直达 ${res.sent || 0} 人（微信服务通知，点开即到领取页）`];
+        if (res.noQuota && res.noQuota.length) lines.push(`未订阅提醒 ${res.noQuota.length} 人：${nm(res.noQuota)}——请用企微群发或转发补发`);
+        if (res.noOpenid && res.noOpenid.length) lines.push(`没开过小程序 ${res.noOpenid.length} 人：${nm(res.noOpenid)}——首次需企微群发或转发引导打开`);
+        if (res.noPending && res.noPending.length) lines.push(`已无待领 ${res.noPending.length} 人（已领完/已撤回），未打扰`);
+        if (res.failed && res.failed.length) lines.push(`发送失败 ${res.failed.length} 人（授权已退回，可重试）：${res.failed.map((f) => (labelOf[f.eu] || f.eu) + '（' + f.error + '）').join('；')}`);
+        this.setData({ miniNotify: { sent: res.sent || 0, lines } });
+        wx.showModal({ title: '直达通知结果', content: lines.join('\n'), showCancel: false });
+      })
+      .catch((e) => {
+        if ((this._notifySeq || 0) !== seq) return;
+        this.setData({ miniNotifying: false, sendErr: '直达通知失败：' + (e.errMsg || e.message || '') });
+      });
+  },
+
   onNotifyText(e) { this.setData({ notifyText: e.detail.value }); },
   sendNotify() {
     const r = this.data.batchResult;
@@ -497,8 +530,8 @@ Page({
     this._batchKey = null; // 新一批 = 新意图，换新幂等键
     this._notifyKey = null; // 弃掉未完成的群发重试意图，防止新批复用旧键命中旧缓存
     this._notifySeq = (this._notifySeq || 0) + 1; // 群发代际+1：飞行中的旧群发回调对新批作废
-    // notifying 一并复位：被弃批次的请求即使还在飞行，也不该锁住新批的群发按钮
-    this.setData({ step: 'pick', selected: [], selectedMap: {}, batchResult: null, sendErr: '', errIdx: -1, notifying: false, notifyDone: false, notifyResult: null });
+    // notifying/miniNotify 一并复位：被弃批次的请求即使还在飞行，也不该锁住新批的按钮
+    this.setData({ step: 'pick', selected: [], selectedMap: {}, batchResult: null, sendErr: '', errIdx: -1, notifying: false, notifyDone: false, notifyResult: null, miniNotifying: false, miniNotify: null });
   },
 
   // ============ 链接快发（副） ============

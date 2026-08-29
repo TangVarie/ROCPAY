@@ -97,6 +97,7 @@ Page({
     call('/api/me', 'GET')
       .then((me) => {
         if (me && me.openid) {
+          this._subTmplId = me.subscribeTmplId || ''; // 订阅消息模板（''=后端未配置，静默关闭）
           this.setData({ openid: me.openid, isAdmin: !!me.isAdmin, profile: this._profileOf(me) });
         }
       })
@@ -125,11 +126,13 @@ Page({
         this.setData({ mode: 'error', message: detail });
         return;
       }
+      this._subTmplId = me.subscribeTmplId || ''; // 订阅消息模板（''=后端未配置，静默关闭）
       const base = {
         isAdmin: !!me.isAdmin,
         openid: me.openid || '',
         profile: this._profileOf(me),
         roleLabel: me.role === 'super' ? '超级管理员' : me.role === 'operator' ? '发放员' : '',
+        subOn: !!this._subTmplId, // 空态"有新奖励时提醒我"按钮的开关
       };
       if (me.isAdmin) this.loadAdminHome(); // 管理员进门：拉仪表数据（额度剩余 + 近24h发放）
       if (mine && mine.reward) {
@@ -279,6 +282,40 @@ Page({
     setTimeout(() => this.refreshProfile(), 1200); // 到账后档案(合作次数/累计)自动 +1
   },
 
+  // 领取动作顺带请求「奖励提醒」订阅授权：一次授权 = 之后新奖励可直达微信服务通知一条。
+  // 必须在点击手势里同步调起（微信平台约束）；拒绝/失败都不影响领取；每次会话只弹一次
+  // （客户勾了"总是保持以上选择"后微信不再弹窗、静默累计授权）。串行执行：授权弹窗
+  // 处理完（complete）再走领取，避免与"确认收款"半屏叠在一起
+  _askSubscribe(next) {
+    const id = this._subTmplId;
+    if (!id || this._subAsked || typeof wx.requestSubscribeMessage !== 'function') return next();
+    this._subAsked = true;
+    wx.requestSubscribeMessage({
+      tmplIds: [id],
+      success: (r) => {
+        if (r && r[id] === 'accept') call('/api/subscribe/grant', 'POST', {}).catch(() => {});
+      },
+      complete: () => next(),
+    });
+  },
+  // 空态"有新奖励时提醒我"：显式订阅入口（首次没有奖励也能先把提醒开起来）
+  askSubscribe() {
+    const id = this._subTmplId;
+    if (!id) return;
+    if (typeof wx.requestSubscribeMessage !== 'function') {
+      return wx.showToast({ title: '当前微信版本过低', icon: 'none' });
+    }
+    wx.requestSubscribeMessage({
+      tmplIds: [id],
+      success: (r) => {
+        if (r && r[id] === 'accept') {
+          call('/api/subscribe/grant', 'POST', {}).catch(() => {});
+          wx.showToast({ title: '已开启提醒', icon: 'success' });
+        }
+      },
+    });
+  },
+
   // 链接领取（令牌）
   onClaimToken() {
     if (!this.data.token || this.data.status === 'loading') return;
@@ -288,6 +325,9 @@ Page({
       return this._confirmTransfer(this._pendingTransfer, () => this._tokenOk());
     }
     this.setData({ status: 'loading', message: '' });
+    this._askSubscribe(() => this._doClaimToken());
+  },
+  _doClaimToken() {
     call('/api/claim', 'POST', { token: this.data.token })
       .then((res) => {
         if (res && res.error) return this.setData({ status: 'fail', message: res.error });
@@ -308,6 +348,9 @@ Page({
       return this._confirmTransfer(this._pendingTransfer, () => this._afterMineOk());
     }
     this.setData({ status: 'loading', message: '' });
+    this._askSubscribe(() => this._doClaimMine());
+  },
+  _doClaimMine() {
     call('/api/claim/mine', 'POST', {})
       .then((res) => {
         if (res && res.error) return this.setData({ status: 'fail', message: res.error });
