@@ -26,8 +26,21 @@ Page({
     custCapped: false,
     custLoading: false,
     syncing: false,
-    selected: [], // [{external_userid, label, amountYuan, note}]
-    selectedMap: {}, // eu -> true（wxml 勾选态）
+    // ---- 直连客户池（免企微模式）：手动录 openid 或客户领取过自动入池，按 openid 定向发放 ----
+    custSrc: 'wecom', // 选人来源 wecom | direct（未连企微时固定 direct）
+    dList: [],
+    dLoaded: false,
+    dError: false, // 加载失败态：与"名单真空/搜索无结果"严格区分（同企微列表三态原则）
+    dOffset: 0,
+    dHasMore: false,
+    dLoading: false,
+    dAddOpen: false, // 手动添加表单展开
+    dNewOpenid: '',
+    dNewRemark: '',
+    dAdding: false,
+    // 双身份选人：key = external_userid(企微) 或 openid(直连)，kind 决定提交时走哪个定向字段
+    selected: [], // [{key, kind:'eu'|'oid', external_userid, openid, label, amountYuan, note}]
+    selectedMap: {}, // key -> true（wxml 勾选态）
     fillAmount: '',
     fillNote: '',
     errIdx: -1, // 批量校验失败的行下标：行内高亮 + 滚动定位，不让运营自己翻着找
@@ -58,7 +71,7 @@ Page({
     stats: null,
     statsPaidYuan: '0.00',
     // batch 非空 = 批次视图；q = 关键词（备注/客户名/金额/单号）；month 与 days 互斥（按月对账用）
-    recFilter: { status: 'all', days: 0, target: '', targetLabel: '', batch: '', q: '', month: '' },
+    recFilter: { status: 'all', days: 0, target: '', targetOpenid: '', targetLabel: '', batch: '', q: '', month: '' },
     recQ: '', // 关键词输入框的即时值（回车/点搜索才生效到 recFilter.q）
     recOffset: 0,
     recHasMore: false,
@@ -123,9 +136,10 @@ Page({
           perUserCapYuan: me.perUserDailyCapYuan || 2000,
           myWecomUserid: me.wecomUserid || '',
           subMiniOn: !!me.subscribeTmplId, // 后端配置了订阅消息模板才显示"小程序直达通知"
+          custSrc: me.wecom ? 'wecom' : 'direct', // 未连企微：选人只有直连客户一个来源
         });
         if (me.isAdmin) {
-          this.loadCustomers();
+          this._loadPick();
           this.loadRecords();
           this.loadPeriod();
           this.loadAlerts();
@@ -156,7 +170,29 @@ Page({
     if (t === 'records') { this.loadRecords(); this.loadPeriod(); this.loadAlerts(); }
     else if (t === 'rank') this.loadRank();
     else if (t === 'staff') this.loadAdmins();
-    else if (this.data.step === 'pick') this.loadCustomers();
+    else if (this.data.step === 'pick') this._loadPick();
+  },
+  // 选人列表按当前来源加载（企微客户 / 直连客户各自独立的列表与分页状态）
+  _loadPick() {
+    if (this.data.custSrc === 'direct') this.loadDirects();
+    else this.loadCustomers();
+  },
+  switchCustSrc(e) {
+    const s = e.currentTarget.dataset.s;
+    if (s === this.data.custSrc) return;
+    this.setData({ custSrc: s, sendErr: '' });
+    // 搜索框两来源共用：切过去时，若该来源缓存的列表不是按当前关键词查出来的就重查——
+    // 绝不允许"输入框是 B 词、列表还是 A 词的旧结果"同框（评审发现）。关键词一致时保留缓存不重查
+    const q = (this.data.custQ || '').trim();
+    if (s === 'direct') {
+      if (!this.data.dLoaded || (this._dirLoadedQ || '') !== q) {
+        this.setData({ dList: [], dLoaded: false, dError: false, dOffset: 0, dHasMore: false });
+        this.loadDirects(); // 序号守卫会丢弃仍在飞行的旧请求响应
+      }
+    } else if (!this.data.custLoaded || (this._custLoadedQ || '') !== q) {
+      this.setData({ custList: [], custLoaded: false, custError: false, custOffset: 0, custHasMore: false, custCapped: false });
+      this.loadCustomers();
+    }
   },
 
   // 32 位十六进制随机串：批量发放/快发/充值的幂等键。同一意图（含失败后的重试）复用同一键，
@@ -223,8 +259,13 @@ Page({
 
   // ============ 定向批量 ============
   onCustQ(e) { this.setData({ custQ: e.detail.value }); },
-  // 新搜索条件立即清掉旧列表：宁可短暂加载态，也不许"旧结果 + 新关键词"同框
+  // 新搜索条件立即清掉旧列表：宁可短暂加载态，也不许"旧结果 + 新关键词"同框。
+  // 搜索框两个来源共用，按当前来源分派（各自独立重查，互不影响对方已加载的列表）
   searchCustomers() {
+    if (this.data.custSrc === 'direct') {
+      this.setData({ dList: [], dLoaded: false, dError: false, dOffset: 0, dHasMore: false });
+      return this.loadDirects();
+    }
     this.setData({ custList: [], custLoaded: false, custError: false, custOffset: 0, custHasMore: false, custCapped: false });
     this.loadCustomers();
   },
@@ -248,6 +289,7 @@ Page({
           sub: c.remark && c.name && c.remark !== c.name ? c.name : '',
           opened: !!c.opened,
         }));
+        this._custLoadedQ = q; // 本列表实际按哪个关键词查的：切来源时据此判断要不要重查
         this.setData({
           custList: isMore ? this.data.custList.concat(page) : page,
           custOffset: offset + page.length,
@@ -290,18 +332,119 @@ Page({
       .catch((e) => this.setData({ syncing: false, sendErr: '同步失败：' + (e.message || e.errMsg || '') }));
   },
 
+  // ---- 直连客户池：不经企微，按 openid 定向。列表/搜索/分页与企微客户镜像，状态互不共用 ----
+  loadDirects(more) {
+    const isMore = more === true;
+    if (isMore && this.data.dLoading) return;
+    const seq = (this._dirSeq = (this._dirSeq || 0) + 1); // 序号守卫同 loadCustomers：过期响应丢弃
+    const LIMIT = 60;
+    const q = (this.data.custQ || '').trim();
+    const offset = isMore ? this.data.dOffset : 0;
+    this.setData({ dLoading: true, dError: false });
+    call(`/api/direct-customers?limit=${LIMIT}&offset=${offset}&q=${encodeURIComponent(q)}`, 'GET')
+      .then((res) => {
+        if (seq !== this._dirSeq) return;
+        if (!res || !res.list) return this.setData({ dLoading: false, dLoaded: true, dError: true });
+        const page = res.list.map((c) => ({
+          openid: c.openid,
+          // 显示名：直连备注 > 借企微备注（同一人在企微侧的备注/昵称，经 openid 桥）> openid 尾号
+          label: c.remark || c.wecom_label || '客户' + String(c.openid).slice(-4),
+          sub: c.openid,
+          claimed: !!c.last_claim_at, // 在本小程序领过奖励 = openid 实测有效
+        }));
+        this._dirLoadedQ = q; // 同企微列表：记录实际查询词，切来源时不一致就重查
+        this.setData({
+          dList: isMore ? this.data.dList.concat(page) : page,
+          dOffset: offset + page.length,
+          dHasMore: res.hasMore || false,
+          dLoaded: true,
+          dLoading: false,
+        });
+      })
+      .catch(() => {
+        if (seq !== this._dirSeq) return;
+        if (isMore) {
+          this.setData({ dLoading: false });
+          return wx.showToast({ title: '加载失败，请重试', icon: 'none' });
+        }
+        this.setData({ dLoading: false, dLoaded: true, dError: true });
+      });
+  },
+  loadMoreDirects() { this.loadDirects(true); },
+  toggleDirectAdd() { this.setData({ dAddOpen: !this.data.dAddOpen, sendErr: '' }); },
+  onDNewOpenid(e) { this.setData({ dNewOpenid: e.detail.value }); },
+  onDNewRemark(e) { this.setData({ dNewRemark: e.detail.value }); },
+  // 手动入池（同 openid 再保存 = 改备注）。openid 让客户打开小程序领取页复制发来；
+  // 填错顶多"发出去没人能领"（过期自动回流），不会错发给别人——openid 查询条件即身份校验
+  addDirect() {
+    if (this.data.dAdding) return;
+    const openid = (this.data.dNewOpenid || '').trim();
+    const remark = (this.data.dNewRemark || '').trim();
+    if (!openid) return this.setData({ sendErr: '请填写客户的 openid（客户打开小程序领取页可复制）' });
+    if (!/^[A-Za-z0-9_-]{6,64}$/.test(openid)) return this.setData({ sendErr: 'openid 格式不对：应为 6-64 位字母/数字/-_' });
+    this.setData({ dAdding: true, sendErr: '' });
+    call('/api/direct-customers', 'POST', { openid, remark })
+      .then((res) => {
+        this.setData({ dAdding: false });
+        if (res && res.error) return this.setData({ sendErr: res.error });
+        this.setData({ dNewOpenid: '', dNewRemark: '', dAddOpen: false });
+        wx.showToast({ title: '已保存', icon: 'success' });
+        this.searchCustomers(); // 重查直连列表（此表单只在 direct 来源下可见）
+      })
+      .catch((e) => this.setData({ dAdding: false, sendErr: '保存失败：' + (e.errMsg || e.message || '') }));
+  },
+  // 移出名单：只删名单不动历史台账；若已勾选一并取消，防止对着刚移除的人发放
+  removeDirect(e) {
+    const { oid, label } = e.currentTarget.dataset;
+    if (!oid) return;
+    wx.showModal({
+      title: '移除客户',
+      content: `将「${label}」移出直连客户名单。历史发放记录不受影响；客户再次领取会自动回到名单。`,
+      confirmText: '移除',
+      confirmColor: '#d92b3c',
+      success: (r) => {
+        if (!r.confirm) return;
+        call('/api/direct-customers/remove', 'POST', { openid: oid })
+          .then((res) => {
+            if (res && res.error) return wx.showToast({ title: res.error, icon: 'none' });
+            const selected = this.data.selected.filter((s) => s.key !== oid);
+            const map = Object.assign({}, this.data.selectedMap);
+            delete map[oid];
+            const nextList = this.data.dList.filter((c) => c.openid !== oid);
+            this.setData({
+              dList: nextList,
+              // 删一行 = 库里结果集整体前移一位：分页游标同步回退，否则下一页会跳过一位客户（评审发现）
+              dOffset: Math.max(this.data.dOffset - (this.data.dList.length - nextList.length), 0),
+              selected,
+              selectedMap: map,
+            });
+            wx.showToast({ title: '已移除', icon: 'success' });
+          })
+          .catch(() => wx.showToast({ title: '网络错误，请重试', icon: 'none' }));
+      },
+    });
+  },
+
   toggleCust(e) {
-    const eu = e.currentTarget.dataset.eu;
-    const label = e.currentTarget.dataset.label;
+    // 双来源统一勾选：key = external_userid(企微行) 或 openid(直连行)，kind 由行上带下来
+    const { key, kind, label } = e.currentTarget.dataset;
     const selected = this.data.selected.slice();
     const map = Object.assign({}, this.data.selectedMap);
-    const idx = selected.findIndex((s) => s.external_userid === eu);
+    const idx = selected.findIndex((s) => s.key === key);
     if (idx >= 0) {
       selected.splice(idx, 1);
-      delete map[eu];
+      delete map[key];
     } else {
-      selected.push({ external_userid: eu, label, amountYuan: '', note: '' });
-      map[eu] = true;
+      selected.push({
+        key,
+        kind, // 提交时 eu 走 externalUserid、oid 走 openid，各走各的定向字段绝不混填
+        external_userid: kind === 'eu' ? key : '',
+        openid: kind === 'oid' ? key : '',
+        label,
+        amountYuan: '',
+        note: '',
+      });
+      map[key] = true;
     }
     this.setData({ selected, selectedMap: map });
   },
@@ -327,7 +470,7 @@ Page({
     const i = e.currentTarget.dataset.i;
     const selected = this.data.selected.slice();
     const map = Object.assign({}, this.data.selectedMap);
-    delete map[selected[i].external_userid];
+    delete map[selected[i].key];
     selected.splice(i, 1);
     this.setData({ selected, selectedMap: map, step: selected.length ? 'fill' : 'pick', errIdx: -1 });
   },
@@ -407,11 +550,12 @@ Page({
     // 幂等键：本次发放意图首次提交时生成，失败重试复用——服务端命中已建批次会回放原结果而不是再建一批
     if (!this._batchKey) this._batchKey = this._newKey();
     this.setData({ sendErr: '', loading: true });
-    const items = selected.map((s) => ({
-      externalUserid: s.external_userid,
-      amountYuan: Number(s.amountYuan),
-      remark: s.note || '',
-    }));
+    // 双身份：企微客户带 externalUserid、直连客户带 openid，后端二选一校验（两个都带会被拒）
+    const items = selected.map((s) =>
+      s.kind === 'oid'
+        ? { openid: s.openid, amountYuan: Number(s.amountYuan), remark: s.note || '' }
+        : { externalUserid: s.external_userid, amountYuan: Number(s.amountYuan), remark: s.note || '' }
+    );
     call('/api/rewards/batch', 'POST', { items, clientKey: this._batchKey })
       .then((res) => {
         this.setData({ loading: false });
@@ -419,19 +563,22 @@ Page({
         this._batchKey = null; // 本批已确认落地，下一批换新键
         this._notifyKey = null; // 新批结果 = 新的群发意图：绝不复用上一批的群发防重键（会命中旧缓存导致本批不建任务）
         this._notifySeq = (this._notifySeq || 0) + 1; // 群发代际+1：上一批仍在飞行的群发回调作废
-        // 拆单后同一客户出现多笔 → 通知名单去重，每人只发一张卡片
-        const targets = [...new Set((res.created || []).map((c) => c.externalUserid))];
+        // 拆单后同一客户出现多笔 → 通知名单去重，每人只发一张卡片；企微/直连分列（各走各的通知通道）
+        const created = res.created || [];
+        const targets = [...new Set(created.filter((c) => c.externalUserid).map((c) => c.externalUserid))];
+        const targetOpenids = [...new Set(created.filter((c) => c.openid).map((c) => c.openid))];
         const labelOf = {};
-        selected.forEach((s) => (labelOf[s.external_userid] = s.label));
+        selected.forEach((s) => (labelOf[s.key] = s.label)); // key 对企微是 eu、对直连是 openid，errors[].target 两种都能对上
         this.setData({
           step: 'result',
           batchResult: {
             createdCount: res.createdCount, // 拆单后的总笔数
-            peopleCount: res.peopleCount || targets.length,
+            peopleCount: res.peopleCount || targets.length + targetOpenids.length,
             batchId: res.batchId || '', // 批次号：结果页可直达"本批台账"
             duplicate: !!res.duplicate, // 重试命中已建批次：展示原结果，未重复创建
             errors: (res.errors || []).map((er) => ({ ...er, label: labelOf[er.target] || er.target || '' })),
             targets,
+            targetOpenids,
           },
           notifyText: '你有一笔奖励待领取，打开【梨响ROC】小程序即可领取～',
           notifyDone: false,
@@ -453,26 +600,29 @@ Page({
   // 跑完后按钮只剩"重试失败名单"，防手滑重发白耗客户授权
   sendMiniNotify() {
     const r = this.data.batchResult;
-    if (!r || !r.targets.length || this.data.miniNotifying) return;
-    // 目标名单：网络中断的续传名单 > 已完成后的失败重试名单 > 整批
-    let targets = r.targets;
+    const allEus = (r && r.targets) || [];
+    const allOids = (r && r.targetOpenids) || []; // 直连客户：openid 即身份，同一接口同一防重键一起发
+    if ((!allEus.length && !allOids.length) || this.data.miniNotifying) return;
+    // 目标名单：网络中断的续传名单 > 已完成后的失败重试名单 > 整批（企微/直连两组并行分列）
+    let targets = { eus: allEus, oids: allOids };
     let acc = { sent: 0, noQuota: [], noOpenid: [], noPending: [], failed: [] };
-    if (this._miniRemaining && this._miniRemaining.length) {
-      targets = this._miniRemaining;
+    const rem = this._miniRemaining;
+    if (rem && (rem.eus.length || rem.oids.length)) {
+      targets = rem;
       acc = this._miniAcc || acc;
     } else if (this.data.miniDone) {
-      const retry = (this._miniFailedList || []);
-      if (!retry.length) return; // 全部处理完且无失败：按钮本应禁用
+      const retry = this._miniFailedList || { eus: [], oids: [] };
+      if (!retry.eus.length && !retry.oids.length) return; // 全部处理完且无失败：按钮本应禁用
       targets = retry; // 重试失败名单：结果按本次重试重算
     }
     const seq = (this._notifySeq = this._notifySeq || 0); // 与群发共用代际：换批后旧回调作废
     this.setData({ miniNotifying: true, sendErr: '' });
     const labelOf = {};
-    this.data.selected.forEach((s) => (labelOf[s.external_userid] = s.label));
-    const nm = (l) => (l || []).map((eu) => labelOf[eu] || eu).join('、');
+    this.data.selected.forEach((s) => (labelOf[s.key] = s.label)); // key 双身份通吃：结果名单两种 id 都能对回备注名
+    const nm = (l) => (l || []).map((id) => labelOf[id] || id).join('、');
     const step = (list) => {
       if (!this._miniKey) this._miniKey = this._newKey(); // 每步一键；同步重试复用同键=服务端回放
-      call('/api/notify-mini', 'POST', { externalUserids: list, clientKey: this._miniKey })
+      call('/api/notify-mini', 'POST', { externalUserids: list.eus, openids: list.oids, clientKey: this._miniKey })
         .then((res) => {
           if ((this._notifySeq || 0) !== seq) return;
           if (res && res.error) return this.setData({ miniNotifying: false, sendErr: res.error });
@@ -482,19 +632,25 @@ Page({
           acc.noOpenid.push(...(res.noOpenid || []));
           acc.noPending.push(...(res.noPending || []));
           acc.failed.push(...(res.failed || []));
-          if (res.partial && res.remaining && res.remaining.length) {
+          const nextEus = res.remaining || [];
+          const nextOids = res.remainingOpenids || [];
+          if (res.partial && (nextEus.length || nextOids.length)) {
             this._miniAcc = acc;
-            this._miniRemaining = res.remaining;
-            return step(res.remaining); // 自动续传下一片
+            this._miniRemaining = { eus: nextEus, oids: nextOids };
+            return step(this._miniRemaining); // 自动续传下一片
           }
           this._miniAcc = null;
           this._miniRemaining = null;
-          this._miniFailedList = acc.failed.map((f) => f.eu);
+          // 失败名单按身份分列存：重试时各回各的请求字段
+          this._miniFailedList = {
+            eus: acc.failed.filter((f) => f.eu).map((f) => f.eu),
+            oids: acc.failed.filter((f) => f.openid).map((f) => f.openid),
+          };
           const lines = [`已直达 ${acc.sent} 人（微信服务通知，点开即到领取页）`];
-          if (acc.noQuota.length) lines.push(`未订阅提醒 ${acc.noQuota.length} 人：${nm(acc.noQuota)}——请用企微群发或转发补发`);
+          if (acc.noQuota.length) lines.push(`未订阅提醒 ${acc.noQuota.length} 人：${nm(acc.noQuota)}——请用${allEus.length ? '企微群发或' : ''}转发补发`);
           if (acc.noOpenid.length) lines.push(`没开过小程序 ${acc.noOpenid.length} 人：${nm(acc.noOpenid)}——首次需企微群发或转发引导打开`);
           if (acc.noPending.length) lines.push(`已无待领 ${acc.noPending.length} 人（已领完/已撤回），未打扰`);
-          if (acc.failed.length) lines.push(`发送失败 ${acc.failed.length} 人（授权已退回，可重试）：${acc.failed.map((f) => (labelOf[f.eu] || f.eu) + '（' + f.error + '）').join('；')}`);
+          if (acc.failed.length) lines.push(`发送失败 ${acc.failed.length} 人（授权已退回，可重试）：${acc.failed.map((f) => (labelOf[f.eu || f.openid] || f.eu || f.openid) + '（' + f.error + '）').join('；')}`);
           this.setData({ miniNotifying: false, miniDone: true, miniNotify: { sent: acc.sent, lines, failedCount: acc.failed.length } });
           wx.showModal({ title: '直达通知结果', content: lines.join('\n'), showCancel: false });
         })
@@ -682,6 +838,7 @@ Page({
     this.setData({ recLoading: true, recError: false });
     call(
       `/api/rewards?limit=${LIMIT}&offset=${offset}&status=${f.status}&days=${f.days}&target=${encodeURIComponent(f.target)}` +
+        `&targetOpenid=${encodeURIComponent(f.targetOpenid || '')}` +
         `&batch=${encodeURIComponent(f.batch || '')}&q=${encodeURIComponent(f.q || '')}&month=${encodeURIComponent(f.month || '')}`,
       'GET'
     )
@@ -701,8 +858,16 @@ Page({
             yuan: (r.amount_fen / 100).toFixed(2),
             // 副行：备注 + 谁发的（多发放员团队对账/追责要看这个）
             sub: (r.remark || '客户奖励') + (by ? ' · ' + by + ' 发放' : ''),
-            who: r.target_remark || r.target_name || (r.target_external_userid ? '定向客户' : ''),
+            // 定向对象：企微客户显备注/名字；直连客户显名单备注 > 借企微备注（openid 桥）> openid 尾号
+            who:
+              r.target_remark || r.target_name ||
+              (r.target_external_userid
+                ? '定向客户'
+                : r.target_openid
+                  ? r.target_direct_remark || r.target_bridge_remark || '客户' + String(r.target_openid).slice(-4)
+                  : ''),
             eu: r.target_external_userid || '',
+            oid: r.target_openid || '',
             statusText: expired ? '已过期' : map[st] || st,
             cls: expired
               ? 'muted'
@@ -786,16 +951,20 @@ Page({
     this._resetRecords();
     this.loadRecords();
   },
-  // 点记录里的客户名 → 只看这个人的资金往来（stats 同步变成单人汇总）
+  // 点记录里的客户名 → 只看这个人的资金往来（stats 同步变成单人汇总）。
+  // 企微客户按 external_userid 筛、直连客户按 openid 筛，二者互斥（一次只看一个人）
   filterByCustomer(e) {
-    const { eu, label } = e.currentTarget.dataset;
-    if (!eu) return;
-    this.setData({ recFilter: Object.assign({}, this.data.recFilter, { target: eu, targetLabel: label || '该客户' }) });
+    const { eu, oid, label } = e.currentTarget.dataset;
+    if (!eu && !oid) return;
+    const patch = eu
+      ? { target: eu, targetOpenid: '', targetLabel: label || '该客户' }
+      : { target: '', targetOpenid: oid, targetLabel: label || '该客户' };
+    this.setData({ recFilter: Object.assign({}, this.data.recFilter, patch) });
     this._resetRecords();
     this.loadRecords();
   },
   clearCustomerFilter() {
-    this.setData({ recFilter: Object.assign({}, this.data.recFilter, { target: '', targetLabel: '' }) });
+    this.setData({ recFilter: Object.assign({}, this.data.recFilter, { target: '', targetOpenid: '', targetLabel: '' }) });
     this._resetRecords();
     this.loadRecords();
   },
@@ -813,7 +982,7 @@ Page({
     this.setData({
       tab: 'records',
       recQ: '',
-      recFilter: { status: 'all', days: 0, target: '', targetLabel: '', batch, q: '', month: '' },
+      recFilter: { status: 'all', days: 0, target: '', targetOpenid: '', targetLabel: '', batch, q: '', month: '' },
     });
     this._resetRecords();
     this.loadRecords();

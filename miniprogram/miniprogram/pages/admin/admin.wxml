@@ -51,23 +51,40 @@
       <!-- ===== 定向发放 ===== -->
       <block wx:if="{{sendMode==='target'}}">
 
-        <!-- 步骤1 · 选客户（白底描边块） -->
+        <!-- 步骤1 · 选客户（白底描边块）。双来源：企微客户（同步档案）/ 直连客户（openid 名单，免企微） -->
         <view class="panel" wx:if="{{step==='pick'}}">
           <view class="prow">
             <view class="ptitle t-dark">选择客户</view>
-            <view class="textbtn" bindtap="syncCustomers">{{syncing?'同步中…':'从企微同步'}}</view>
+            <view class="textbtn" wx:if="{{custSrc==='wecom'}}" bindtap="syncCustomers">{{syncing?'同步中…':'从企微同步'}}</view>
+            <view class="textbtn" wx:else bindtap="toggleDirectAdd">{{dAddOpen?'收起':'添加客户'}}</view>
           </view>
-          <view class="psub t-hint" wx:if="{{lastSyncText}}">上次同步 {{lastSyncText}}</view>
+          <!-- 连了企微才有来源可切；未连企微固定直连来源，不出现切换 chips -->
+          <view class="fchips srcchips" wx:if="{{wecomOn}}">
+            <view class="fchip {{custSrc==='wecom'?'on':''}}" data-s="wecom" bindtap="switchCustSrc">企微客户</view>
+            <view class="fchip {{custSrc==='direct'?'on':''}}" data-s="direct" bindtap="switchCustSrc">直连客户</view>
+          </view>
+          <view class="psub t-hint" wx:if="{{custSrc==='wecom' && lastSyncText}}">上次同步 {{lastSyncText}}</view>
+
+          <!-- 直连客户 · 手动添加（同 openid 再保存 = 改备注） -->
+          <view class="dadd" wx:if="{{custSrc==='direct' && dAddOpen}}">
+            <input class="input dadd-input" placeholder="客户 openid（客户打开小程序领取页可复制）" placeholder-class="ph"
+                   value="{{dNewOpenid}}" bindinput="onDNewOpenid" />
+            <input class="input dadd-input" placeholder="备注名（选填，如 张老板）" placeholder-class="ph"
+                   value="{{dNewRemark}}" bindinput="onDNewRemark" />
+            <button class="btn btn-blue btn-block dadd-btn" bindtap="addDirect" loading="{{dAdding}}" disabled="{{dAdding}}">保存到名单</button>
+          </view>
 
           <view class="searchbar">
-            <input class="input searchinput" placeholder="搜客户备注名" placeholder-class="ph" value="{{custQ}}"
+            <input class="input searchinput" placeholder="{{custSrc==='direct' ? '搜备注名 / openid' : '搜客户备注名'}}" placeholder-class="ph" value="{{custQ}}"
                    bindinput="onCustQ" confirm-type="search" bindconfirm="searchCustomers" />
             <button class="btn btn-blue searchbtn" bindtap="searchCustomers">搜索</button>
           </view>
 
+          <!-- 来源一：企微客户 -->
+          <block wx:if="{{custSrc==='wecom'}}">
           <block wx:if="{{custList.length}}">
             <view class="cust hairline-b" wx:for="{{custList}}" wx:key="external_userid"
-                  data-eu="{{item.external_userid}}" data-label="{{item.label}}" bindtap="toggleCust">
+                  data-key="{{item.external_userid}}" data-kind="eu" data-label="{{item.label}}" bindtap="toggleCust">
               <view class="cb {{selectedMap[item.external_userid]?'on':''}}"></view>
               <view class="cust-main">
                 <view class="cust-name t-dark">{{item.label}}</view>
@@ -102,6 +119,47 @@
             <view class="pempty-t2 t-light">{{wecomOn ? '从企微同步后，即可按备注名选人发放' : '连接企微后可一键同步客户档案'}}</view>
             <button class="btn btn-fill pempty-btn" wx:if="{{wecomOn}}" bindtap="syncCustomers">从企微同步</button>
           </view>
+          </block>
+
+          <!-- 来源二：直连客户（openid 名单）。行尾可移除；勾选与企微客户合入同一份已选名单 -->
+          <block wx:if="{{custSrc==='direct'}}">
+          <block wx:if="{{dList.length}}">
+            <view class="cust hairline-b" wx:for="{{dList}}" wx:key="openid"
+                  data-key="{{item.openid}}" data-kind="oid" data-label="{{item.label}}" bindtap="toggleCust">
+              <view class="cb {{selectedMap[item.openid]?'on':''}}"></view>
+              <view class="cust-main">
+                <view class="cust-name t-dark">{{item.label}}</view>
+                <view class="cust-sub t-hint">{{item.sub}}</view>
+              </view>
+              <text class="badge {{item.claimed?'badge-blue':''}}">{{item.claimed?'领过奖励':'手动添加'}}</text>
+              <view class="frow-del" data-oid="{{item.openid}}" data-label="{{item.label}}" catchtap="removeDirect">移除</view>
+            </view>
+            <view class="loadmore textbtn" wx:if="{{dHasMore}}" bindtap="loadMoreDirects">{{dLoading ? '加载中…' : '加载更多'}}</view>
+          </block>
+          <view class="pempty" wx:elif="{{dError}}">
+            <view class="li li-alert pempty-icon"></view>
+            <view class="pempty-t1 t-dark">名单加载失败</view>
+            <view class="pempty-t2 t-light">网络开小差了，点下方按钮重试</view>
+            <button class="btn btn-fill pempty-btn" bindtap="searchCustomers">重新加载</button>
+          </view>
+          <view class="pempty" wx:elif="{{!dLoaded}}">
+            <view class="band-spinner pempty-spin" aria-label="加载中">
+              <view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view>
+            </view>
+            <view class="pempty-t1 t-dark">正在加载名单…</view>
+          </view>
+          <view class="pempty" wx:elif="{{custQ}}">
+            <view class="li li-users pempty-icon"></view>
+            <view class="pempty-t1 t-dark">没有匹配「{{custQ}}」的客户</view>
+            <view class="pempty-t2 t-light">支持按备注名模糊搜、按完整 openid 精确搜</view>
+          </view>
+          <view class="pempty" wx:else>
+            <view class="li li-users pempty-icon"></view>
+            <view class="pempty-t1 t-dark">直连客户名单还是空的</view>
+            <view class="pempty-t2 t-light">点「添加客户」录入 openid（客户打开小程序领取页可复制发你）；客户领取过奖励也会自动进名单</view>
+            <button class="btn btn-fill pempty-btn" bindtap="toggleDirectAdd">添加客户</button>
+          </view>
+          </block>
 
           <view class="err" wx:if="{{sendErr}}">{{sendErr}}</view>
 
@@ -128,7 +186,7 @@
             <view class="textbtn" bindtap="applyFill">填充全部</view>
           </view>
 
-          <view class="frow hairline-b {{errIdx === index ? 'frow-err' : ''}}" wx:for="{{selected}}" wx:key="external_userid">
+          <view class="frow hairline-b {{errIdx === index ? 'frow-err' : ''}}" wx:for="{{selected}}" wx:key="key">
             <view class="frow-name t-dark">{{item.label}}</view>
             <input class="input frow-amt num" type="digit" placeholder="金额" placeholder-class="ph" value="{{item.amountYuan}}"
                    data-i="{{index}}" bindinput="onRowAmount" />
@@ -165,11 +223,13 @@
               </block>
               <view class="psub t-light">直达仅覆盖开过小程序且点过「允许提醒」的客户，其余请用下方方式补发</view>
             </block>
-            <block wx:if="{{wecomOn}}">
+            <!-- 通知报错共用一处展示：直达通知与企微群发的 sendErr 都落这里（企微块可能整块隐藏） -->
+            <view class="err" wx:if="{{sendErr}}">{{sendErr}}</view>
+            <!-- 企微群发只对企微客户有意义：本批全是直连客户时整块隐藏 -->
+            <block wx:if="{{wecomOn && batchResult.targets.length}}">
               <textarea class="input notify-ta" value="{{notifyText}}" bindinput="onNotifyText" maxlength="200" auto-height />
               <button class="btn btn-blue btn-block" bindtap="sendNotify" loading="{{notifying}}"
                       disabled="{{notifyDone && !(notifyResult && notifyResult.failCount)}}">{{notifyDone ? (notifyResult && notifyResult.failCount ? '重试 ' + notifyResult.failCount + ' 位未进入群发的客户' : '已创建群发，去企微点发送') : '企微群发通知'}}</button>
-              <view class="err" wx:if="{{sendErr}}">{{sendErr}}</view>
               <block wx:if="{{notifyResult}}">
                 <view class="psub t-dark" wx:for="{{notifyResult.lines}}" wx:key="*this">任务派发：{{item}}</view>
                 <view class="psub t-light" wx:if="{{notifyResult.failCount}}">{{notifyResult.failCount}} 位客户未进入群发（多为跟进关系未同步或本月接收已达上限）——建议先「从企微同步」刷新跟进关系后点上方按钮重试，或用下方「转发领取入口」补发</view>
@@ -177,7 +237,7 @@
               <view class="psub t-light">任务按"谁跟进谁发"派给对应员工，在企微「消息-客户联系」提醒里点一次发送即可送达</view>
               <view class="psub t-light" wx:if="{{!myWecomUserid}}">提示：让超管在「员工」里给你配置企微账号后，你跟进的客户任务会直接派给你</view>
             </block>
-            <view class="psub t-light" wx:else>未连接企微，可直接把小程序转发到客户聊天</view>
+            <view class="psub t-light" wx:else>{{wecomOn ? '本批为直连客户：用上方直达通知，或把领取入口转发到客户聊天' : '未连接企微，可直接把小程序转发到客户聊天'}}</view>
             <button class="btn btn-fill btn-block" open-type="share">转发领取入口给客户</button>
             <view class="textbtn center-self" wx:if="{{batchResult.batchId}}" bindtap="viewBatchLedger">查看本批台账</view>
             <view class="textbtn center-self" bindtap="newBatch">再发一批</view>
@@ -272,7 +332,7 @@
         </picker>
         <view class="fchip fchip-target on" wx:if="{{recFilter.month}}" bindtap="clearRecMonth">✕</view>
         <view class="fchip fchip-target on" wx:if="{{recFilter.q}}" bindtap="clearRecQ">「{{recFilter.q}}」 ✕</view>
-        <view class="fchip fchip-target on" wx:if="{{recFilter.target}}" bindtap="clearCustomerFilter">{{recFilter.targetLabel}} ✕</view>
+        <view class="fchip fchip-target on" wx:if="{{recFilter.target || recFilter.targetOpenid}}" bindtap="clearCustomerFilter">{{recFilter.targetLabel}} ✕</view>
         <view class="fchip fchip-target on" wx:if="{{recFilter.batch}}" bindtap="clearBatchFilter">本批发放 ✕</view>
       </view>
 
@@ -280,14 +340,14 @@
            只在无附加筛选（时间/月份/单人/批次/关键词）时出现——筛选子集下看到的不是全部异常，
            不该允许一键推进全局水位把被筛掉的失败也悄悄知悉掉 -->
       <view class="alert-actions"
-            wx:if="{{recFilter.status === 'failed' && failAlert > 0 && !recFilter.days && !recFilter.month && !recFilter.target && !recFilter.batch && !recFilter.q}}">
+            wx:if="{{recFilter.status === 'failed' && failAlert > 0 && !recFilter.days && !recFilter.month && !recFilter.target && !recFilter.targetOpenid && !recFilter.batch && !recFilter.q}}">
         <view class="textbtn" bindtap="ackAlerts">标记 {{failAlert}} 笔异常为已处理</view>
       </view>
 
       <!-- 汇总（跟随筛选：范围内合计/动账，即期间或单人资金消耗） -->
       <view class="statrow" wx:if="{{stats}}">
         <view class="block tint-sky stat-main">
-          <view class="sm-label">{{recFilter.target ? recFilter.targetLabel + ' · 往来合计' : '发放合计'}}</view>
+          <view class="sm-label">{{recFilter.target || recFilter.targetOpenid ? recFilter.targetLabel + ' · 往来合计' : '发放合计'}}</view>
           <view class="sm-num num">¥{{statsTotalYuan}}</view>
           <view class="sm-sub">共 {{stats.total}} 笔 · 实际动账 ¥{{statsPaidYuan}}{{stats.cancelled_count > 0 ? ' · 撤回 ' + stats.cancelled_count + ' 笔' : ''}}</view>
         </view>
@@ -314,7 +374,7 @@
           <view class="rec-l">
             <view class="rec-line1">
               <text class="rec-amt num t-dark">¥{{item.yuan}}</text>
-              <text class="rec-who t-light" wx:if="{{item.who}}" data-eu="{{item.eu}}" data-label="{{item.who}}" catchtap="filterByCustomer">{{item.who}}</text>
+              <text class="rec-who t-light" wx:if="{{item.who}}" data-eu="{{item.eu}}" data-oid="{{item.oid}}" data-label="{{item.who}}" catchtap="filterByCustomer">{{item.who}}</text>
             </view>
             <view class="rec-remark t-light">{{item.sub}}</view>
           </view>

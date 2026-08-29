@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS rewards (
   amount_fen     INT UNSIGNED NOT NULL COMMENT '金额(分)',
   remark         VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注(用户可见)',
   recipient_name VARCHAR(64)  NULL COMMENT '收款人真实姓名(可选·PII)',
-  target_external_userid VARCHAR(64) NULL COMMENT '定向目标企微客户(P2)，NULL=非定向',
+  target_external_userid VARCHAR(64) NULL COMMENT '定向目标·企微客户(P2)，与target_openid二选一',
+  target_openid  VARCHAR(64)  NULL COMMENT '定向目标·直连客户openid(免企微模式)，与target_external_userid二选一',
   batch_id       VARCHAR(32)  NULL COMMENT '批次号：同一次批量发放的多笔共用，按批查看/撤回用',
   revoked_by     VARCHAR(64)  NULL COMMENT '撤回操作人openid(审计:谁撤的这笔钱)',
   revoked_at     DATETIME     NULL COMMENT '撤回操作时间',
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS rewards (
   updated_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_rewards_created_by (created_by),
   KEY idx_rewards_status (status),
+  KEY idx_rewards_target_openid (target_openid),
   KEY idx_rewards_batch (batch_id),
   KEY idx_rewards_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='发放的奖励';
@@ -105,6 +107,19 @@ CREATE TABLE IF NOT EXISTS customers (
   KEY idx_customers_follow (follow_userid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='企微客户缓存+身份映射';
 
+-- 直连客户池（免企微模式选人）：领取过的人自动入池(source=claim)，也可手动按openid添加备注(source=manual)
+CREATE TABLE IF NOT EXISTS direct_customers (
+  openid        VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '客户小程序openid',
+  remark        VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注名(管理员起)',
+  source        VARCHAR(16)  NOT NULL DEFAULT 'manual' COMMENT 'manual手动添加|claim领取自动入池',
+  created_by    VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '手动添加人openid(审计)',
+  last_claim_at DATETIME     NULL COMMENT '最近一次领取时间',
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_dc_remark (remark),
+  KEY idx_dc_last_claim (last_claim_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='直连客户池(免企微定向发放选人用)';
+
 -- 订阅消息授权配额（小程序直达通知）：客户点一次「允许」granted+1，后端发一条 used+1
 CREATE TABLE IF NOT EXISTS subscribe_quota (
   openid      VARCHAR(64)  NOT NULL COMMENT '客户小程序openid',
@@ -140,3 +155,24 @@ SET @cf_ddl := IF(@cf_has_remark = 0,
 PREPARE cf_stmt FROM @cf_ddl;
 EXECUTE cf_stmt;
 DEALLOCATE PREPARE cf_stmt;
+
+-- rewards.target_openid：直连定向目标（免企微模式）
+SET @rw_has_toid := (
+  SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema = DATABASE() AND table_name = 'rewards' AND column_name = 'target_openid');
+SET @rw_ddl := IF(@rw_has_toid = 0,
+  'ALTER TABLE rewards ADD COLUMN target_openid VARCHAR(64) NULL COMMENT ''定向目标·直连客户openid(免企微模式)'' AFTER target_external_userid',
+  'SELECT ''rewards.target_openid 已存在，跳过'' AS note');
+PREPARE rw_stmt FROM @rw_ddl;
+EXECUTE rw_stmt;
+DEALLOCATE PREPARE rw_stmt;
+
+SET @rw_has_toidx := (
+  SELECT COUNT(*) FROM information_schema.statistics
+   WHERE table_schema = DATABASE() AND table_name = 'rewards' AND index_name = 'idx_rewards_target_openid');
+SET @rw_idx := IF(@rw_has_toidx = 0,
+  'ALTER TABLE rewards ADD KEY idx_rewards_target_openid (target_openid)',
+  'SELECT ''idx_rewards_target_openid 已存在，跳过'' AS note');
+PREPARE rw_stmt2 FROM @rw_idx;
+EXECUTE rw_stmt2;
+DEALLOCATE PREPARE rw_stmt2;
