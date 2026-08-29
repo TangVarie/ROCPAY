@@ -522,6 +522,7 @@ app.get('/api/rewards', async (req, res) => {
       status: String(req.query.status || 'all'),
       days: Number(req.query.days) || 0,
       target: String(req.query.target || ''),
+      targetOpenid: String(req.query.targetOpenid || ''), // 直连客户单人往来（与 target 二选一）
       batch: String(req.query.batch || ''),
       q: String(req.query.q || ''),
       month: String(req.query.month || ''),
@@ -710,6 +711,58 @@ app.get('/api/customers', async (req, res) => {
   }
 });
 
+// ================= 直连客户池（免企微模式的"客户列表"）=================
+// 入池不动钱：真正的资金定向在发放时绑定到 rewards.target_openid。
+// 池的来源：① 客户在小程序领取过奖励自动入池；② 管理员手动按 openid 添加
+// （客户打开小程序空态页能看到自己的 openid 并一键复制，发给员工即可）。
+
+// 列表/搜索（备注模糊 / openid 精确）——管理员
+app.get('/api/direct-customers', async (req, res) => {
+  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  try {
+    const limit = Math.min(Number(req.query.limit) || 60, 200);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const list = await db.listDirectCustomers({ q: String(req.query.q || ''), limit, offset });
+    res.json({ list, hasMore: list.length === limit });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 添加/改备注（upsert by openid）——管理员
+app.post('/api/direct-customers', async (req, res) => {
+  const me = getOpenid(req);
+  if (!isAdmin(me)) return res.status(403).json({ error: '无权限' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  const openid = String((req.body || {}).openid || '').trim();
+  const remark = String((req.body || {}).remark || '').trim();
+  if (!openid) return res.status(400).json({ error: '请填写客户的 openid' });
+  // 与员工管理同一套格式校验：openid 填错顶多是"发出去没人能领"（过期自动回流），不会错发给别人，
+  // 但格式垃圾直接拦住
+  if (!/^[A-Za-z0-9_-]{6,64}$/.test(openid)) return res.status(400).json({ error: 'openid 格式不对' });
+  try {
+    await db.upsertDirectCustomer({ openid, remark, createdBy: me });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 从池里移除（只删名单，不影响历史奖励/台账）——管理员
+app.post('/api/direct-customers/remove', async (req, res) => {
+  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  const openid = String((req.body || {}).openid || '').trim();
+  if (!openid) return res.status(400).json({ error: '缺少 openid' });
+  try {
+    const ok = await db.removeDirectCustomer(openid);
+    res.json({ ok: !!ok });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // 从企微同步客户入库——管理员（需配企微）。body.userids = 要同步的企微员工 userid 列表
 // 大客户量防超时：单次最多跑 ~10s（客户端 callContainer 15s 超时，留足余量），
 // 超时返回 { partial:true, nextIndex, nextCursor }，前端自动带回续传直到跑完。upsert 幂等，重跑无害。
@@ -769,8 +822,9 @@ app.post('/api/customers/sync', async (req, res) => {
 });
 
 // 小程序直达通知：给选中的定向客户直接推微信「服务通知」（订阅消息），点开直达领取页，
-// 不经企微群发、员工无需再点发送。只覆盖两个条件都满足的客户：
+// 不经企微群发、员工无需再点发送。企微客户（externalUserids）需两个条件都满足：
 //   ① 开过小程序（customers.openid 已回填）；② 此前在小程序点过「允许提醒」且授权还有余量。
+// 直连客户（openids）openid 即身份，只需条件②。
 // 其余客户按原因分列返回，前端引导走企微群发/转发兜底。配额先本地原子占用再调微信，
 // 非配额类失败退回占用；微信回 43101（授权用尽/撤销）则对齐清零本地配额。
 // 大批量防超时：服务端 8s 处理期限（callContainer 15s 上限内留足余量），到点把没处理的
@@ -791,8 +845,12 @@ app.post('/api/notify-mini', async (req, res) => {
   const eus = Array.isArray((req.body || {}).externalUserids)
     ? [...new Set(req.body.externalUserids.filter(Boolean))]
     : [];
-  if (!eus.length) return res.status(400).json({ error: '缺少要通知的客户' });
-  if (eus.length > 200) return res.status(400).json({ error: '单次最多通知 200 位客户' });
+  // 双模式：直连客户按 openid 通知（openid 即身份，不查 customers 表）。两组可同请求混发
+  const oids = Array.isArray((req.body || {}).openids)
+    ? [...new Set(req.body.openids.filter(Boolean))]
+    : [];
+  if (!eus.length && !oids.length) return res.status(400).json({ error: '缺少要通知的客户' });
+  if (eus.length + oids.length > 200) return res.status(400).json({ error: '单次最多通知 200 位客户' });
   const clientKey = String((req.body || {}).clientKey || '');
   const hasKey = /^[a-f0-9]{16,64}$/i.test(clientKey);
   if (hasKey) {
@@ -811,27 +869,35 @@ app.post('/api/notify-mini', async (req, res) => {
   const work = (async () => {
     const DEADLINE_MS = 8000;
     const startAt = Date.now();
-    const [openidMap, pendingMap] = await Promise.all([
+    const [openidMap, pendingMap, pendingMapD] = await Promise.all([
       db.getCustomerOpenids(eus),
       db.pendingSummaryForTargets(eus),
+      db.pendingSummaryForOpenidTargets(oids),
     ]);
-    const noOpenid = []; // 没开过小程序：拿不到 openid，发不了
+    const noOpenid = []; // 没开过小程序：拿不到 openid，发不了（仅企微客户会落这里）
     const noPending = []; // 名下已无待领（已领完/已过期/已撤回）：不该再催
     const noQuota = []; // 没订阅过或授权次数用完
-    const failed = []; // 微信侧发送失败（配额已退回，可重试）
-    const remaining = []; // 本请求处理期限内没轮到的：前端带新键续传
+    const failed = []; // 微信侧发送失败（配额已退回，可重试）：{eu}|{openid} 标明身份类型
+    const remaining = []; // 处理期限内没轮到的企微客户：前端带新键续传
+    const remainingOpenids = []; // 处理期限内没轮到的直连客户（与 remaining 分列，老前端不受影响）
     let sent = 0;
-    for (let i = 0; i < eus.length; i++) {
-      const eu = eus[i];
+    // 统一队列：企微客户在前、直连客户在后；到期各按身份类型归还续传名单
+    const queue = [
+      ...eus.map((id) => ({ kind: 'eu', id })),
+      ...oids.map((id) => ({ kind: 'oid', id })),
+    ];
+    for (let i = 0; i < queue.length; i++) {
+      const it = queue[i];
       if (Date.now() - startAt > DEADLINE_MS) {
-        remaining.push(...eus.slice(i));
+        for (const rest of queue.slice(i)) (rest.kind === 'eu' ? remaining : remainingOpenids).push(rest.id);
         break;
       }
-      const openid = openidMap.get(eu);
-      if (!openid) { noOpenid.push(eu); continue; }
-      const pending = pendingMap.get(eu);
-      if (!pending || !pending.n) { noPending.push(eu); continue; }
-      if (!(await db.consumeSubscribe(openid, tid))) { noQuota.push(eu); continue; }
+      // 直连客户 openid 即身份；企微客户需经 customers 表回填的 openid
+      const openid = it.kind === 'eu' ? openidMap.get(it.id) : it.id;
+      if (!openid) { noOpenid.push(it.id); continue; }
+      const pending = it.kind === 'eu' ? pendingMap.get(it.id) : pendingMapD.get(it.id);
+      if (!pending || !pending.n) { noPending.push(it.id); continue; }
+      if (!(await db.consumeSubscribe(openid, tid))) { noQuota.push(it.id); continue; }
       const r = await weixin.sendRewardNotice({
         openid,
         remark: pending.remark,
@@ -842,13 +908,17 @@ app.post('/api/notify-mini', async (req, res) => {
       if (r.quotaExhausted) {
         // 微信侧授权已用尽/被撤销：本地配额对齐清零，归入"未订阅"引导兜底
         await db.exhaustSubscribe(openid, tid).catch(() => {});
-        noQuota.push(eu);
+        noQuota.push(it.id);
       } else {
         await db.refundSubscribe(openid, tid).catch(() => {}); // 非配额失败：授权不白丢
-        failed.push({ eu, error: r.error });
+        failed.push(it.kind === 'eu' ? { eu: it.id, error: r.error } : { openid: it.id, error: r.error });
       }
     }
-    return { ok: true, sent, noOpenid, noPending, noQuota, failed, remaining, partial: remaining.length > 0 };
+    return {
+      ok: true, sent, noOpenid, noPending, noQuota, failed,
+      remaining, remainingOpenids,
+      partial: remaining.length > 0 || remainingOpenids.length > 0,
+    };
   })();
   if (hasKey) miniNotifyRecent.set(clientKey, { at: Date.now(), promise: work });
   try {
@@ -1094,13 +1164,15 @@ app.post('/api/rewards/batch', async (req, res) => {
     if (existing.length) {
       return res.json({
         createdCount: existing.length,
-        peopleCount: new Set(existing.map((r) => r.target_external_userid)).size,
+        // 双模式：目标可能是企微客户(external_userid)或直连客户(openid)，按各自 ID 去重计人数
+        peopleCount: new Set(existing.map((r) => r.target_external_userid || r.target_openid)).size,
         errorCount: 0,
         batchId,
         duplicate: true, // 此前已创建成功，这是原结果回放，未重复建单
         created: existing.map((r) => ({
           rid: r.rid,
-          externalUserid: r.target_external_userid,
+          externalUserid: r.target_external_userid || undefined,
+          openid: r.target_openid || undefined,
           amountYuan: r.amount_fen / 100,
           remark: r.remark || '',
         })),
@@ -1116,16 +1188,28 @@ app.post('/api/rewards/batch', async (req, res) => {
   const minFen = Math.round(config.app.minAmountYuan * 100);
   const perUserCapYuan = Math.min(config.app.perUserDailyCapYuan, config.app.maxAmountYuan);
 
-  // 先整体校验并算出拆单计划，再落库——避免拆一半发现超限
+  // 先整体校验并算出拆单计划，再落库——避免拆一半发现超限。
+  // 双模式目标：每项二选一——externalUserid(企微客户，领取走 unionid 桥) 或 openid(直连客户，
+  // 领取按 openid 直查)。两个都传/都不传都拒绝：一笔钱必须有唯一明确的定向语义
   const plans = [];
   const errors = [];
   let totalBills = 0;
   for (let i = 0; i < items.length; i++) {
     const it = items[i] || {};
-    const target = String(it.externalUserid || '').trim();
+    const targetEu = String(it.externalUserid || '').trim();
+    const targetOid = String(it.openid || '').trim();
+    const target = targetEu || targetOid; // 报错定位用（errors[].target）
     const yuan = Number(it.amountYuan);
-    if (!target) {
-      errors.push({ i, error: '缺少客户 externalUserid' });
+    if (!targetEu && !targetOid) {
+      errors.push({ i, error: '缺少发放对象（externalUserid 或 openid）' });
+      continue;
+    }
+    if (targetEu && targetOid) {
+      errors.push({ i, target, error: '发放对象只能二选一（企微客户或直连 openid）' });
+      continue;
+    }
+    if (targetOid && !/^[A-Za-z0-9_-]{6,64}$/.test(targetOid)) {
+      errors.push({ i, target, error: 'openid 格式不对' });
       continue;
     }
     if (!(yuan > 0)) {
@@ -1147,7 +1231,7 @@ app.post('/api/rewards/batch', async (req, res) => {
       continue;
     }
     totalBills += bills.length;
-    plans.push({ i, target, yuan, bills, remark: it.remark, name: it.name });
+    plans.push({ i, target, targetEu, targetOid, yuan, bills, remark: it.remark, name: it.name });
   }
   if (totalBills > 400) {
     return res.status(400).json({ error: `本批拆单后共 ${totalBills} 笔，超过单次 400 笔上限，请分批发放` });
@@ -1175,17 +1259,24 @@ app.post('/api/rewards/batch', async (req, res) => {
           name: p.name,
           createdBy: openid,
           exp,
-          targetExternalUserid: p.target,
+          targetExternalUserid: p.targetEu || undefined,
+          targetOpenid: p.targetOid || undefined,
           batchId,
         });
-        created.push({ rid, externalUserid: p.target, amountYuan: billFen / 100, remark: p.remark || '' });
+        created.push({
+          rid,
+          externalUserid: p.targetEu || undefined,
+          openid: p.targetOid || undefined,
+          amountYuan: billFen / 100,
+          remark: p.remark || '',
+        });
         ok++;
       } catch (e) {
         errors.push({ i: p.i, target: p.target, error: `落库失败（已成功 ${ok}/${p.bills.length} 笔）：` + (e.code || e.message) });
         break; // 这个人剩余的笔不再继续，已落库的仍有效可领
       }
     }
-    if (ok > 0) people.push({ externalUserid: p.target, totalYuan: p.yuan, bills: ok });
+    if (ok > 0) people.push({ externalUserid: p.targetEu || undefined, openid: p.targetOid || undefined, totalYuan: p.yuan, bills: ok });
   }
   res.json({
     createdCount: created.length, // 拆单后的总笔数
@@ -1247,15 +1338,23 @@ app.get('/api/claim/mine', async (req, res) => {
   if (!openid) return res.status(401).json({ error: '请在微信小程序内打开' });
   if (!db.dbEnabled) return res.json({ reward: null, reason: 'no_db' });
   try {
+    // 双模式定向：先查「直连」（奖励直接绑我的 openid，无需任何身份桥，最快最稳），
+    // 再走「企微」老路（unionid → external_userid 桥）。两池的待领汇总合并展示，
+    // 逐笔领取时 GET 每次都会重查，两个池会被串行领完。
+    // ---- 直连池（openid 直查，零外部依赖）----
+    const aggD = await db.countPendingRewardsForOpenid(openid).catch(() => ({ n: 0, fen: 0 }));
+    // ---- 企微池（身份桥可能不通：不通只是企微池不可见，不影响直连池）----
     // 首页自动探测：本地库优先（快），未命中再走企微在线转换兜底（已带 6s 超时，不会拖死）。
-    // 否则"同步时未拿到 unionid / 未同步"的定向客户会一直看不到属于自己的奖励。
     const externalUserid = await resolveCustomer(unionid, openid);
-    if (!externalUserid) return res.json({ reward: null, reason: unionid ? 'not_a_customer' : 'no_unionid' });
-    // 大额拆单后一人名下会挂多笔：带上待领汇总，前端显示"共 N 笔 · 合计 ¥X"并逐笔串行领取
-    const agg = await db.countPendingRewardsForTarget(externalUserid).catch(() => null);
+    const aggW = externalUserid
+      ? await db.countPendingRewardsForTarget(externalUserid).catch(() => ({ n: 0, fen: 0 }))
+      : { n: 0, fen: 0 };
+    const agg = { n: aggD.n + aggW.n, fen: aggD.fen + aggW.fen };
     // 优先续办「已领取待确认」的在途单：转账已发起、资金已冻结，重开确认页即可到账。
     // 此前这种单重进后会被当成"没有待领奖励"，客户卡死到微信超时关单
-    const resumable = await db.findResumableTransferForTarget(externalUserid, openid).catch(() => null);
+    const resumable =
+      (await db.findResumableTransferForOpenid(openid).catch(() => null)) ||
+      (externalUserid ? await db.findResumableTransferForTarget(externalUserid, openid).catch(() => null) : null);
     if (resumable) {
       return res.json({
         reward: { rid: resumable.rid, amountYuan: resumable.amount_fen / 100, remark: resumable.remark },
@@ -1266,14 +1365,21 @@ app.get('/api/claim/mine', async (req, res) => {
           appId: config.wechatpay.appid,
         },
         // 待领汇总只算 CREATED，这笔在途单要补进去，"共 N 笔"才对得上
-        pending: { count: (agg ? agg.n : 0) + 1, totalYuan: ((agg ? agg.fen : 0) + resumable.amount_fen) / 100 },
+        pending: { count: agg.n + 1, totalYuan: (agg.fen + resumable.amount_fen) / 100 },
       });
     }
-    const r = await db.findPendingRewardForTarget(externalUserid);
-    if (!r) return res.json({ reward: null, reason: 'no_pending' });
+    const r =
+      (await db.findPendingRewardForOpenid(openid)) ||
+      (externalUserid ? await db.findPendingRewardForTarget(externalUserid) : null);
+    if (!r) {
+      // 空态原因只在「确实可能有企微定向但身份没接上」时给企微向的提示；
+      // 纯直连模式（未配企微）不该拿"加企业微信好友"误导客户
+      const reason = !externalUserid && wecom.wecomEnabled ? (unionid ? 'not_a_customer' : 'no_unionid') : 'no_pending';
+      return res.json({ reward: null, reason });
+    }
     res.json({
       reward: { rid: r.rid, amountYuan: r.amount_fen / 100, remark: r.remark },
-      pending: agg ? { count: agg.n, totalYuan: agg.fen / 100 } : null,
+      pending: { count: agg.n, totalYuan: agg.fen / 100 },
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1287,9 +1393,14 @@ app.post('/api/claim/mine', async (req, res) => {
   if (!openid) return res.status(401).json({ error: '请在微信小程序内打开' });
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
   try {
-    const externalUserid = await resolveCustomer(unionid, openid);
-    if (!externalUserid) return res.status(403).json({ error: '未识别到你的客户身份，无法领取' });
-    const r = await db.findPendingRewardForTarget(externalUserid);
+    // 双模式：先取直连池（奖励的 target_openid == 我的 openid，查询条件即身份校验，无桥可错），
+    // 直连池空再走企微池老路。找到哪笔就发哪笔——转账收款人恒为当前请求者本人的 openid
+    let r = await db.findPendingRewardForOpenid(openid);
+    if (!r) {
+      const externalUserid = await resolveCustomer(unionid, openid);
+      if (!externalUserid) return res.status(403).json({ error: '未识别到你的客户身份，无法领取' });
+      r = await db.findPendingRewardForTarget(externalUserid);
+    }
     if (!r) return res.status(404).json({ error: '没有属于你的待领奖励' });
     const result = await createTransferBill({
       outBillNo: r.rid, // 幂等：重复领取不重复付款
@@ -1311,6 +1422,7 @@ app.post('/api/claim/mine', async (req, res) => {
         packageInfo: result.package_info,
       })
     );
+    persist('touchDirectCustomer(mine)', () => db.touchDirectCustomer(openid)); // 领取者自动入直连客户池
     res.json({
       state: result.state,
       package_info: result.package_info,
@@ -1356,7 +1468,7 @@ app.get('/api/claim/status', async (req, res) => {
       if (rw) {
         if (rw.status === 'CANCELLED') state = 'CANCELLED';
         else if (rw.status === 'SUCCESS') state = 'SUCCESS';
-        else if (rw.target_external_userid) state = 'TARGETED';
+        else if (rw.target_external_userid || rw.target_openid) state = 'TARGETED'; // 两种定向同等拦截
       }
     } catch (_) {
       /* 查库失败按可领处理：点领取时 POST /api/claim 仍有全量强校验兜底 */
@@ -1385,7 +1497,8 @@ app.post('/api/claim', async (req, res) => {
       if (rw && rw.status === 'CANCELLED') {
         return res.status(410).json({ error: '这笔奖励已被发放方撤回' });
       }
-      if (rw && rw.target_external_userid) {
+      if (rw && (rw.target_external_userid || rw.target_openid)) {
+        // 定向奖励（企微定向或直连定向）只能由目标本人按身份领取，令牌路径一律拒绝（防冒领）
         return res.status(403).json({ error: '这是定向奖励，请由指定客户在小程序内领取' });
       }
     } catch (_) {
@@ -1414,6 +1527,7 @@ app.post('/api/claim', async (req, res) => {
         packageInfo: result.package_info,
       })
     );
+    persist('touchDirectCustomer(claim)', () => db.touchDirectCustomer(openid)); // 领取者自动入直连客户池
     res.json({
       state: result.state, // 一般是 WAIT_USER_CONFIRM
       package_info: result.package_info,

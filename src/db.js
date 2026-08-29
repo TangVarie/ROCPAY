@@ -59,7 +59,8 @@ const DDL = [
      amount_fen     INT UNSIGNED NOT NULL COMMENT '金额(分)',
      remark         VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注(用户可见)',
      recipient_name VARCHAR(64)  NULL COMMENT '收款人真实姓名(可选·PII)',
-     target_external_userid VARCHAR(64) NULL COMMENT '定向目标企微客户(P2)，NULL=非定向',
+     target_external_userid VARCHAR(64) NULL COMMENT '定向目标·企微客户(P2)，与target_openid二选一',
+     target_openid  VARCHAR(64)  NULL COMMENT '定向目标·直连客户openid(免企微模式)，与target_external_userid二选一',
      batch_id       VARCHAR(32)  NULL COMMENT '批次号：同一次批量发放的多笔共用，按批查看/撤回用',
      revoked_by     VARCHAR(64)  NULL COMMENT '撤回操作人openid(审计：谁撤的这笔钱)',
      revoked_at     DATETIME     NULL COMMENT '撤回操作时间',
@@ -71,6 +72,7 @@ const DDL = [
      KEY idx_rewards_created_by (created_by),
      KEY idx_rewards_status (status),
      KEY idx_rewards_target (target_external_userid),
+     KEY idx_rewards_target_openid (target_openid),
      KEY idx_rewards_batch (batch_id),
      KEY idx_rewards_created_at (created_at)
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='发放的奖励'`,
@@ -145,6 +147,21 @@ const DDL = [
      KEY idx_customers_openid (openid),
      KEY idx_customers_follow (follow_userid)
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='企微客户缓存+身份映射'`,
+
+  // 直连客户池（免企微模式的"客户列表"）：任何在小程序领取过奖励的人自动入池（source=claim），
+  // 管理员也可手动按 openid 添加/改备注（source=manual）。定向发放的直连模式从这里选人。
+  // 入池只是"可选名单"，不动钱：真正的资金定向绑定在 rewards.target_openid 上
+  `CREATE TABLE IF NOT EXISTS direct_customers (
+     openid        VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '客户小程序openid',
+     remark        VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '备注名(管理员起，选人/台账显示用)',
+     source        VARCHAR(16)  NOT NULL DEFAULT 'manual' COMMENT 'manual手动添加|claim领取自动入池',
+     created_by    VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '手动添加人openid(审计)',
+     last_claim_at DATETIME     NULL COMMENT '最近一次领取时间',
+     created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+     KEY idx_dc_remark (remark),
+     KEY idx_dc_last_claim (last_claim_at)
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='直连客户池(免企微定向发放选人用)'`,
 
   // 订阅消息授权配额：客户在小程序点一次「允许」= granted+1；后端发一条 = used+1。
   // 微信侧同样按次计数，本表是本地记账（避免明知发不出去还白调接口），以先耗尽者为准
@@ -260,6 +277,13 @@ export async function migrate() {
     'remark',
     "remark VARCHAR(64) NOT NULL DEFAULT '' COMMENT '该跟进人给客户起的备注名(每人各自一份)' AFTER userid"
   );
+  // 老库补列：直连定向目标（免企微模式，与 target_external_userid 二选一）
+  await ensureColumn(
+    'rewards',
+    'target_openid',
+    "target_openid VARCHAR(64) NULL COMMENT '定向目标·直连客户openid(免企微模式)' AFTER target_external_userid"
+  );
+  await ensureIndex('rewards', 'idx_rewards_target_openid', 'KEY idx_rewards_target_openid (target_openid)');
   await seedSuperAdmins(config.app.adminOpenids);
 }
 
@@ -339,14 +363,20 @@ function clip(s, n) {
   return str.length > n ? str.slice(0, n) : str;
 }
 
-/** 【发奖】管理员生成奖励时落库。targetExternalUserid 非空=定向奖励(P2)；batchId=同一次批量发放的批次号 */
-export async function saveReward({ rid, amountFen, remark, name, createdBy, exp, targetExternalUserid, batchId }) {
+/** 【发奖】管理员生成奖励时落库。定向目标二选一：targetExternalUserid(企微) 或 targetOpenid(直连)；
+ *  两个都传视为调用方 bug，直接抛错拒绝落库——一笔钱只能有一个明确的定向语义。
+ *  batchId=同一次批量发放的批次号 */
+export async function saveReward({ rid, amountFen, remark, name, createdBy, exp, targetExternalUserid, targetOpenid, batchId }) {
   if (!pool) return;
+  if (targetExternalUserid && targetOpenid) {
+    throw new Error('定向目标只能二选一（企微客户或直连openid）');
+  }
   await pool.execute(
-    `INSERT INTO rewards (rid, amount_fen, remark, recipient_name, target_external_userid, batch_id, created_by, status, expires_at)
-     VALUES (:rid, :amount_fen, :remark, :recipient_name, :target, :batch_id, :created_by, 'CREATED', FROM_UNIXTIME(:exp_ts))
+    `INSERT INTO rewards (rid, amount_fen, remark, recipient_name, target_external_userid, target_openid, batch_id, created_by, status, expires_at)
+     VALUES (:rid, :amount_fen, :remark, :recipient_name, :target, :target_openid, :batch_id, :created_by, 'CREATED', FROM_UNIXTIME(:exp_ts))
      ON DUPLICATE KEY UPDATE amount_fen=VALUES(amount_fen), remark=VALUES(remark),
        recipient_name=VALUES(recipient_name), target_external_userid=VALUES(target_external_userid),
+       target_openid=VALUES(target_openid),
        created_by=VALUES(created_by)`,
     {
       rid,
@@ -354,6 +384,7 @@ export async function saveReward({ rid, amountFen, remark, name, createdBy, exp,
       remark: clip(remark || '', 64),
       recipient_name: name ? clip(name, 64) : null,
       target: targetExternalUserid || null,
+      target_openid: targetOpenid || null,
       batch_id: batchId || null,
       created_by: clip(createdBy || '', 64),
       exp_ts: expSec(exp),
@@ -509,13 +540,14 @@ export async function saveNotifyEvent({ eventType, outBillNo, transferBillNo, st
  */
 // 台账筛选条件 → WHERE 子句（listRewards/getStats 共用，保证列表和汇总口径一致）
 //   status: all|created(待领取·未过期)|expired(已过期未领)|waiting(待确认)|success|failed(含失败/关闭/撤回)
-//   days:   只看近 N 天（0=全部）；target: 只看某个客户（单人资金往来）；batch: 只看某一批次
-//   q:      关键词（备注模糊 / 单号 rid 精确 / 金额精确(元) / 客户备注名·昵称）
+//   days:   只看近 N 天（0=全部）；target: 只看某企微客户 / targetOpenid: 只看某直连客户（单人资金往来）；
+//   batch:  只看某一批次
+//   q:      关键词（备注模糊 / 单号 rid 精确 / 金额精确(元) / 客户备注名·昵称·直连备注）
 //   month:  只看某个自然月（YYYY-MM；边界按库内时间——库服务器时区，与 days 的 NOW() 口径一致）
 // 过期口径与额度回流(QUOTA_CONSUMED_SQL)/领取校验一致：CREATED 且 expires_at 已过。
 // 过期单从未发起转账（钱没动过），所以不并入 failed，单独一档。
 const EXPIRED_SQL = `(r.status = 'CREATED' AND r.expires_at IS NOT NULL AND r.expires_at <= NOW())`;
-function rewardFilterSql({ status = 'all', days = 0, target = '', batch = '', q = '', month = '' } = {}) {
+function rewardFilterSql({ status = 'all', days = 0, target = '', targetOpenid = '', batch = '', q = '', month = '' } = {}) {
   const conds = [];
   const params = {};
   const st = String(status || 'all');
@@ -533,6 +565,10 @@ function rewardFilterSql({ status = 'all', days = 0, target = '', batch = '', q 
     conds.push(`r.target_external_userid = :target`);
     params.target = String(target);
   }
+  if (targetOpenid) {
+    conds.push(`r.target_openid = :target_openid`);
+    params.target_openid = String(targetOpenid);
+  }
   if (batch) {
     conds.push(`r.batch_id = :batch`);
     params.batch = String(batch);
@@ -549,6 +585,9 @@ function rewardFilterSql({ status = 'all', days = 0, target = '', batch = '', q 
          (SELECT external_userid FROM customers WHERE remark LIKE :kw_like OR name LIKE :kw_like)`,
       `r.target_external_userid IN
          (SELECT external_userid FROM customer_follows WHERE remark LIKE :kw_like)`,
+      `r.target_openid IN
+         (SELECT openid FROM direct_customers WHERE remark LIKE :kw_like)`,
+      `r.target_openid = :kw`,
     ];
     params.kw_like = `%${kw}%`;
     params.kw = kw;
@@ -567,19 +606,20 @@ function rewardFilterSql({ status = 'all', days = 0, target = '', batch = '', q 
   return { where: conds.length ? `WHERE ${conds.join(' AND ')}` : '', params };
 }
 
-export async function listRewards({ limit = 50, offset = 0, status, days, target, batch, q, month, viewerUserid = '' } = {}) {
+export async function listRewards({ limit = 50, offset = 0, status, days, target, targetOpenid, batch, q, month, viewerUserid = '' } = {}) {
   if (!pool) return [];
   const lim = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
   const off = Math.max(parseInt(offset, 10) || 0, 0);
-  const { where, params } = rewardFilterSql({ status, days, target, batch, q, month });
+  const { where, params } = rewardFilterSql({ status, days, target, targetOpenid, batch, q, month });
   // 客户名个性化：优先显示查看者(企微userid)自己给客户起的备注，兜底单值次之
   params.viewer = viewerUserid || '';
   const [rows] = await pool.execute(
     `SELECT r.rid, r.amount_fen, r.remark, r.created_by, r.status,
             ${EXPIRED_SQL} AS is_expired,
-            r.created_at, r.expires_at, r.target_external_userid, r.batch_id,
+            r.created_at, r.expires_at, r.target_external_userid, r.target_openid, r.batch_id,
             r.revoked_by, r.revoked_at,
             COALESCE(NULLIF(vf.remark, ''), c.remark) AS target_remark, c.name AS target_name,
+            dc.remark AS target_direct_remark,
             a.name AS created_by_name,
             ra.name AS revoked_by_name,
             t.claimer_openid, t.transfer_bill_no, t.state AS transfer_state,
@@ -589,6 +629,7 @@ export async function listRewards({ limit = 50, offset = 0, status, days, target
        LEFT JOIN customers c ON c.external_userid = r.target_external_userid
        LEFT JOIN customer_follows vf
          ON vf.external_userid = r.target_external_userid AND vf.userid = :viewer
+       LEFT JOIN direct_customers dc ON dc.openid = r.target_openid
        LEFT JOIN admins a ON a.openid = r.created_by
        LEFT JOIN admins ra ON ra.openid = r.revoked_by
       ${where}
@@ -1088,6 +1129,140 @@ export async function countPendingRewardsForTarget(externalUserid) {
   return { n: Number(rows[0].n), fen: Number(rows[0].fen) };
 }
 
+// ---------------- 直连定向（免企微：奖励直接绑客户 openid） ----------------
+// 与上面三个企微定向查询严格镜像：唯一差别是匹配列换成 target_openid。
+// 安全性质更强：查询条件本身就是"目标=请求者本人的 openid"，不存在身份桥错配的可能
+
+/** 找某 openid 名下"待领取"的直连定向奖励 */
+export async function findPendingRewardForOpenid(openid) {
+  if (!pool || !openid) return null;
+  const [rows] = await pool.query(
+    `SELECT rid, amount_fen, remark, recipient_name, expires_at, status
+       FROM rewards
+      WHERE target_openid = :o AND status = 'CREATED'
+        AND (expires_at IS NULL OR expires_at > NOW())
+      ORDER BY created_at ASC LIMIT 1`,
+    { o: openid }
+  );
+  return rows.length ? rows[0] : null;
+}
+
+/** 某 openid 名下待领直连奖励汇总（拆单后一人多笔，"共 N 笔 · 合计"用） */
+export async function countPendingRewardsForOpenid(openid) {
+  if (!pool || !openid) return { n: 0, fen: 0 };
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS n, COALESCE(SUM(amount_fen),0) AS fen
+       FROM rewards
+      WHERE target_openid = :o AND status = 'CREATED'
+        AND (expires_at IS NULL OR expires_at > NOW())`,
+    { o: openid }
+  );
+  return { n: Number(rows[0].n), fen: Number(rows[0].fen) };
+}
+
+/** 该 openid「已领取但还没确认收款」的直连在途转账（重开微信确认页续办） */
+export async function findResumableTransferForOpenid(openid) {
+  if (!pool || !openid) return null;
+  const [rows] = await pool.execute(
+    `SELECT r.rid, r.amount_fen, r.remark, t.package_info, t.transfer_bill_no
+       FROM rewards r
+       JOIN transfers t ON t.out_bill_no = r.rid
+      WHERE r.target_openid = :o AND r.status = 'CLAIMED'
+        AND t.state = 'WAIT_USER_CONFIRM' AND t.claimer_openid = :o
+        AND t.package_info IS NOT NULL
+      ORDER BY r.created_at ASC LIMIT 1`,
+    { o: openid }
+  );
+  return rows.length ? rows[0] : null;
+}
+
+// ---------------- 直连客户池 ----------------
+
+/** 【自动入池】客户发起领取时登记/刷新（best-effort，不阻断领钱主流程）。
+ *  只更新 last_claim_at，绝不覆盖管理员起的备注 */
+export async function touchDirectCustomer(openid) {
+  if (!pool || !openid) return;
+  await pool.execute(
+    `INSERT INTO direct_customers (openid, source, last_claim_at)
+     VALUES (:openid, 'claim', CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE last_claim_at = CURRENT_TIMESTAMP`,
+    { openid }
+  );
+}
+
+/** 【手动】添加/改备注（upsert by openid）。备注覆盖，source/last_claim_at 保留 */
+export async function upsertDirectCustomer({ openid, remark, createdBy }) {
+  if (!pool) throw new Error('未开启数据库');
+  await pool.execute(
+    `INSERT INTO direct_customers (openid, remark, source, created_by)
+     VALUES (:openid, :remark, 'manual', :created_by)
+     ON DUPLICATE KEY UPDATE remark = VALUES(remark)`,
+    { openid, remark: clip(remark || '', 64), created_by: clip(createdBy || '', 64) }
+  );
+}
+
+/** 【手动】从池里移除（只删名单行，不影响该客户的历史奖励/台账） */
+export async function removeDirectCustomer(openid) {
+  if (!pool || !openid) return false;
+  const [r] = await pool.execute(`DELETE FROM direct_customers WHERE openid = :openid`, { openid });
+  return ((r && r.affectedRows) || 0) > 0;
+}
+
+/** 【选人】直连客户池列表：备注模糊 / openid 精确匹配；近期领取过的排前面 */
+export async function listDirectCustomers({ q = '', limit = 60, offset = 0 } = {}) {
+  if (!pool) return [];
+  const lim = Math.min(Math.max(parseInt(limit, 10) || 60, 1), 500);
+  const off = Math.max(parseInt(offset, 10) || 0, 0);
+  const where = [];
+  const params = {};
+  const kw = String(q || '').trim();
+  if (kw) {
+    where.push(`(remark LIKE :kw_like OR openid = :kw)`);
+    params.kw_like = `%${kw}%`;
+    params.kw = kw;
+  }
+  const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  const [rows] = await pool.query(
+    `SELECT openid, remark, source, last_claim_at
+       FROM direct_customers ${whereSql}
+      ORDER BY (last_claim_at IS NULL) ASC, last_claim_at DESC, remark ASC, openid ASC
+      LIMIT ${lim} OFFSET ${off}`,
+    params
+  );
+  return rows;
+}
+
+/** 一批直连客户的备注：openid -> remark（通知结果/台账显示用） */
+export async function getDirectRemarks(openids = []) {
+  const map = new Map();
+  if (!pool || !openids.length) return map;
+  const ph = openids.map(() => '?').join(',');
+  const [rows] = await pool.query(
+    `SELECT openid, remark FROM direct_customers WHERE openid IN (${ph})`,
+    openids
+  );
+  for (const r of rows) map.set(r.openid, r.remark || '');
+  return map;
+}
+
+/** 一批直连定向客户的待领汇总：openid -> { n, fen, remark 任一备注 }（直达通知文案用） */
+export async function pendingSummaryForOpenidTargets(openids = []) {
+  const map = new Map();
+  if (!pool || !openids.length) return map;
+  const ph = openids.map(() => '?').join(',');
+  const [rows] = await pool.query(
+    `SELECT target_openid AS o, COUNT(*) AS n,
+            COALESCE(SUM(amount_fen),0) AS fen, MAX(remark) AS remark
+       FROM rewards
+      WHERE target_openid IN (${ph}) AND status = 'CREATED'
+        AND (expires_at IS NULL OR expires_at > NOW())
+      GROUP BY target_openid`,
+    openids
+  );
+  for (const r of rows) map.set(r.o, { n: Number(r.n), fen: Number(r.fen), remark: r.remark || '' });
+  return map;
+}
+
 /** 「知悉水位」之后新出现的失败/关闭单数量（异常角标口径；水位为空则统计全部）。
     用 >= 而不是 >：水位与 updated_at 都是秒级精度，ack 同一秒内之后新出现的失败
     用 > 会被永久排除——宁可让同一秒里刚知悉的单多提醒一次（再点一次即清），绝不静默丢新失败 */
@@ -1105,7 +1280,7 @@ export async function countUnackedFailures(ackAt) {
 export async function getReward(rid) {
   if (!pool || !rid) return null;
   const [rows] = await pool.execute(
-    `SELECT rid, amount_fen, remark, status, target_external_userid FROM rewards WHERE rid=:rid LIMIT 1`,
+    `SELECT rid, amount_fen, remark, status, target_external_userid, target_openid FROM rewards WHERE rid=:rid LIMIT 1`,
     { rid }
   );
   return rows.length ? rows[0] : null;
@@ -1115,7 +1290,7 @@ export async function getReward(rid) {
 export async function listBatchRewards(batchId) {
   if (!pool || !batchId) return [];
   const [rows] = await pool.execute(
-    `SELECT rid, status, amount_fen, remark, target_external_userid
+    `SELECT rid, status, amount_fen, remark, target_external_userid, target_openid
        FROM rewards WHERE batch_id=:b ORDER BY created_at ASC, rid ASC`,
     { b: batchId }
   );
@@ -1259,6 +1434,15 @@ export const db = {
   findPendingRewardForTarget,
   findResumableTransferForTarget,
   countPendingRewardsForTarget,
+  findPendingRewardForOpenid,
+  findResumableTransferForOpenid,
+  countPendingRewardsForOpenid,
+  touchDirectCustomer,
+  upsertDirectCustomer,
+  removeDirectCustomer,
+  listDirectCustomers,
+  getDirectRemarks,
+  pendingSummaryForOpenidTargets,
   getRewardTarget,
   getReward,
   revokeReward,

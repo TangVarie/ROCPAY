@@ -362,3 +362,11 @@
 }
 .openid-text { flex: 1; word-break: break-all; font-size: 24rpx; color: var(--text-light); }
 .openid-copy { flex: none; font-size: 26rpx; font-weight: 600; color: var(--primary-onbg); padding: 10rpx 14rpx; }
+
+/* ===== 直连客户（免企微 openid 名单） ===== */
+.srcchips { margin-top: 16rpx; }
+.dadd { padding: 8rpx 0 4rpx; }
+.dadd-input { width: 100%; box-sizing: border-box; margin-bottom: 16rpx; }
+.dadd-btn { margin-bottom: 12rpx; }
+/* 直连行副行是 openid 长串（无空格）：强制可断行，不撑破行布局；企微行副行为名字，不受影响 */
+.cust-sub { word-break: break-all; }
