@@ -139,6 +139,21 @@ app.use((req, res, next) => {
   return ok ? next() : res.status(404).send('Not found');
 });
 
+// —— 迁移闸门（评审发现）：DB_AUTO_MIGRATE 模式下 schema 就绪前不放行 /api 业务请求 ——
+// 升级窗口/连库悬死时拿旧表结构跑业务会半路报错，快发甚至会"令牌已发、台账没落"；
+// 就绪前统一 503（明确可稍后重试），比放进来碰 ER_BAD_FIELD_ERROR 诚实且安全。
+// /api/health 放行：云托管健康检查不依赖 schema。微信支付/企微回调被 503 会由对方按其
+// 重试机制稍后重投，不丢事件
+let dbSchemaReady = !db.dbEnabled || !config.db.autoMigrate; // 无库/手动迁移模式：不设闸
+let dbMigrateSettled = null; // 迁移重试循环的 promise（首轮成功前一直 pending，见文件末启动段）
+app.use(async (req, res, next) => {
+  if (dbSchemaReady || !req.path.startsWith('/api/') || req.path === '/api/health') return next();
+  // 迁移收尾窗口内到达的请求：排队最多 5s 等就绪再放行（前端超时 15s，留足余量），等不到才 503
+  if (dbMigrateSettled) await Promise.race([dbMigrateSettled, new Promise((r) => setTimeout(r, 5000))]);
+  if (dbSchemaReady) return next();
+  res.status(503).json({ error: '服务正在升级数据库结构，请稍候几秒重试' });
+});
+
 // 身份来源：callContainer 注入的 x-wx-openid（公网不信任）。DEV_* 仅在 ALLOW_DEV_AUTH=1 时用于本地调试。
 function getOpenid(req) {
   if (viaPublicDomain(req)) return '';
@@ -1367,48 +1382,73 @@ app.get('/api/claim/mine', async (req, res) => {
   if (!openid) return res.status(401).json({ error: '请在微信小程序内打开' });
   if (!db.dbEnabled) return res.json({ reward: null, reason: 'no_db' });
   try {
-    // 双模式定向：先查「直连」（奖励直接绑我的 openid，无需任何身份桥，最快最稳），
-    // 再走「企微」老路（unionid → external_userid 桥）。两池的待领汇总合并展示，
-    // 逐笔领取时 GET 每次都会重查，两个池会被串行领完。
-    // ---- 直连池（openid 直查，零外部依赖）----
+    // 双模式定向：直连池整体先行、企微池整体在后（评审发现：直连领取名义上不依赖企微，
+    // 就不能被企微身份桥的外呼拖住——桥的两次请求各 6s 超时，企微故障时会拖 ~12s，
+    // 逼近 callContainer 15s 上限）。直连池有单就直接服务、不碰企微；直连池空了才解析
+    // 企微身份走老路。代价说清楚：两池都有单时，直连池服务期间"共 N 笔"只计直连池，
+    // 直连领完后 GET 重查自然切到企微池口径——计数短暂偏少，换来直连领取零外部依赖。
+    // ---- 直连池（openid 直查，先在途单后待领单）----
     const aggD = await db.countPendingRewardsForOpenid(openid).catch(() => ({ n: 0, fen: 0 }));
-    // ---- 企微池（身份桥可能不通：不通只是企微池不可见，不影响直连池）----
+    const resumableD = await db.findResumableTransferForOpenid(openid).catch(() => null);
+    if (resumableD) {
+      return res.json({
+        reward: { rid: resumableD.rid, amountYuan: resumableD.amount_fen / 100, remark: resumableD.remark },
+        resume: {
+          package_info: resumableD.package_info,
+          transfer_bill_no: resumableD.transfer_bill_no || '',
+          mchId: config.wechatpay.mchid,
+          appId: config.wechatpay.appid,
+        },
+        // 待领汇总只算 CREATED，这笔在途单要补进去，"共 N 笔"才对得上
+        pending: { count: aggD.n + 1, totalYuan: (aggD.fen + resumableD.amount_fen) / 100 },
+      });
+    }
+    const rD = await db.findPendingRewardForOpenid(openid);
+    if (rD) {
+      return res.json({
+        reward: { rid: rD.rid, amountYuan: rD.amount_fen / 100, remark: rD.remark },
+        pending: { count: aggD.n || 1, totalYuan: aggD.fen / 100 || rD.amount_fen / 100 },
+      });
+    }
+    // ---- 直连池已空：走企微老路（unionid → external_userid 桥）----
     // 首页自动探测：本地库优先（快），未命中再走企微在线转换兜底（已带 6s 超时，不会拖死）。
     const externalUserid = await resolveCustomer(unionid, openid);
     const aggW = externalUserid
       ? await db.countPendingRewardsForTarget(externalUserid).catch(() => ({ n: 0, fen: 0 }))
       : { n: 0, fen: 0 };
-    const agg = { n: aggD.n + aggW.n, fen: aggD.fen + aggW.fen };
     // 优先续办「已领取待确认」的在途单：转账已发起、资金已冻结，重开确认页即可到账。
     // 此前这种单重进后会被当成"没有待领奖励"，客户卡死到微信超时关单
-    const resumable =
-      (await db.findResumableTransferForOpenid(openid).catch(() => null)) ||
-      (externalUserid ? await db.findResumableTransferForTarget(externalUserid, openid).catch(() => null) : null);
-    if (resumable) {
+    const resumableW = externalUserid
+      ? await db.findResumableTransferForTarget(externalUserid, openid).catch(() => null)
+      : null;
+    if (resumableW) {
       return res.json({
-        reward: { rid: resumable.rid, amountYuan: resumable.amount_fen / 100, remark: resumable.remark },
+        reward: { rid: resumableW.rid, amountYuan: resumableW.amount_fen / 100, remark: resumableW.remark },
         resume: {
-          package_info: resumable.package_info,
-          transfer_bill_no: resumable.transfer_bill_no || '',
+          package_info: resumableW.package_info,
+          transfer_bill_no: resumableW.transfer_bill_no || '',
           mchId: config.wechatpay.mchid,
           appId: config.wechatpay.appid,
         },
-        // 待领汇总只算 CREATED，这笔在途单要补进去，"共 N 笔"才对得上
-        pending: { count: agg.n + 1, totalYuan: (agg.fen + resumable.amount_fen) / 100 },
+        pending: { count: aggW.n + 1, totalYuan: (aggW.fen + resumableW.amount_fen) / 100 },
       });
     }
-    const r =
-      (await db.findPendingRewardForOpenid(openid)) ||
-      (externalUserid ? await db.findPendingRewardForTarget(externalUserid) : null);
+    const r = externalUserid ? await db.findPendingRewardForTarget(externalUserid) : null;
     if (!r) {
       // 空态原因只在「确实可能有企微定向但身份没接上」时给企微向的提示；
-      // 纯直连模式（未配企微）不该拿"加企业微信好友"误导客户
-      const reason = !externalUserid && wecom.wecomEnabled ? (unionid ? 'not_a_customer' : 'no_unionid') : 'no_pending';
+      // 纯直连模式（未配企微）不该拿"加企业微信好友"误导客户。
+      // 混合模式下直连名单里的客户同理（评审发现）：他合法地走免企微通道，
+      // 只是暂时没有待领，给"暂无待领"而不是"加企业微信"的身份指引
+      let reason = 'no_pending';
+      if (!externalUserid && wecom.wecomEnabled) {
+        const inDirectPool = (await db.getDirectRemarks([openid]).catch(() => new Map())).has(openid);
+        if (!inDirectPool) reason = unionid ? 'not_a_customer' : 'no_unionid';
+      }
       return res.json({ reward: null, reason });
     }
     res.json({
       reward: { rid: r.rid, amountYuan: r.amount_fen / 100, remark: r.remark },
-      pending: { count: agg.n, totalYuan: agg.fen / 100 },
+      pending: { count: aggW.n, totalYuan: aggW.fen / 100 },
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1677,27 +1717,38 @@ async function reconcileTransfers() {
 
 // 先完成数据库迁移、再开门收请求（评审发现的升级窗口）：升级部署的窗口期里老库还没有新列
 // （如 rewards.target_openid），提前放进来的请求会整批 ER_BAD_FIELD_ERROR——快发路线更糟：
-// saveReward 是 fire-and-forget，令牌照发、台账没落。迁移失败/超时仍照常监听（保持"降级可用"
-// 语义，云托管健康检查不被拖死），只是不再和第一批请求赛跑。
+// saveReward 是 fire-and-forget，令牌照发、台账没落。正常情况迁移秒级完成、监听前就绪；
+// 迁移失败/超时先行监听（云托管健康检查不被拖死），但 schema 就绪前 /api 由顶部闸门挡成
+// 503、后台每 60s 重试迁移直到成功（评审发现：不能"超时后带着旧 schema 照常营业"）。
 (async () => {
   if (db.dbEnabled) {
     if (config.db.autoMigrate) {
-      try {
-        await Promise.race([
-          (async () => {
+      // 首轮迁移见分晓（成功或失败）就开门：失败时闸门守着、后台重试，干等 30s 毫无收益；
+      // 30s 上限只兜"连库悬死既不成功也不报错"的情况，云托管健康检查不被拖死
+      let firstAttemptDone;
+      const firstAttempt = new Promise((resolve) => { firstAttemptDone = resolve; });
+      dbMigrateSettled = (async () => {
+        // 重试到成功为止：启动时数据库短暂不可用，不该让服务永远停在"未迁移"。migrate 幂等重跑无害
+        for (let attempt = 1; ; attempt++) {
+          try {
             await db.migrate();
-            await refreshAdmins();
-          })(),
-          // 30s 上限：连库悬死不能无限拖住监听（迁移幂等，超时后下次启动会补齐）
-          new Promise((_, rej) => setTimeout(() => rej(new Error('迁移超过 30s 未完成')), 30_000).unref?.()),
-        ]);
-        console.log('✅ 数据库已连接，业务表已就绪（rewards / transfers / notify_events / admins）');
-      } catch (e) {
-        console.error('⚠️ 自动建表失败（服务仍可运行，落库会被跳过）：', e.code || e.message);
-      }
+            await refreshAdmins(); // 内部自捕获，不会抛
+            dbSchemaReady = true;
+            console.log('✅ 数据库已连接，业务表已就绪（rewards / transfers / notify_events / admins）');
+            firstAttemptDone();
+            return;
+          } catch (e) {
+            console.error(`⚠️ 自动建表失败（第 ${attempt} 次，60s 后重试；就绪前 /api 返回 503）：`, e.code || e.message);
+            firstAttemptDone();
+            await new Promise((r) => setTimeout(r, 60_000));
+          }
+        }
+      })();
+      await Promise.race([firstAttempt, new Promise((r) => setTimeout(r, 30_000).unref?.())]);
+      if (!dbSchemaReady) console.warn('⚠️ 迁移未就绪即先行监听；/api 在 schema 就绪前返回 503，后台持续重试迁移');
     } else {
       console.log('ℹ️ 已配置数据库，但 DB_AUTO_MIGRATE=false，请手动执行 db/schema.sql');
-      await refreshAdmins().catch((e) => console.error('⚠️ 员工缓存预热失败：', e.code || e.message));
+      await refreshAdmins(); // 内部自捕获，不会抛
     }
   } else {
     if (config.db.partialConfig) {

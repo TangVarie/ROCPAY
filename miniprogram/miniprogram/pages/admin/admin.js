@@ -410,7 +410,14 @@ Page({
             const selected = this.data.selected.filter((s) => s.key !== oid);
             const map = Object.assign({}, this.data.selectedMap);
             delete map[oid];
-            this.setData({ dList: this.data.dList.filter((c) => c.openid !== oid), selected, selectedMap: map });
+            const nextList = this.data.dList.filter((c) => c.openid !== oid);
+            this.setData({
+              dList: nextList,
+              // 删一行 = 库里结果集整体前移一位：分页游标同步回退，否则下一页会跳过一位客户（评审发现）
+              dOffset: Math.max(this.data.dOffset - (this.data.dList.length - nextList.length), 0),
+              selected,
+              selectedMap: map,
+            });
             wx.showToast({ title: '已移除', icon: 'success' });
           })
           .catch(() => wx.showToast({ title: '网络错误，请重试', icon: 'none' }));
