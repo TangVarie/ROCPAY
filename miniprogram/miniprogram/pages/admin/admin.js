@@ -337,7 +337,8 @@ Page({
         if (!res || !res.list) return this.setData({ dLoading: false, dLoaded: true, dError: true });
         const page = res.list.map((c) => ({
           openid: c.openid,
-          label: c.remark || '客户' + String(c.openid).slice(-4), // 没备注时以 openid 尾号区分
+          // 显示名：直连备注 > 借企微备注（同一人在企微侧的备注/昵称，经 openid 桥）> openid 尾号
+          label: c.remark || c.wecom_label || '客户' + String(c.openid).slice(-4),
           sub: c.openid,
           claimed: !!c.last_claim_at, // 在本小程序领过奖励 = openid 实测有效
         }));
@@ -839,13 +840,13 @@ Page({
             yuan: (r.amount_fen / 100).toFixed(2),
             // 副行：备注 + 谁发的（多发放员团队对账/追责要看这个）
             sub: (r.remark || '客户奖励') + (by ? ' · ' + by + ' 发放' : ''),
-            // 定向对象：企微客户显备注/名字；直连客户显名单备注，没备注用 openid 尾号区分
+            // 定向对象：企微客户显备注/名字；直连客户显名单备注 > 借企微备注（openid 桥）> openid 尾号
             who:
               r.target_remark || r.target_name ||
               (r.target_external_userid
                 ? '定向客户'
                 : r.target_openid
-                  ? r.target_direct_remark || '客户' + String(r.target_openid).slice(-4)
+                  ? r.target_direct_remark || r.target_bridge_remark || '客户' + String(r.target_openid).slice(-4)
                   : ''),
             eu: r.target_external_userid || '',
             oid: r.target_openid || '',

@@ -723,7 +723,13 @@ app.get('/api/direct-customers', async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 60, 200);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
-    const list = await db.listDirectCustomers({ q: String(req.query.q || ''), limit, offset });
+    const list = await db.listDirectCustomers({
+      q: String(req.query.q || ''),
+      limit,
+      offset,
+      // 企微身份桥的备注个性化：借来的企微备注优先显示查看者自己起的那份
+      viewerUserid: adminWecomUserid(getOpenid(req)),
+    });
     res.json({ list, hasMore: list.length === limit });
   } catch (e) {
     res.status(500).json({ error: e.message });

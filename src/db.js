@@ -587,6 +587,12 @@ function rewardFilterSql({ status = 'all', days = 0, target = '', targetOpenid =
          (SELECT external_userid FROM customer_follows WHERE remark LIKE :kw_like)`,
       `r.target_openid IN
          (SELECT openid FROM direct_customers WHERE remark LIKE :kw_like)`,
+      // 企微身份桥：开过小程序的客户 customers.openid 已回填——用企微备注/昵称/任一跟进人备注
+      // 也能搜到他的直连定向单（同一个人两种模式的单都要能被同一个备注搜到）
+      `r.target_openid IN
+         (SELECT openid FROM customers
+           WHERE openid IS NOT NULL AND (remark LIKE :kw_like OR name LIKE :kw_like
+             OR external_userid IN (SELECT external_userid FROM customer_follows WHERE remark LIKE :kw_like)))`,
       `r.target_openid = :kw`,
     ];
     params.kw_like = `%${kw}%`;
@@ -620,6 +626,12 @@ export async function listRewards({ limit = 50, offset = 0, status, days, target
             r.revoked_by, r.revoked_at,
             COALESCE(NULLIF(vf.remark, ''), c.remark) AS target_remark, c.name AS target_name,
             dc.remark AS target_direct_remark,
+            (SELECT COALESCE(NULLIF(vf2.remark, ''), NULLIF(c2.remark, ''), c2.name)
+               FROM customers c2
+               LEFT JOIN customer_follows vf2
+                 ON vf2.external_userid = c2.external_userid AND vf2.userid = :viewer
+              WHERE r.target_openid IS NOT NULL AND c2.openid = r.target_openid
+              LIMIT 1) AS target_bridge_remark,
             a.name AS created_by_name,
             ra.name AS revoked_by_name,
             t.claimer_openid, t.transfer_bill_no, t.state AS transfer_state,
@@ -1209,23 +1221,35 @@ export async function removeDirectCustomer(openid) {
 }
 
 /** 【选人】直连客户池列表：备注模糊 / openid 精确匹配；近期领取过的排前面 */
-export async function listDirectCustomers({ q = '', limit = 60, offset = 0 } = {}) {
+export async function listDirectCustomers({ q = '', limit = 60, offset = 0, viewerUserid = '' } = {}) {
   if (!pool) return [];
   const lim = Math.min(Math.max(parseInt(limit, 10) || 60, 1), 500);
   const off = Math.max(parseInt(offset, 10) || 0, 0);
   const where = [];
-  const params = {};
+  // 企微身份桥：开过小程序的企微客户 customers.openid 已回填，据此把企微备注借给直连侧
+  // 显示与搜索用（只读桥，不写任何表）。wecom_label 用相关子查询取单值而不是 JOIN——
+  // customers.openid 无唯一约束，JOIN 在异常数据下会让名单一行变多行，子查询 LIMIT 1 天然免疫
+  const params = { viewer: viewerUserid || '' };
   const kw = String(q || '').trim();
   if (kw) {
-    where.push(`(remark LIKE :kw_like OR openid = :kw)`);
+    // 直连备注模糊 / openid 精确 / 企微备注·昵称·任一跟进人备注（经 openid 桥）都能搜到
+    where.push(`(dc.remark LIKE :kw_like OR dc.openid = :kw
+       OR dc.openid IN (SELECT openid FROM customers
+            WHERE openid IS NOT NULL AND (remark LIKE :kw_like OR name LIKE :kw_like
+              OR external_userid IN (SELECT external_userid FROM customer_follows WHERE remark LIKE :kw_like))))`);
     params.kw_like = `%${kw}%`;
     params.kw = kw;
   }
   const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
   const [rows] = await pool.query(
-    `SELECT openid, remark, source, last_claim_at
-       FROM direct_customers ${whereSql}
-      ORDER BY (last_claim_at IS NULL) ASC, last_claim_at DESC, remark ASC, openid ASC
+    `SELECT dc.openid, dc.remark, dc.source, dc.last_claim_at,
+            (SELECT COALESCE(NULLIF(vf.remark, ''), NULLIF(c.remark, ''), c.name)
+               FROM customers c
+               LEFT JOIN customer_follows vf
+                 ON vf.external_userid = c.external_userid AND vf.userid = :viewer
+              WHERE c.openid = dc.openid LIMIT 1) AS wecom_label
+       FROM direct_customers dc ${whereSql}
+      ORDER BY (dc.last_claim_at IS NULL) ASC, dc.last_claim_at DESC, dc.remark ASC, dc.openid ASC
       LIMIT ${lim} OFFSET ${off}`,
     params
   );
