@@ -250,12 +250,13 @@ Page({
         if (seq !== this._custSeq) return; // 条件已切换：旧响应作废
         if (!res || !res.list) return this.setData({ custLoading: false, custLoaded: true, custError: true });
         const page = res.list.map((c) => ({
-          kind: c.kind, // eu=企微客户（按企微身份定向）| oid=纯直连（按 openid 定向）
+          kind: c.kind, // eu=企微身份定向 | oid=openid 直连定向（拆企微后老档案自动转 oid）
           key: c.k,
           label: c.label,
           // 副行：企微行显示昵称（与备注不同才显），直连行显示 openid
           sub: c.kind === 'oid' ? c.sub : c.sub && c.sub !== c.label ? c.sub : '',
           active: !!c.active, // eu=开过小程序 | oid=领过奖励
+          removable: !!c.removable, // 只有真在直连名单里的行可移除（转换来的企微档案行不可）
         }));
         this.setData({
           custList: isMore ? this.data.custList.concat(page) : page,

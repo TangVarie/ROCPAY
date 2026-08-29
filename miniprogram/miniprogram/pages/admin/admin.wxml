@@ -86,8 +86,8 @@
                 <view class="cust-name t-dark">{{item.label}}</view>
                 <view class="cust-sub t-hint" wx:if="{{item.sub}}">{{item.sub}}</view>
               </view>
-              <text class="badge {{item.active?'badge-blue':''}}">{{item.kind==='eu' ? (item.active?'开过小程序':'未开过') : (item.active?'领过奖励':'手动添加')}}</text>
-              <view class="frow-del" wx:if="{{item.kind==='oid'}}" data-oid="{{item.key}}" data-label="{{item.label}}" catchtap="removeDirect">移除</view>
+              <text class="badge {{item.active?'badge-blue':''}}">{{item.kind==='eu' ? (item.active?'开过小程序':'未开过') : !item.removable ? '开过小程序' : (item.active?'领过奖励':'手动添加')}}</text>
+              <view class="frow-del" wx:if="{{item.removable}}" data-oid="{{item.key}}" data-label="{{item.label}}" catchtap="removeDirect">移除</view>
             </view>
             <view class="loadmore textbtn" wx:if="{{custHasMore}}" bindtap="loadMoreCustomers">{{custLoading ? '加载中…' : '加载更多'}}</view>
           </block>
