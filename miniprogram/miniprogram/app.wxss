@@ -130,7 +130,15 @@ page {
 .btn-fill:active { background: rgba(0, 0, 0, 0.08); }
 .btn-red { background: var(--danger); color: #ffffff; }
 .btn-red:active { background: var(--danger-dark); }
-.btn-block { width: 100%; }
+/* 整行按钮：系统字体放大时长标签会折行，固定高度会把字裁掉——
+   改最小高度+内边距，单行时仍是 96rpx 档，折行时按钮自己撑高 */
+.btn-block {
+  width: 100%;
+  height: auto;
+  min-height: 96rpx;
+  padding: 12rpx 24rpx;
+  box-sizing: border-box;
+}
 
 /* ---- 发丝线分隔（列表不许一条一卡） ----
    1rpx 在部分机型换算成 <1 物理像素会被吞/深浅不一，改用 1px + scaleY(0.5) 经典半像素方案 */

@@ -127,7 +127,7 @@
 .pempty-spin { margin-bottom: 20rpx; } /* 加载态山形弧带动效：尺寸由 .band-spinner 自带，只补下边距 */
 .pempty-t1 { font-size: 30rpx; font-weight: 600; }
 .pempty-t2 { font-size: 26rpx; margin-top: 6rpx; text-align: center; }
-.pempty-btn { margin-top: 32rpx; width: 300rpx; height: 80rpx; font-size: 28rpx; }
+.pempty-btn { margin-top: 32rpx; min-width: 300rpx; width: auto; height: auto; min-height: 80rpx; padding: 8rpx 32rpx; box-sizing: border-box; font-size: 28rpx; }
 
 /* 已选条 */
 .pickbar {
@@ -317,7 +317,8 @@
 .state-icon { margin-bottom: 28rpx; }
 .state-t1 { font-size: 34rpx; font-weight: 600; color: var(--text-dark); }
 .state-t2 { margin-top: 8rpx; font-size: 26rpx; color: var(--text-light); text-align: center; }
-.state-btn { margin-top: 40rpx; width: 320rpx; }
+/* 宽度改下限、高度可撑：系统字体放大时文字变宽变高，固定宽高会折行裁字 */
+.state-btn { margin-top: 40rpx; min-width: 320rpx; width: auto; height: auto; min-height: 96rpx; padding: 12rpx 40rpx; box-sizing: border-box; }
 
 /* ---- 客户等级总榜 ---- */
 .rank-head { margin-bottom: 16rpx; }
