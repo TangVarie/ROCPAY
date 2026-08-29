@@ -181,9 +181,18 @@ Page({
     const s = e.currentTarget.dataset.s;
     if (s === this.data.custSrc) return;
     this.setData({ custSrc: s, sendErr: '' });
-    // 首次切过去才加载；已加载过的保留原列表与分页，来回切不重查
-    if (s === 'direct') { if (!this.data.dLoaded && !this.data.dLoading) this.loadDirects(); }
-    else if (!this.data.custLoaded && !this.data.custLoading) this.loadCustomers();
+    // 搜索框两来源共用：切过去时，若该来源缓存的列表不是按当前关键词查出来的就重查——
+    // 绝不允许"输入框是 B 词、列表还是 A 词的旧结果"同框（评审发现）。关键词一致时保留缓存不重查
+    const q = (this.data.custQ || '').trim();
+    if (s === 'direct') {
+      if (!this.data.dLoaded || (this._dirLoadedQ || '') !== q) {
+        this.setData({ dList: [], dLoaded: false, dError: false, dOffset: 0, dHasMore: false });
+        this.loadDirects(); // 序号守卫会丢弃仍在飞行的旧请求响应
+      }
+    } else if (!this.data.custLoaded || (this._custLoadedQ || '') !== q) {
+      this.setData({ custList: [], custLoaded: false, custError: false, custOffset: 0, custHasMore: false, custCapped: false });
+      this.loadCustomers();
+    }
   },
 
   // 32 位十六进制随机串：批量发放/快发/充值的幂等键。同一意图（含失败后的重试）复用同一键，
@@ -280,6 +289,7 @@ Page({
           sub: c.remark && c.name && c.remark !== c.name ? c.name : '',
           opened: !!c.opened,
         }));
+        this._custLoadedQ = q; // 本列表实际按哪个关键词查的：切来源时据此判断要不要重查
         this.setData({
           custList: isMore ? this.data.custList.concat(page) : page,
           custOffset: offset + page.length,
@@ -342,6 +352,7 @@ Page({
           sub: c.openid,
           claimed: !!c.last_claim_at, // 在本小程序领过奖励 = openid 实测有效
         }));
+        this._dirLoadedQ = q; // 同企微列表：记录实际查询词，切来源时不一致就重查
         this.setData({
           dList: isMore ? this.data.dList.concat(page) : page,
           dOffset: offset + page.length,

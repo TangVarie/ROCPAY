@@ -1239,6 +1239,29 @@ app.post('/api/rewards/batch', async (req, res) => {
     totalBills += bills.length;
     plans.push({ i, target, targetEu, targetOid, yuan, bills, remark: it.remark, name: it.name });
   }
+  // 跨身份撞人校验（评审发现的双倍发放口）：同一个人可能同时是企微客户（customers.openid 已回填）
+  // 和直连客户（领取过自动入池），两个页签各选一次 = 同一人两笔，两池会被先后领完。
+  // 以 openid 为准做同批碰撞检测：命中的直连条目整条拒绝，保留企微条目（老路优先，可走企微通知）。
+  // 校验查询失败时整批拒绝——防重发的闸门宁可误拦不可漏放，重试幂等无副作用
+  const dedupeEus = [...new Set(plans.filter((p) => p.targetEu).map((p) => p.targetEu))];
+  if (dedupeEus.length && plans.some((p) => p.targetOid)) {
+    let euOpenidMap;
+    try {
+      euOpenidMap = await db.getCustomerOpenids(dedupeEus);
+    } catch (e) {
+      return res.status(500).json({ error: '同人校验查询失败，本批未创建，请重试：' + (e.code || e.message) });
+    }
+    const euByOpenid = new Map();
+    for (const [eu, oid] of euOpenidMap) if (oid) euByOpenid.set(oid, eu);
+    for (let k = plans.length - 1; k >= 0; k--) {
+      const p = plans[k];
+      if (p.targetOid && euByOpenid.has(p.targetOid)) {
+        errors.push({ i: p.i, target: p.target, error: '与本批已选的企微客户是同一人（openid 相同），为防重复发放已跳过，请只保留一处' });
+        totalBills -= p.bills.length;
+        plans.splice(k, 1);
+      }
+    }
+  }
   if (totalBills > 400) {
     return res.status(400).json({ error: `本批拆单后共 ${totalBills} 笔，超过单次 400 笔上限，请分批发放` });
   }
@@ -1652,24 +1675,29 @@ async function reconcileTransfers() {
   }
 }
 
-app.listen(config.port, async () => {
-  console.log(`✅ 服务已启动，监听端口 ${config.port}`);
-  if (db.dbEnabled) {
-    setTimeout(reconcileTransfers, 60_000); // 启动 1 分钟后先跑一轮
-    setInterval(reconcileTransfers, 10 * 60_000); // 之后每 10 分钟一轮
-  }
+// 先完成数据库迁移、再开门收请求（评审发现的升级窗口）：升级部署的窗口期里老库还没有新列
+// （如 rewards.target_openid），提前放进来的请求会整批 ER_BAD_FIELD_ERROR——快发路线更糟：
+// saveReward 是 fire-and-forget，令牌照发、台账没落。迁移失败/超时仍照常监听（保持"降级可用"
+// 语义，云托管健康检查不被拖死），只是不再和第一批请求赛跑。
+(async () => {
   if (db.dbEnabled) {
     if (config.db.autoMigrate) {
       try {
-        await db.migrate();
-        await refreshAdmins();
+        await Promise.race([
+          (async () => {
+            await db.migrate();
+            await refreshAdmins();
+          })(),
+          // 30s 上限：连库悬死不能无限拖住监听（迁移幂等，超时后下次启动会补齐）
+          new Promise((_, rej) => setTimeout(() => rej(new Error('迁移超过 30s 未完成')), 30_000).unref?.()),
+        ]);
         console.log('✅ 数据库已连接，业务表已就绪（rewards / transfers / notify_events / admins）');
       } catch (e) {
         console.error('⚠️ 自动建表失败（服务仍可运行，落库会被跳过）：', e.code || e.message);
       }
     } else {
       console.log('ℹ️ 已配置数据库，但 DB_AUTO_MIGRATE=false，请手动执行 db/schema.sql');
-      await refreshAdmins();
+      await refreshAdmins().catch((e) => console.error('⚠️ 员工缓存预热失败：', e.code || e.message));
     }
   } else {
     if (config.db.partialConfig) {
@@ -1680,4 +1708,11 @@ app.listen(config.port, async () => {
     }
     console.log('ℹ️ 未配置 MYSQL_*，运行在无状态模式（不落库）');
   }
-});
+  app.listen(config.port, () => {
+    console.log(`✅ 服务已启动，监听端口 ${config.port}`);
+    if (db.dbEnabled) {
+      setTimeout(reconcileTransfers, 60_000); // 启动 1 分钟后先跑一轮
+      setInterval(reconcileTransfers, 10 * 60_000); // 之后每 10 分钟一轮
+    }
+  });
+})();
