@@ -158,7 +158,8 @@
             <!-- 首选：小程序直达通知（订阅消息服务通知，员工零操作，点开直达领取页）。
                  只覆盖此前在小程序点过「允许提醒」的客户；其余按原因列出走下方兜底 -->
             <block wx:if="{{subMiniOn}}">
-              <button class="btn btn-blue btn-block" bindtap="sendMiniNotify" loading="{{miniNotifying}}" disabled="{{miniNotifying}}">小程序直达通知（免企微·免转发）</button>
+              <button class="btn btn-blue btn-block" bindtap="sendMiniNotify" loading="{{miniNotifying}}"
+                      disabled="{{miniNotifying || (miniDone && !(miniNotify && miniNotify.failedCount))}}">{{miniDone ? (miniNotify && miniNotify.failedCount ? '重试 ' + miniNotify.failedCount + ' 位发送失败的客户' : '直达通知已完成') : '小程序直达通知（免企微·免转发）'}}</button>
               <block wx:if="{{miniNotify}}">
                 <view class="psub t-dark" wx:for="{{miniNotify.lines}}" wx:key="*this">{{item}}</view>
               </block>

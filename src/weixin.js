@@ -84,15 +84,22 @@ async function call(path, body) {
  * vars:    { remark, amount, count, time }
  * 微信对字段值有硬性长度/格式校验（超长直接 47003 拒发）：
  *   thing* ≤20 字符 / phrase* ≤5 / character_string* ≤32 / name* ≤10
+ * 裁剪按 Unicode 码点：备注里带 emoji（代理对）时按 UTF-16 单元切会切出半个字符，
+ * 产生非法字符串被微信拒发且重试必复现
  */
+function clipPoints(s, max, ellipsis = false) {
+  const cps = [...s];
+  if (cps.length <= max) return s;
+  return ellipsis ? cps.slice(0, max - 3).join('') + '...' : cps.slice(0, max).join('');
+}
 function fillTemplateData(mapping, vars) {
   const out = {};
   for (const [k, tpl] of Object.entries(mapping)) {
     let v = String(tpl).replace(/\{(\w+)\}/g, (_, name) => (vars[name] != null ? String(vars[name]) : ''));
-    if (/^thing/.test(k) && v.length > 20) v = v.slice(0, 17) + '...';
-    else if (/^phrase/.test(k)) v = v.slice(0, 5);
-    else if (/^character_string/.test(k)) v = v.slice(0, 32);
-    else if (/^name/.test(k) && v.length > 10) v = v.slice(0, 10);
+    if (/^thing/.test(k)) v = clipPoints(v, 20, true);
+    else if (/^phrase/.test(k)) v = clipPoints(v, 5);
+    else if (/^character_string/.test(k)) v = clipPoints(v, 32);
+    else if (/^name/.test(k)) v = clipPoints(v, 10);
     out[k] = { value: v };
   }
   return out;

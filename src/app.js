@@ -773,6 +773,17 @@ app.post('/api/customers/sync', async (req, res) => {
 //   ① 开过小程序（customers.openid 已回填）；② 此前在小程序点过「允许提醒」且授权还有余量。
 // 其余客户按原因分列返回，前端引导走企微群发/转发兜底。配额先本地原子占用再调微信，
 // 非配额类失败退回占用；微信回 43101（授权用尽/撤销）则对齐清零本地配额。
+// 大批量防超时：服务端 8s 处理期限（callContainer 15s 上限内留足余量），到点把没处理的
+// 放进 remaining 返回 partial，由前端自动续传——绝不让一个请求跑满超时后重试重发。
+// 防重放：clientKey -> {at, promise}（处理中，等同一份结果）| {at, payload}（已完成，回放）。
+// 结构同群发 deliverRecent：生命周期只跟 settle 挂钩，已 settle 条目 10 分钟过期
+const miniNotifyRecent = new Map();
+function pruneMiniNotify() {
+  const now = Date.now();
+  for (const [k, v] of miniNotifyRecent) {
+    if (!v.promise && now - v.at > 10 * 60_000) miniNotifyRecent.delete(k);
+  }
+}
 app.post('/api/notify-mini', async (req, res) => {
   if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
   if (!weixin.subscribeEnabled) return res.status(503).json({ error: '订阅消息未配置（需 WECHAT_SUBSCRIBE_TEMPLATE_ID/WECHAT_SUBSCRIBE_DATA + 密钥或云托管开放接口）' });
@@ -782,8 +793,24 @@ app.post('/api/notify-mini', async (req, res) => {
     : [];
   if (!eus.length) return res.status(400).json({ error: '缺少要通知的客户' });
   if (eus.length > 200) return res.status(400).json({ error: '单次最多通知 200 位客户' });
+  const clientKey = String((req.body || {}).clientKey || '');
+  const hasKey = /^[a-f0-9]{16,64}$/i.test(clientKey);
+  if (hasKey) {
+    pruneMiniNotify();
+    const hit = miniNotifyRecent.get(clientKey);
+    if (hit) {
+      // 同键重试：处理中等同一份结果、已完成直接回放——同一步绝不给客户发第二条
+      try {
+        return res.json(hit.promise ? await hit.promise : hit.payload);
+      } catch (e) {
+        return res.status(500).json({ error: e.message });
+      }
+    }
+  }
   const tid = config.weixin.subscribeTemplateId;
-  try {
+  const work = (async () => {
+    const DEADLINE_MS = 8000;
+    const startAt = Date.now();
     const [openidMap, pendingMap] = await Promise.all([
       db.getCustomerOpenids(eus),
       db.pendingSummaryForTargets(eus),
@@ -792,8 +819,14 @@ app.post('/api/notify-mini', async (req, res) => {
     const noPending = []; // 名下已无待领（已领完/已过期/已撤回）：不该再催
     const noQuota = []; // 没订阅过或授权次数用完
     const failed = []; // 微信侧发送失败（配额已退回，可重试）
+    const remaining = []; // 本请求处理期限内没轮到的：前端带新键续传
     let sent = 0;
-    for (const eu of eus) {
+    for (let i = 0; i < eus.length; i++) {
+      const eu = eus[i];
+      if (Date.now() - startAt > DEADLINE_MS) {
+        remaining.push(...eus.slice(i));
+        break;
+      }
       const openid = openidMap.get(eu);
       if (!openid) { noOpenid.push(eu); continue; }
       const pending = pendingMap.get(eu);
@@ -815,8 +848,15 @@ app.post('/api/notify-mini', async (req, res) => {
         failed.push({ eu, error: r.error });
       }
     }
-    res.json({ ok: true, sent, noOpenid, noPending, noQuota, failed });
+    return { ok: true, sent, noOpenid, noPending, noQuota, failed, remaining, partial: remaining.length > 0 };
+  })();
+  if (hasKey) miniNotifyRecent.set(clientKey, { at: Date.now(), promise: work });
+  try {
+    const payload = await work;
+    if (hasKey) miniNotifyRecent.set(clientKey, { at: Date.now(), payload });
+    res.json(payload);
   } catch (e) {
+    if (hasKey) miniNotifyRecent.delete(clientKey); // 整体失败不缓存：重试重新执行
     res.status(500).json({ error: e.message });
   }
 });
