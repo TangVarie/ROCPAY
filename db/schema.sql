@@ -176,3 +176,18 @@ SET @rw_idx := IF(@rw_has_toidx = 0,
 PREPARE rw_stmt2 FROM @rw_idx;
 EXECUTE rw_stmt2;
 DEALLOCATE PREPARE rw_stmt2;
+
+-- 历史领取人一次性回填直连名单：更新之前领取过奖励的客户（含链接快发领取人）也进统一选人名单。
+-- settings 打点保证只跑一次——不能重复执行：操作员手动移出名单的人会被复活
+INSERT INTO direct_customers (openid, source, last_claim_at)
+SELECT t.claimer_openid, 'claim', MAX(t.updated_at)
+  FROM transfers t
+ WHERE t.claimer_openid IS NOT NULL AND t.claimer_openid <> ''
+   AND NOT EXISTS (SELECT 1 FROM settings WHERE k = 'direct_backfill_done')
+ GROUP BY t.claimer_openid
+ON DUPLICATE KEY UPDATE last_claim_at = COALESCE(
+  GREATEST(COALESCE(direct_customers.last_claim_at, '1970-01-01'), VALUES(last_claim_at)),
+  direct_customers.last_claim_at);
+
+INSERT INTO settings (k, v) VALUES ('direct_backfill_done', '1')
+ON DUPLICATE KEY UPDATE v = '1';

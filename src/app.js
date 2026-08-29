@@ -732,6 +732,31 @@ app.get('/api/customers', async (req, res) => {
 // （客户打开小程序空态页能看到自己的 openid 并一键复制，发给员工即可）。
 
 // 列表/搜索（备注模糊 / openid 精确）——管理员
+// 统一选人名单：企微客户 + 直连客户一人一行（openid 桥去重，选人页唯一数据源）。
+// /api/customers 与 /api/direct-customers 保留不动：老版小程序（审核期）仍在用
+app.get('/api/pick-customers', async (req, res) => {
+  if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
+  if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
+  try {
+    const limit = Math.min(Number(req.query.limit) || 60, 200);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const [list, lastSyncAt] = await Promise.all([
+      db.listPickCustomers({
+        q: String(req.query.q || ''),
+        limit,
+        offset,
+        viewerUserid: adminWecomUserid(getOpenid(req)), // 备注个性化：优先显示查看者自己起的
+        // 去企微化感知：拆掉企微配置后，有 openid 的老档案自动转直连身份定向（领取免 unionid 桥）
+        wecomEnabled: wecom.wecomEnabled,
+      }),
+      db.getLastSyncAt().catch(() => null),
+    ]);
+    res.json({ list, hasMore: list.length === limit, lastSyncAt });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/direct-customers', async (req, res) => {
   if (!isAdmin(getOpenid(req))) return res.status(403).json({ error: '无权限' });
   if (!db.dbEnabled) return res.status(503).json({ error: '未开启数据库' });
@@ -1254,26 +1279,47 @@ app.post('/api/rewards/batch', async (req, res) => {
     totalBills += bills.length;
     plans.push({ i, target, targetEu, targetOid, yuan, bills, remark: it.remark, name: it.name });
   }
-  // 跨身份撞人校验（评审发现的双倍发放口）：同一个人可能同时是企微客户（customers.openid 已回填）
-  // 和直连客户（领取过自动入池），两个页签各选一次 = 同一人两笔，两池会被先后领完。
-  // 以 openid 为准做同批碰撞检测：命中的直连条目整条拒绝，保留企微条目（老路优先，可走企微通知）。
-  // 校验查询失败时整批拒绝——防重发的闸门宁可误拦不可漏放，重试幂等无副作用
+  // 跨身份撞人校验（评审两轮补强的双倍发放口）：以 openid 为"同一人"判定基准。
+  // ① 直连条目撞企微条目（同一人领取过自动入池又被从企微侧选中）→ 直连条目拒绝，
+  //    保留企微条目（老路优先，可走企微群发通知）；
+  // ② 两条企微条目经 openid 解析是同一人（异常数据：重复档案共用 openid）→ 后到的拒绝。
+  // 有直连条目时校验查询失败整批拒绝（宁可误拦不可漏放，幂等键保证重试无副作用）；
+  // 纯企微批查询失败只跳过②——异常数据兜底不该拖垮正常企微批的可用性，
+  // 且选人名单的一人一行去重已是第一道防线
   const dedupeEus = [...new Set(plans.filter((p) => p.targetEu).map((p) => p.targetEu))];
-  if (dedupeEus.length && plans.some((p) => p.targetOid)) {
-    let euOpenidMap;
+  const hasOidPlans = plans.some((p) => p.targetOid);
+  if (dedupeEus.length && (hasOidPlans || dedupeEus.length > 1)) {
+    let euOpenidMap = null;
     try {
       euOpenidMap = await db.getCustomerOpenids(dedupeEus);
     } catch (e) {
-      return res.status(500).json({ error: '同人校验查询失败，本批未创建，请重试：' + (e.code || e.message) });
+      if (hasOidPlans) {
+        return res.status(500).json({ error: '同人校验查询失败，本批未创建，请重试：' + (e.code || e.message) });
+      }
+      console.error('[batch] 企微条目同人校验查询失败（跳过，仅影响异常重复档案检测）：', e.code || e.message);
     }
-    const euByOpenid = new Map();
-    for (const [eu, oid] of euOpenidMap) if (oid) euByOpenid.set(oid, eu);
-    for (let k = plans.length - 1; k >= 0; k--) {
-      const p = plans[k];
-      if (p.targetOid && euByOpenid.has(p.targetOid)) {
-        errors.push({ i: p.i, target: p.target, error: '与本批已选的企微客户是同一人（openid 相同），为防重复发放已跳过，请只保留一处' });
-        totalBills -= p.bills.length;
-        plans.splice(k, 1);
+    if (euOpenidMap) {
+      const keeperByOpenid = new Map(); // openid -> 保留的企微条目 external_userid（先到者）
+      const dropEuIdx = new Set();
+      for (const p of plans) {
+        if (!p.targetEu) continue;
+        const oid = euOpenidMap.get(p.targetEu);
+        if (!oid) continue;
+        const keeper = keeperByOpenid.get(oid);
+        if (keeper === undefined) keeperByOpenid.set(oid, p.targetEu);
+        else if (keeper !== p.targetEu) dropEuIdx.add(p.i);
+      }
+      for (let k = plans.length - 1; k >= 0; k--) {
+        const p = plans[k];
+        if (p.targetEu && dropEuIdx.has(p.i)) {
+          errors.push({ i: p.i, target: p.target, error: '与本批另一位企微客户是同一人（openid 相同，疑似重复档案），为防重复发放已跳过' });
+          totalBills -= p.bills.length;
+          plans.splice(k, 1);
+        } else if (p.targetOid && keeperByOpenid.has(p.targetOid)) {
+          errors.push({ i: p.i, target: p.target, error: '与本批已选的企微客户是同一人（openid 相同），为防重复发放已跳过，请只保留一处' });
+          totalBills -= p.bills.length;
+          plans.splice(k, 1);
+        }
       }
     }
   }

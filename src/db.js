@@ -284,6 +284,26 @@ export async function migrate() {
     "target_openid VARCHAR(64) NULL COMMENT '定向目标·直连客户openid(免企微模式)' AFTER target_external_userid"
   );
   await ensureIndex('rewards', 'idx_rewards_target_openid', 'KEY idx_rewards_target_openid (target_openid)');
+  // 历史领取人一次性回填直连名单：本次更新之前领取过奖励的客户（含链接快发的领取人）
+  // 也要能在统一选人名单里被直接找到并定向发放。settings 打点保证只跑一次——
+  // 不能每次启动重跑：操作员手动移出名单的人会在下次重启被复活
+  const [bf] = await pool.query(`SELECT v FROM settings WHERE k = 'direct_backfill_done'`);
+  if (!bf.length) {
+    await pool.query(
+      `INSERT INTO direct_customers (openid, source, last_claim_at)
+       SELECT claimer_openid, 'claim', MAX(updated_at)
+         FROM transfers
+        WHERE claimer_openid IS NOT NULL AND claimer_openid <> ''
+        GROUP BY claimer_openid
+       ON DUPLICATE KEY UPDATE last_claim_at = COALESCE(
+         GREATEST(COALESCE(direct_customers.last_claim_at, '1970-01-01'), VALUES(last_claim_at)),
+         direct_customers.last_claim_at)`
+    );
+    await pool.query(
+      `INSERT INTO settings (k, v) VALUES ('direct_backfill_done', '1')
+       ON DUPLICATE KEY UPDATE v = '1'`
+    );
+  }
   await seedSuperAdmins(config.app.adminOpenids);
 }
 
@@ -1265,6 +1285,106 @@ export async function listDirectCustomers({ q = '', limit = 60, offset = 0, view
   return rows;
 }
 
+/** 统一选人名单：企微客户 + 直连客户，一人一行（openid 桥去重）。
+ *  连着企微（wecomEnabled=true）：企微客户行 kind='eu'（保留企微身份定向，企微群发可用），
+ *  只在直连名单、没有企微档案匹配的行 kind='oid'；同一人两边都有时只出企微行。
+ *  已拆企微（wecomEnabled=false，去企微化终点）：有 openid 的企微档案整体转为 kind='oid'
+ *  直连行（openid 定向领取无需 unionid 桥，最稳），只有从未开过小程序的老档案仍以 eu 兜底。
+ *  两条企微档案共用同一 openid（异常数据）时只保留最近同步的一条——一人一行在任何数据下成立。
+ *  搜索继承双向备注桥：企微备注/昵称/任一跟进人备注/直连备注模糊搜，完整 openid 精确搜。 */
+export async function listPickCustomers({ q = '', limit = 60, offset = 0, viewerUserid = '', wecomEnabled = true } = {}) {
+  if (!pool) return [];
+  const lim = Math.min(Math.max(parseInt(limit, 10) || 60, 1), 500);
+  const off = Math.max(parseInt(offset, 10) || 0, 0);
+  const params = { viewer: viewerUserid || '' };
+  const kw = String(q || '').trim();
+  // 企微档案行内部去重（异常数据兜底）：同一 openid 挂了多条档案时只保留最近同步的一条，
+  // 平局按 external_userid 定序——去重必须确定性，不然翻页会闪行
+  const euDedupe = `(c.openid IS NULL OR NOT EXISTS (
+        SELECT 1 FROM customers cd
+         WHERE cd.openid = c.openid AND cd.external_userid <> c.external_userid
+           AND (COALESCE(cd.synced_at, '1970-01-01') > COALESCE(c.synced_at, '1970-01-01')
+             OR (COALESCE(cd.synced_at, '1970-01-01') = COALESCE(c.synced_at, '1970-01-01')
+                 AND cd.external_userid < c.external_userid))))`;
+  // 直连行显示兜底：无直连备注时借同一人的企微备注（查看者自己的优先）
+  const wecomLabelSub = `(SELECT COALESCE(NULLIF(vf2.remark, ''), NULLIF(c2.remark, ''), NULLIF(c2.name, ''))
+          FROM customers c2
+          LEFT JOIN customer_follows vf2
+            ON vf2.external_userid = c2.external_userid AND vf2.userid = :viewer
+         WHERE c2.openid = dc.openid LIMIT 1)`;
+  let euSearch = '';
+  let poolSearch = '';
+  let rankEu = '0';
+  let rankOid = '0';
+  if (kw) {
+    // 企微档案：备注/昵称/任一跟进人备注模糊搜 + 完整 openid 精确搜（统一搜索框承诺
+    // openid 可搜，桥合并后的人也必须能按 openid 找到）+ 直连侧备注（桥）
+    euSearch = `AND (vf.remark LIKE :q OR c.remark LIKE :q OR c.name LIKE :q OR c.openid = :kw
+      OR EXISTS (SELECT 1 FROM customer_follows af
+                  WHERE af.external_userid = c.external_userid AND af.remark LIKE :q)
+      OR (c.openid IS NOT NULL AND c.openid IN
+            (SELECT openid FROM direct_customers WHERE remark LIKE :q)))`;
+    poolSearch = `AND (dc.remark LIKE :q OR dc.openid = :kw
+      OR dc.openid IN (SELECT openid FROM customers
+            WHERE openid IS NOT NULL AND (remark LIKE :q OR name LIKE :q
+              OR external_userid IN (SELECT external_userid FROM customer_follows WHERE remark LIKE :q))))`;
+    // 搜索时命中查看者自己备注的排最前（与企微列表既有排序规则一致）
+    rankEu = `(vf.remark IS NOT NULL AND vf.remark LIKE :q)`;
+    rankOid = `(dc.remark LIKE :q)`;
+    params.q = `%${kw}%`;
+    params.kw = kw;
+  }
+  // 企微档案行（kind 按模式定：连企微=eu；拆企微后有 openid 的转 oid 直连定向）
+  const euArm = (whereExtra, kindExpr, keyExpr, removable) => `
+        SELECT ${kindExpr} AS kind,
+               ${keyExpr} AS k,
+               COALESCE(NULLIF(vf.remark, ''), NULLIF(c.remark, ''), NULLIF(c.name, ''), c.external_userid) AS label,
+               c.name AS sub,
+               (c.openid IS NOT NULL) AS active,
+               ${removable} AS removable,
+               ${rankEu} AS rk
+          FROM customers c
+          LEFT JOIN customer_follows vf
+            ON vf.external_userid = c.external_userid AND vf.userid = :viewer
+         WHERE ${euDedupe} ${whereExtra} ${euSearch}`;
+  const poolArm = (whereExtra) => `
+        SELECT 'oid' AS kind,
+               dc.openid AS k,
+               COALESCE(NULLIF(dc.remark, ''), ${wecomLabelSub}, CONCAT('客户', RIGHT(dc.openid, 4))) AS label,
+               dc.openid AS sub,
+               (dc.last_claim_at IS NOT NULL) AS active,
+               1 AS removable,
+               ${rankOid} AS rk
+          FROM direct_customers dc
+         WHERE 1=1 ${whereExtra} ${poolSearch}`;
+  const arms = wecomEnabled
+    ? [
+        // 连企微：全部企微档案按企微身份出；直连名单里与企微档案同 openid 的行不再重复出
+        euArm('', `'eu'`, 'c.external_userid', '0'),
+        poolArm(`AND dc.openid NOT IN (SELECT openid FROM customers WHERE openid IS NOT NULL)`),
+      ]
+    : [
+        // 已拆企微：只有从未开过小程序的老档案仍走企微身份（唯一可用身份）
+        euArm('AND c.openid IS NULL', `'eu'`, 'c.external_userid', '0'),
+        // 直连名单全量出（含曾是企微客户的人，显示自动借企微备注）
+        poolArm(''),
+        // 有 openid 但还没进直连名单的企微老档案：转为直连行（openid 定向），不在名单内故不可移除
+        euArm(
+          `AND c.openid IS NOT NULL AND c.openid NOT IN (SELECT openid FROM direct_customers)`,
+          `'oid'`,
+          'c.openid',
+          '0'
+        ),
+      ];
+  const [rows] = await pool.query(
+    `SELECT * FROM (${arms.join('\n        UNION ALL\n')}) t
+      ORDER BY t.rk DESC, t.label ASC, t.k ASC
+      LIMIT ${lim} OFFSET ${off}`,
+    params
+  );
+  return rows.map((r) => ({ ...r, active: !!r.active, removable: !!Number(r.removable) }));
+}
+
 /** 一批直连客户的备注：openid -> remark（通知结果/台账显示用） */
 export async function getDirectRemarks(openids = []) {
   const map = new Map();
@@ -1474,6 +1594,7 @@ export const db = {
   upsertDirectCustomer,
   removeDirectCustomer,
   listDirectCustomers,
+  listPickCustomers,
   getDirectRemarks,
   pendingSummaryForOpenidTargets,
   getRewardTarget,
