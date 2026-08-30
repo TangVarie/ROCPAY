@@ -257,8 +257,27 @@ Page({
       appId: res.appId,
       package: res.package_info,
       success: onOk,
-      fail: (e) =>
-        this.setData({ status: 'fail', message: '未完成确认收款：' + (e.errMsg || '') }),
+      fail: (e) => {
+        const msg = e.errMsg || '';
+        // 手滑取消（errMsg 带 cancel）：保留在途凭证，再点直接重开确认页（原设计）
+        if (/cancel/i.test(msg)) {
+          this.setData({ status: 'fail', message: '未完成确认收款：' + msg });
+          return;
+        }
+        // 定向领取的真失败（典型是「订单已失效」：凭证对应的转账已完成/关闭，只是确认
+        // 回调还没同步到后端）：清凭证 + 重新对账——后端会以微信实况出下一笔或终态；
+        // 不清的话每次点击都在重开同一张死凭证，客户被永久卡住
+        if (this.data.mode === 'mine') {
+          this._pendingTransfer = null;
+          this.setData({ status: 'fail', message: '确认收款未完成（' + msg + '），已刷新状态，请稍候再点一次领取' });
+          setTimeout(() => this.checkMineQuiet(), 800);
+          return;
+        }
+        // 链接领取：这张凭证是该笔在途转账唯一的重开入口——令牌可能已临期/过期，
+        // 清掉后重新 POST 会被令牌校验拒绝，反而把还能确认的钱锁在外面（评审发现）。
+        // 保留凭证让"再点一次"能重开；若真已失效，重新打开链接会看到明确的终态提示
+        this.setData({ status: 'fail', message: '未完成确认收款：' + msg + '，请再点一次领取' });
+      },
     });
   },
 
