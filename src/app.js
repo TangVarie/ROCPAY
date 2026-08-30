@@ -1421,6 +1421,32 @@ app.post('/api/rewards/batch/revoke', async (req, res) => {
   }
 });
 
+// 续办在途单前先问微信一次实况：库里认为「在途」≠ 真在途——确认收款的异步回调可能
+// 迟到几秒到几十分钟（微信按退避重试），这窗口里把已经用过的确认凭证再递给客户，
+// 微信确认页只会给「订单已失效」，客户被卡在"点了没反应"。以微信为准：
+// 仍 WAIT_USER_CONFIRM 才续办；已终态则当场把真实状态落库（不等回调），返回 null
+// 让同一请求继续往下出下一笔待领——连续领取不再被回调时序卡断。
+// 查询失败按在途处理（保持原行为）：宁可偶尔递一张可能过期的凭证（前端会自愈重查），
+// 不可把真在途单误判成没有、让客户面对"暂无奖励"而钱还冻着
+async function verifyResumableFresh(rz) {
+  try {
+    const data = await queryTransferByOutBillNo(rz.rid);
+    const state = data && data.state;
+    if (!state || state === 'WAIT_USER_CONFIRM') return true;
+    await db.updateTransferState({
+      outBillNo: data.out_bill_no || rz.rid,
+      state,
+      transferBillNo: data.transfer_bill_no,
+      failReason: data.fail_reason,
+      claimerOpenid: data.openid,
+      amountFen: data.transfer_amount,
+    });
+    return false;
+  } catch (_) {
+    return true;
+  }
+}
+
 // 【客户】查我的定向奖励（身份匹配，防领错）
 app.get('/api/claim/mine', async (req, res) => {
   const openid = getOpenid(req);
@@ -1435,7 +1461,9 @@ app.get('/api/claim/mine', async (req, res) => {
     // 直连领完后 GET 重查自然切到企微池口径——计数短暂偏少，换来直连领取零外部依赖。
     // ---- 直连池（openid 直查，先在途单后待领单）----
     const aggD = await db.countPendingRewardsForOpenid(openid).catch(() => ({ n: 0, fen: 0 }));
-    const resumableD = await db.findResumableTransferForOpenid(openid).catch(() => null);
+    let resumableD = await db.findResumableTransferForOpenid(openid).catch(() => null);
+    // 续办前以微信实况为准：已终态（刚确认完、回调还没到）就地落库并跳过，直接出下一笔
+    if (resumableD && !(await verifyResumableFresh(resumableD))) resumableD = null;
     if (resumableD) {
       return res.json({
         reward: { rid: resumableD.rid, amountYuan: resumableD.amount_fen / 100, remark: resumableD.remark },
@@ -1464,9 +1492,11 @@ app.get('/api/claim/mine', async (req, res) => {
       : { n: 0, fen: 0 };
     // 优先续办「已领取待确认」的在途单：转账已发起、资金已冻结，重开确认页即可到账。
     // 此前这种单重进后会被当成"没有待领奖励"，客户卡死到微信超时关单
-    const resumableW = externalUserid
+    let resumableW = externalUserid
       ? await db.findResumableTransferForTarget(externalUserid, openid).catch(() => null)
       : null;
+    // 同直连池：续办前先问微信实况，已终态就地落库并跳过
+    if (resumableW && !(await verifyResumableFresh(resumableW))) resumableW = null;
     if (resumableW) {
       return res.json({
         reward: { rid: resumableW.rid, amountYuan: resumableW.amount_fen / 100, remark: resumableW.remark },

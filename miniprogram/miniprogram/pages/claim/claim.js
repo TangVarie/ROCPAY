@@ -257,8 +257,20 @@ Page({
       appId: res.appId,
       package: res.package_info,
       success: onOk,
-      fail: (e) =>
-        this.setData({ status: 'fail', message: '未完成确认收款：' + (e.errMsg || '') }),
+      fail: (e) => {
+        const msg = e.errMsg || '';
+        // 分两种失败：客户手滑取消（errMsg 带 cancel）→ 保留在途凭证，再点直接重开确认页；
+        // 真失败（典型是微信「订单已失效」：这张凭证对应的转账其实已完成/关闭，只是
+        // 确认回调还没同步到后端）→ 必须清掉凭证并重新对账，否则每次点击都在重开
+        // 同一张死凭证，客户被永久卡住、看起来像"不能连续领取"
+        if (/cancel/i.test(msg)) {
+          this.setData({ status: 'fail', message: '未完成确认收款：' + msg });
+          return;
+        }
+        this._pendingTransfer = null;
+        this.setData({ status: 'fail', message: '确认收款未完成（' + msg + '），已刷新状态，请稍候再点一次领取' });
+        if (this.data.mode === 'mine') setTimeout(() => this.checkMineQuiet(), 800);
+      },
     });
   },
 
