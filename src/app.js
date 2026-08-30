@@ -1429,22 +1429,27 @@ app.post('/api/rewards/batch/revoke', async (req, res) => {
 // 查询失败按在途处理（保持原行为）：宁可偶尔递一张可能过期的凭证（前端会自愈重查），
 // 不可把真在途单误判成没有、让客户面对"暂无奖励"而钱还冻着
 async function verifyResumableFresh(rz) {
+  let data;
   try {
-    const data = await queryTransferByOutBillNo(rz.rid);
-    const state = data && data.state;
-    if (!state || state === 'WAIT_USER_CONFIRM') return true;
-    await db.updateTransferState({
+    data = await queryTransferByOutBillNo(rz.rid);
+  } catch (_) {
+    return true; // 只有「问不到微信」才保持现状续办——别把真在途单误杀
+  }
+  const state = data && data.state;
+  if (!state || state === 'WAIT_USER_CONFIRM') return true;
+  // 已确认是终态：无论落库成败都绝不再续办这张死凭证（评审发现：落库失败不该
+  // 退回续办）。落库失败只记日志，交给微信回调/10分钟自动对账兜底补写
+  await db
+    .updateTransferState({
       outBillNo: data.out_bill_no || rz.rid,
       state,
       transferBillNo: data.transfer_bill_no,
       failReason: data.fail_reason,
       claimerOpenid: data.openid,
       amountFen: data.transfer_amount,
-    });
-    return false;
-  } catch (_) {
-    return true;
-  }
+    })
+    .catch((e) => console.error('[claim] 续办校验落库失败（已按微信实况跳过续办）：', e.code || e.message));
+  return false;
 }
 
 // 【客户】查我的定向奖励（身份匹配，防领错）
