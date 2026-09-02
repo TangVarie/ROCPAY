@@ -1,3 +1,5 @@
+<!-- 开屏：工作台也可能是入口（直达路径），与领取页共用 app.js 的冷启动置位，一次冷启动只亮一次 -->
+<splash />
 <view class="page">
 
   <!-- 身份未知：先给加载态（品牌山形弧带动效），避免管理员打开先闪出"你还不是发放员" -->
@@ -30,7 +32,7 @@
       </view>
     </view>
 
-    <!-- Tab：发丝线 + 蓝色下划指示 -->
+    <!-- Tab：发丝线 + 主色下划指示 -->
     <view class="tabs hairline-b">
       <view class="tab {{tab==='send'?'on':''}}" data-tab="send" bindtap="switchTab">发放</view>
       <view class="tab {{tab==='records'?'on':''}}" data-tab="records" bindtap="switchTab">记录<text class="tab-dot" wx:if="{{failAlert > 0}}"></text></view>
@@ -40,7 +42,7 @@
 
     <!-- ================= 发放 ================= -->
     <block wx:if="{{tab==='send'}}">
-      <!-- 方式：选中 chip 品牌蓝 -->
+      <!-- 方式：选中 chip 主色底 -->
       <view class="chips">
         <view class="chip {{sendMode==='target'?'on':''}}" data-m="target" bindtap="switchSendMode">定向发放</view>
         <view class="chip {{sendMode==='quick'?'on':''}}" data-m="quick" bindtap="switchSendMode">链接快发</view>
@@ -98,11 +100,16 @@
             <view class="pempty-t2 t-light">网络开小差了，点下方按钮重试</view>
             <button class="btn btn-fill pempty-btn" bindtap="searchCustomers">重新加载</button>
           </view>
-          <view class="pempty" wx:elif="{{!custLoaded}}">
-            <view class="band-spinner pempty-spin" aria-label="加载中">
-              <view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view>
+          <!-- 加载中：骨架行 ×3 占住客户行的位置（scenarios/04「骨架屏优先」） -->
+          <view class="pskel" wx:elif="{{!custLoaded}}" aria-label="正在加载客户">
+            <view class="sk-row hairline-b" wx:for="{{[1, 2, 3]}}" wx:key="*this">
+              <view class="skeleton-base sk-tail" style="width:40rpx;height:40rpx"></view>
+              <view class="sk-main">
+                <view class="skeleton-base sk-line sk-line-w"></view>
+                <view class="skeleton-base sk-line sk-line-n"></view>
+              </view>
+              <view class="skeleton-base sk-tail"></view>
             </view>
-            <view class="pempty-t1 t-dark">正在加载客户…</view>
           </view>
           <view class="pempty" wx:elif="{{custQ}}">
             <view class="li li-users pempty-icon"></view>
@@ -350,11 +357,15 @@
         <view class="state-t2">网络开小差了，点下方按钮重试</view>
         <button class="btn btn-fill state-btn" bindtap="reloadRecords">重新加载</button>
       </view>
-      <view class="state" wx:elif="{{!recLoaded}}">
-        <view class="band-spinner state-icon" aria-label="加载中">
-        <view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view>
-      </view>
-        <view class="state-t1">正在加载记录…</view>
+      <!-- 加载中：骨架行 ×3 对齐记录行（金额行 + 备注行 + 右侧徽标位） -->
+      <view class="list-skel" wx:elif="{{!recLoaded}}" aria-label="正在加载记录">
+        <view class="sk-row hairline-b" wx:for="{{[1, 2, 3]}}" wx:key="*this">
+          <view class="sk-main">
+            <view class="skeleton-base sk-line sk-line-w"></view>
+            <view class="skeleton-base sk-line sk-line-n"></view>
+          </view>
+          <view class="skeleton-base sk-tail"></view>
+        </view>
       </view>
       <view class="state" wx:else>
         <view class="li li-inbox state-icon"></view>
@@ -401,11 +412,16 @@
         <view class="state-t2">网络开小差了，点下方按钮重试</view>
         <button class="btn btn-fill state-btn" bindtap="reloadRank">重新加载</button>
       </view>
-      <view class="state" wx:elif="{{!rankLoaded}}">
-        <view class="band-spinner state-icon" aria-label="加载中">
-        <view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view>
-      </view>
-        <view class="state-t1">正在加载榜单…</view>
+      <!-- 加载中：骨架行 ×3 对齐榜单行（名次位 + 名字/次数 + 右侧金额位） -->
+      <view class="list-skel" wx:elif="{{!rankLoaded}}" aria-label="正在加载榜单">
+        <view class="sk-row hairline-b" wx:for="{{[1, 2, 3]}}" wx:key="*this">
+          <view class="skeleton-base sk-tail" style="width:56rpx;height:40rpx"></view>
+          <view class="sk-main">
+            <view class="skeleton-base sk-line sk-line-w"></view>
+            <view class="skeleton-base sk-line sk-line-n"></view>
+          </view>
+          <view class="skeleton-base sk-tail"></view>
+        </view>
       </view>
       <view class="state" wx:else>
         <view class="li li-users state-icon"></view>

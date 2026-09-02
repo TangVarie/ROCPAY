@@ -11,7 +11,8 @@
     "dev": "node --watch src/app.js",
     "smoke": "node src/smoke-test.js",
     "db:ping": "node src/db-cli.js ping",
-    "db:migrate": "node src/db-cli.js migrate"
+    "db:migrate": "node src/db-cli.js migrate",
+    "design:check": "python3 design/tools/check-design.py miniprogram/miniprogram"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

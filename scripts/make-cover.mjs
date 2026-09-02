@@ -1,6 +1,7 @@
 // ============================================================
 //  生成企微群发「小程序卡片」封面图（纯 Node，无外部图像库）
-//  BYWOOD：藏蓝底 + 正红礼盒 + 白丝带十字。卡片标题文字由企微单独显示，
+//  BYWOOD v5.1：深青底（brand.primary）+ 赭石礼盒（brand.accent，价值/礼物）+ 白丝带十字。
+//  赭石是这张卡唯一的视觉重心（DESIGN.md §5·5）。卡片标题文字由企微单独显示，
 //  封面无需渲染文字。输出 assets/reward-cover.png（企微封面推荐 ~5:4）。
 //  运行：node scripts/make-cover.mjs
 // ============================================================
@@ -14,8 +15,8 @@ const OUT = resolve(__dirname, '../assets/reward-cover.png');
 
 const W = 1080;
 const H = 864;
-const NAVY = [0x23, 0x5e, 0x8e];
-const RED = [0xd9, 0x23, 0x2b];
+const PRIMARY = [0x1e, 0x57, 0x54]; // #1E5754 深青（palette.json brand.primary）
+const ACCENT = [0xb8, 0x50, 0x2f];  // #B8502F 赭石（brand.accent）
 const WHITE = [0xff, 0xff, 0xff];
 
 // 礼盒：居中正方 + 白丝带十字 + 顶部盒盖
@@ -29,14 +30,14 @@ function colorAt(x, y) {
   // 盒盖
   if (y >= LID0 && y < LID1 && x >= LIDX0 && x < LIDX1) {
     if (x >= RBV0 && x < RBV1) return WHITE;
-    return RED;
+    return ACCENT;
   }
   // 盒体
   if (x >= BX0 && x < BX1 && y >= BY0 && y < BY1) {
     if ((x >= RBV0 && x < RBV1) || (y >= RBH0 && y < RBH1)) return WHITE;
-    return RED;
+    return ACCENT;
   }
-  return NAVY;
+  return PRIMARY;
 }
 
 // 原始扫描线：每行前置 filter 字节 0，再 W×RGB

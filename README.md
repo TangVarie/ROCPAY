@@ -124,7 +124,7 @@ DDL 见 [`db/schema.sql`](./db/schema.sql)（与 `src/db.js` 中的建表语句�
 仓库根目录/                 ← 后端，云托管构建（Dockerfile 在此，监听 3000）
 ├── Dockerfile · package.json · .env.example
 ├── public/                # 静态：安全医生 verify 文件（根目录直达）
-├── assets/reward-cover.png# 企微群发卡片封面（BYWOOD 藏蓝）
+├── assets/reward-cover.png# 企微群发卡片封面（BYWOOD 深青，scripts/make-cover.mjs 生成）
 ├── db/schema.sql          # 建表参考（启动自动建，通常不用手跑）
 ├── src/
 │   ├── config.js          # 配置加载 + 启动校验
@@ -137,7 +137,7 @@ DDL 见 [`db/schema.sql`](./db/schema.sql)（与 `src/db.js` 中的建表语句�
 │   └── app.js             # Express 路由入口（含公网防护、自动对账定时器）
 └── miniprogram/           # 小程序（微信开发者工具打开，不部署到云托管，已被 .dockerignore 排除）
     └── miniprogram/
-        ├── app.wxss       # BYWOOD 设计系统（硬边圆角 token / 黑色阶 / 语义色）
+        ├── app.wxss       # BYWOOD 设计系统 v5.1 token（青赭双色 / 直角 / 黑色阶 / 语义色 / 深色模式翻转）
         ├── api.js         # 统一调用封装（串行队列 + 超时 + 重试）
         └── pages/{claim,admin}/  # 领取页 / 工作台
 ```

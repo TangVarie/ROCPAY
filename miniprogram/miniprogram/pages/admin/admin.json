@@ -1,5 +1,5 @@
 {
-  "usingComponents": {},
+  "usingComponents": { "splash": "/components/splash/splash" },
   "navigationBarTitleText": "奖励工作台",
   "enablePullDownRefresh": true,
   "backgroundTextStyle": "dark"
