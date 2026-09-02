@@ -1,17 +1,17 @@
 /* ============================================================
-   BYWOOD 设计系统 · 对齐色板 v5.1 / 版式 v4（DESIGN.md + BRAND.md + tokens/palette.json）
-   编辑部亮色块 × 青赭双色制：深青＝动作与结构，赭石＝价值与增长（金额/收益/高亮），
+   BYWOOD 设计系统 · 色板 v5.1 / 版式 v4（DESIGN.md + BRAND.md + tokens/palette.json）
+   编辑部亮色块 × 青赭双色制：深青＝动作与结构，赭石＝价值与增长，
    标志青＝品牌面色（v5.1：只做底不做字，块内墨字，每屏 ≤1 块），语义色只表状态
-   —— v5.0.1 的「深湖蓝」主色随标志青回归整体换值（BRAND.md §2 v5.1 裁决）
    画布比表面深一档（白块无阴影也能"浮起成形"）；黑色阶文字；禁 emoji/渐变/毛玻璃/阴影
-   直角制度：一切容器/按钮/输入/chip/徽标 border-radius: 0，
-   "圆"只存在于状态圆点与圆头笔画（tab-dot、勾选画勾）
+   直角制度：一切容器/按钮/输入/chip/徽标 border-radius: 0，"圆"只存在于状态圆点与勾选画勾
 
-   token 命名与 kit 的 tokens/miniprogram.wxss 同名（--color-*），色值逐一取自 palette.json screen 节。
-   不直接 @import 那个文件：它的深色块自 v4 起写的是亮色值（CHANGELOG v5.1「明确未做」），
-   这里按 palette.json screen.dark 内联翻转；下次升级只需对照 screen 节改值。
+   token 来源：tokens/miniprogram.wxss = 设计系统包原件（相对上游只修两处，见该文件头注）。
+   这里只放 kit 没有的本项目扩展 token 与组件；深色模式：app.json darkmode:true + theme.json 管导航栏，
+   token 翻转在 tokens/miniprogram.wxss 与下方扩展块各自的 @media 里。
    交付前跑 npm run design:check（design/tools/check-design.py，色板外色值即 FAIL）。
    ============================================================ */
+@import "tokens/miniprogram.wxss";
+
 page {
   /* 圆角 token 全部置 0（直角制度）。保留变量名以便个别系统件例外时可局部覆写 */
   --r-block: 0;
@@ -19,53 +19,23 @@ page {
   --r-badge: 0;
   --r-check: 0;
 
-  /* ---- 品牌（palette.json screen.light）---- */
-  --color-primary: #1e5754;        /* 深青：主按钮/激活态/聚焦环/主色文字 */
-  --color-primary-dark: #16413f;   /* 墨青：按下态 */
+  /* ---- kit 没有的角色 token（值仍取 palette.json）---- */
   /* 主色底上的文字：亮色白字 8.25:1；深色主色为亮青，白字只有 2.11:1，按 palette _darkButtonRule 改压墨字 */
   --color-on-primary: #ffffff;
-  --color-accent: #b8502f;         /* 赭石：金额/链接/增量 */
-  --color-money: #b8502f;
-  --color-block-primary: #1e5754;  /* 深色数据块（白字），两模式恒定 */
-  --color-block-accent: #b8502f;   /* 强调数据块（白字），每屏 ≤1 */
-  --color-tint-primary: #e3efef;   /* 次级数据块底，块内文字色阶 */
-  --color-tint-accent: #f8eae2;    /* 提示块底 */
-  --color-field-brand: #7ed1cd; /* ok: 品牌面色（v5.1）：做底不做字，块内只放墨字/主色字，两模式同值 */
   --color-ink: rgba(0, 0, 0, 0.9); /* 青面上的墨字（9.85:1）：青面不翻转，墨字也不翻转 */
-
-  /* ---- 语义（标签文字用加深档）。语义色只表状态，与赭石"价值/金额"不同源不混用 ---- */
-  --color-success: #00b578;
+  /* 语义加深档（浅底上的文字）与危险按钮按下态 */
   --color-success-deep: #006b4a;
-  --color-warning: #ff8f1f;
   --color-warning-deep: #995400;
-  --color-danger: #d92b3c;
-  --color-danger-dark: #b02330;    /* 危险按钮按下态 */
-  --color-danger-deep: #b02330;    /* 浅底上的危险文字 */
-  /* 语义浅底（语义色 /10）：徽标、横幅、警示块共用，深色下换亮档语义色的同比例浅底 */
+  --color-danger-deep: #b02330;
+  --color-danger-dark: #b02330;
+  /* 语义浅底（语义色 /10）：徽标、横幅、警示块共用 */
   --color-success-tint: rgba(0, 181, 120, 0.1);
   --color-warning-tint: rgba(255, 143, 31, 0.1);
   --color-danger-tint: rgba(217, 43, 60, 0.1);
-
-  /* ---- 画布与表面：画布比表面深一档，白色面板靠明度差成形（无阴影制度的前提）---- */
-  --color-bg: #f3f4f6;
-  --color-bg-secondary: #eaecef;
-  --color-surface: #ffffff;
-  --color-fill: rgba(0, 0, 0, 0.045);
-
-  /* ---- 黑色阶文字（禁纯黑）。
-     hint(0.45) 是本项目在 kit 四阶之外的扩展档：信息性辅助文字（时间/提示）的下限，白底约 3.4:1；
-     faint(0.3) 白底仅 ~2.1:1，只许用于纯装饰（水印、占位符），不许承载信息或交互 ---- */
-  --color-text-dark: rgba(0, 0, 0, 0.9);
-  --color-text: rgba(0, 0, 0, 0.65);
-  --color-text-light: rgba(0, 0, 0, 0.55);
+  /* hint(0.45)：kit 四阶之外的扩展档，信息性辅助文字（时间/提示）的下限，白底约 3.4:1；
+     faint(0.3) 白底仅 ~2.1:1，只许用于纯装饰，不许承载信息或交互 */
   --color-text-hint: rgba(0, 0, 0, 0.45);
-  --color-text-faint: rgba(0, 0, 0, 0.3);
-
-  /* ---- 分隔 ---- */
-  --color-border: rgba(0, 0, 0, 0.08);
-  --color-border-strong: #e5e6eb;
-
-  /* ---- 水印（大字报）：品牌色极淡（装饰透明度 8–12% 档），随模式换提亮档 ---- */
+  /* 水印（大字报）：品牌色极淡（装饰透明度 8–12% 档） */
   --color-wm-primary: rgba(30, 87, 84, 0.08);
   --color-wm-accent: rgba(184, 80, 47, 0.08);
 
@@ -73,11 +43,7 @@ page {
      其后是零加载成本的系统栈兜底：DIN(iOS)/Bahnschrift(Win) + 主流安卓厂商字体 */
   --font-num: 'ROC Num', 'DIN Alternate', 'Bahnschrift', 'MiSans', 'HarmonyOS Sans SC', 'OPPO Sans', 'vivo Sans', 'Roboto Condensed', 'Helvetica Neue', sans-serif;
 
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-size: 30rpx; /* 正文 15px 档 */
-  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  line-height: 1.6;
+  line-height: 1.6; /* 背景/文字色/字体/字号由 kit 的 page 规则给 */
 }
 
 /* 页容器：屏幕留边 16px */
@@ -86,18 +52,13 @@ page {
   box-sizing: border-box;
 }
 
-/* ---- 色块（唯一的装饰，直角，无阴影）---- */
+/* ---- 色块：kit 提供 .block-blue/.block-red/.tint-sky/.tint-blush；这里补 .block 的直角与盒模型、品牌面色块 ---- */
 .block {
   border-radius: var(--r-block);
   padding: 32rpx;
   box-sizing: border-box;
 }
-/* 类名沿用 kit 的 block-blue/block-red（kit 模板同名），底色走角色 token */
-.block-blue { background: var(--color-block-primary); }
-.block-red { background: var(--color-block-accent); }
-.tint-sky { background: var(--color-tint-primary); }
-.tint-blush { background: var(--color-tint-accent); }
-/* 品牌面色块（v5.1）：青底 + 墨字，每屏 ≤1、不与主色块相邻；块内禁白字与赭石 */
+/* 品牌面色块（v5.1）：青底 + 墨字，每屏 ≤1、不与主色块相邻；块内禁白字与赭石。kit 只有 token 没有类 */
 .field-brand { background: var(--color-field-brand); color: var(--color-ink); }
 
 /* 白底描边块（设置类内容） */
@@ -109,15 +70,18 @@ page {
   box-sizing: border-box;
 }
 
-/* ---- 文字 ---- */
+/* ---- 文字色阶助手（kit 的 .t-* 是字号档，这里是颜色档，各管一头）---- */
 .t-dark { color: var(--color-text-dark); }
 .t-body { color: var(--color-text); }
 .t-light { color: var(--color-text-light); }
 .t-hint { color: var(--color-text-hint); }
 .t-faint { color: var(--color-text-faint); }
+/* 数字：换成本项目的数字字体栈；字重不强制——kit 的 .num 固定 600 是给金额的，
+   本项目把时间戳/openid 也标了 .num 取等宽，字重跟随所在文字 */
 .num {
   font-family: var(--font-num);
   font-variant-numeric: tabular-nums lining-nums;
+  font-weight: inherit;
 }
 
 /* 编辑式导语：21px 次级色 + 加粗重点（走 token，深色模式自动翻转） */
@@ -129,7 +93,7 @@ page {
 }
 .lede .em { color: var(--color-text-dark); font-weight: 600; }
 
-/* ---- 按钮：扁平直角，禁 3D/渐变/阴影 ----
+/* ---- 按钮：在 kit .btn（直角/无边/600）之上定高度与居中 ----
    垂直居中用 flex，不用 line-height=height（后者在部分真机上文字偏上/偏下，
    就是"宽按钮文字总对不齐"的根源） */
 .btn {
@@ -140,12 +104,9 @@ page {
   line-height: normal;
   border-radius: var(--r-control);
   font-size: 32rpx;
-  font-weight: 600;
-  border: none;
   text-align: center;
   transition: transform 120ms ease-out, background-color 120ms ease-out;
 }
-.btn::after { border: none; }
 .btn:active { transform: scale(0.98); }
 /* 主按钮：主色底；文字随 --color-on-primary（亮色白字 / 深色墨字）*/
 .btn-blue { background: var(--color-primary); color: var(--color-on-primary); }
@@ -167,15 +128,10 @@ page {
   box-sizing: border-box;
 }
 
-/* ---- 发丝线分隔（列表不许一条一卡）----
+/* ---- 发丝线：覆盖 kit 的 1rpx 版 ----
    1rpx 在部分机型换算成 <1 物理像素会被吞/深浅不一，改用 1px + scaleY(0.5) 经典半像素方案 */
-.hairline-b { position: relative; }
 .hairline-b::after {
-  content: '';
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
   height: 1px;
-  background: var(--color-border);
   transform: scaleY(0.5);
   transform-origin: 0 100%;
 }
@@ -190,21 +146,18 @@ page {
   transform-origin: 0 0;
 }
 
-/* ---- 状态标签：语义色/10 底 + 加深档文字，直角，高 40rpx（kit 徽标规格）---- */
+/* ---- 状态标签：在 kit .badge（高 40rpx · 0 12rpx · 24rpx 字）之上补直角 token、深色可翻转的浅底 ---- */
 .badge {
   display: inline-flex;
   align-items: center;
-  font-size: 24rpx;
   font-weight: 600;
-  height: 40rpx;
-  line-height: 40rpx;
-  padding: 0 12rpx; /* kit 徽标原样：高 40rpx · 左右 12rpx */
   border-radius: var(--r-badge);
   background: var(--color-fill);
   color: var(--color-text);
   flex-shrink: 0;       /* flex 行内不许被挤压折行 */
   white-space: nowrap;
 }
+/* kit 的语义徽标底色是写死的 rgba，深色模式下太暗；改走 tint token（值同 kit，深色换亮档） */
 .badge-success { background: var(--color-success-tint); color: var(--color-success-deep); }
 .badge-warning { background: var(--color-warning-tint); color: var(--color-warning-deep); }
 .badge-danger { background: var(--color-danger-tint); color: var(--color-danger-deep); }
@@ -272,40 +225,8 @@ page {
   color: var(--color-text-faint);
 }
 
-/* ---- 品牌山形弧带加载动效（v5 .band-spinner）----
-   四条横条自上而下递增宽度、由下至上逐层点亮，复刻山形的层叠感；
-   只用主色一色做明暗递进（小程序无内联 SVG，用横条近似，规格随 tokens/miniprogram.wxss）。
-   颜色走 --color-primary：深色模式自动翻到亮青，无需第二套实现 */
-.band-spinner {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6rpx; /* kit 原样：四条弧带的层叠间距 */
-}
-.band-spinner .band {
-  height: 6rpx;
-  background: var(--color-primary);
-  animation: bandRise 1.2s infinite;
-}
-.band-spinner .band-1 { width: 40rpx; animation-delay: 0.36s; }
-.band-spinner .band-2 { width: 64rpx; animation-delay: 0.24s; }
-.band-spinner .band-3 { width: 88rpx; animation-delay: 0.12s; }
-.band-spinner .band-4 { width: 112rpx; animation-delay: 0s; }
-@keyframes bandRise {
-  0%, 100% { opacity: 0.22; }
-  35% { opacity: 1; }
-}
-
-/* ---- 骨架屏（kit .skeleton-base：明暗脉动，UI 渐变禁令下的合法加载态）----
+/* ---- 加载：.band-spinner 与 .skeleton-base 由 kit 提供；这里只补骨架行的排版 ----
    列表加载优先用骨架行（scenarios/04「骨架屏优先」），≥3 行占位；行高对齐真实列表行 */
-.skeleton-base {
-  background: var(--color-bg-secondary);
-  animation: skeletonPulse 1.6s ease-in-out infinite;
-}
-@keyframes skeletonPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
-}
 .sk-row { display: flex; align-items: center; gap: 24rpx; padding: 24rpx 8rpx; }
 .sk-row .sk-main { flex: 1; display: flex; flex-direction: column; gap: 8rpx; }
 .sk-line { height: 28rpx; }
@@ -327,7 +248,7 @@ page {
 .stagger-in > view:nth-child(6) { animation-delay: 275ms; }
 
 /* 尊重系统「减弱动态效果」：入场/庆祝动效停用；
-   加载是功能性动效——放慢而不是停掉 */
+   加载是功能性动效——放慢而不是停掉（kit 未处理，这里补） */
 @media (prefers-reduced-motion: reduce) {
   .stagger-in > view { animation: none; }
   .band-spinner .band { animation-duration: 1.8s; }
@@ -335,45 +256,20 @@ page {
 }
 
 /* ============================================================
-   深色模式（app.json darkmode:true + theme.json 管导航栏；这里翻转 token）
-   值取 palette.json screen.dark（v5.1）。原则（DESIGN.md §2）：
-   · 品牌深色块（block-primary 深青 / block-accent 深赭）+ 白字不翻——白字对比两模式都成立；
-   · 主色本身翻到亮青 #6ac1bd（深底 8.85:1）：按钮、激活 chip、指示条、主色文字全部随之；
-     亮青底上白字只有 2.11:1，故 --color-on-primary 改墨字（8.85:1）；
-   · 只翻画布/表面/文字色阶/分隔/浅调块；语义"加深档"文字在暗底反向改亮档；
-   · 品牌面色（标志青）与墨字不翻——青面两模式同值。
+   深色模式——kit token 的翻转在 tokens/miniprogram.wxss；这里只翻本项目扩展 token
+   （值取 palette.json screen.dark）与几处写死的按压态
    ============================================================ */
 @media (prefers-color-scheme: dark) {
   page {
-    --color-primary: #6ac1bd;
-    --color-primary-dark: #48a8a3;
-    --color-on-primary: #0f1318;
-    --color-accent: #d97e55;
-    --color-money: #d97e55;
-    --color-block-accent: #a84528;
-    --color-tint-primary: #163b39;
-    --color-tint-accent: #3d291f;
-    --color-success: #21b183;
+    --color-on-primary: #0f1318;     /* 亮青底压墨字 8.85:1 */
     --color-success-deep: #7fe0bd;
-    --color-warning: #ffa24d;
     --color-warning-deep: #ffc38a;
-    --color-danger: #e8575c;
-    --color-danger-dark: #c64449;
     --color-danger-deep: #ff9a9e;
+    --color-danger-dark: #c64449;
     --color-success-tint: rgba(33, 177, 131, 0.12);
     --color-warning-tint: rgba(255, 162, 77, 0.12);
     --color-danger-tint: rgba(232, 87, 92, 0.12);
-    --color-bg: #0f1318;
-    --color-bg-secondary: #151a20;
-    --color-surface: #1b222b;
-    --color-fill: rgba(255, 255, 255, 0.06);
-    --color-text-dark: rgba(255, 255, 255, 0.92);
-    --color-text: rgba(255, 255, 255, 0.7);
-    --color-text-light: rgba(255, 255, 255, 0.55);
     --color-text-hint: rgba(255, 255, 255, 0.45);
-    --color-text-faint: rgba(255, 255, 255, 0.34);
-    --color-border: rgba(255, 255, 255, 0.1);
-    --color-border-strong: #2b3440;
     /* 大字报水印：品牌色极淡在暗底上不可见，换亮青/亮赭同样极淡 */
     --color-wm-primary: rgba(106, 193, 189, 0.1);
     --color-wm-accent: rgba(217, 126, 85, 0.09);
