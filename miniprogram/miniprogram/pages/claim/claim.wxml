@@ -1,3 +1,5 @@
+<!-- 开屏放级联容器之外（fixed 浮层不进 .stagger-in）；只在冷启动亮（app.js onLaunch 置位） -->
+<splash />
 <view class="page stagger-in">
 
   <!-- 识别中：品牌山形弧带加载动效（四条弧带由下至上逐层点亮） -->

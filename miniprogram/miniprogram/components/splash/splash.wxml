@@ -1,0 +1,8 @@
+<!-- 开屏：接收层定式——青面 + 一句话 + 标志（BRAND-LANGUAGE 表二 / BRAND.md §2 青面三件套）。
+     ROC 没有图形标志，用词标「ROC」作墨版签章；标志宁小勿大，识别交给青面与留白。
+     点任意处跳过；到时自动淡出并卸载，不挡后面的数据加载。 -->
+<view class="splash {{leaving ? 'splash-leave' : ''}}" wx:if="{{visible}}" bindtap="skip" aria-label="梨响 ROC 启动页，点击跳过">
+  <view class="splash-mark num">ROC</view>
+  <view class="splash-line">奖励，说到做到</view>
+  <view class="splash-foot">梨响 ROC</view>
+</view>

@@ -1,0 +1,50 @@
+/* 开屏：青面（品牌面色）+ 墨字。青面两模式同值，墨字也不翻转（token 见 app.wxss）。
+   全屏覆盖在页面之上，不在 .stagger-in 容器内（DESIGN.md §6：fixed 浮层放级联容器外）。
+   无阴影、无渐变、直角——它本身就是一块色，靠留白与对称成形。 */
+.splash {
+  position: fixed;
+  left: 0; right: 0; top: 0; bottom: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 64rpx calc(96rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  background: var(--color-field-brand);
+  color: var(--color-ink);
+  animation: splashIn 240ms ease-out backwards;
+}
+.splash-leave { animation: splashOut 240ms ease-in forwards; }
+@keyframes splashIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes splashOut { from { opacity: 1; } to { opacity: 0; } }
+
+/* 词标作签章：≤ 面高 6%（BRAND.md §3 标志上限）——1334px 高的屏 6% ≈ 80px = 160rpx，取 120rpx 留余量 */
+.splash-mark {
+  font-size: 120rpx;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -4rpx;
+}
+/* 一句话：品牌衬线时刻（BRAND.md §5：界面轨每页 ≤1 处；小程序不加载网络字体，走系统衬线栈） */
+.splash-line {
+  margin-top: 32rpx;
+  font-family: 'Songti SC', 'Noto Serif SC', 'STSong', 'SimSun', serif;
+  font-size: 34rpx;
+  font-weight: 600;
+  letter-spacing: 4rpx;
+}
+.splash-foot {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(64rpx + env(safe-area-inset-bottom));
+  text-align: center;
+  font-size: 24rpx;
+  letter-spacing: 6rpx;
+  color: var(--color-ink);
+  opacity: 0.65; /* 墨字 9.85:1，降到 65% 仍 >4.5:1；层级差只来自透明度 */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash, .splash-leave { animation: none; }
+}
