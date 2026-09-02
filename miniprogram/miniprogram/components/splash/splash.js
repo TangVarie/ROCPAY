@@ -40,8 +40,12 @@ Component({
       if (!this.data.visible || this.data.leaving) return;
       this.clearTimers();
       this.setData({ leaving: true });
-      this.restoreNav();
-      this._t2 = setTimeout(() => this.setData({ visible: false, leaving: false }), LEAVE_MS);
+      // 导航栏等淡出结束再还原：提前还原会在青面还没退干净时先冒出一条白/黑，
+      // 正是把导航栏刷成青面要避免的那种割裂
+      this._t2 = setTimeout(() => {
+        this.setData({ visible: false, leaving: false });
+        this.restoreNav();
+      }, LEAVE_MS);
     },
     restoreNav() {
       try { wx.setNavigationBarColor(currentTheme() === 'dark' ? NAV_DARK : NAV_LIGHT); } catch (e) { /* 同上 */ }

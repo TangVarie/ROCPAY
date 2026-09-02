@@ -3,6 +3,13 @@
 
 一条命令扫全轨。品牌跑偏从此是构建错误，不是审美分歧。
 
+—— 本仓库副本（ROCPAY）相对设计系统包 v5.4.0 原件的补丁（PR #21 评审）：
+  ① 色值扫描扩到 3/4/8 位 hex、rgb()/rgba()（逗号与空格语法）与 CSS 命名色，统一归一到 6 位比对；
+  ② border-radius 白名单改为整值匹配（原先前缀匹配放过 0.5rem / 08px / 0 0 8px 8px）；
+  ③ 标志青围栏对显式目标也跑（原先只在自检模式跑，npm run design:check 传目录时形同虚设）；
+  ④ 扫描前抹掉块注释（保留行号）——注释里的说明文字不再被当成声明。
+  四处都标了「本仓库补丁」；上游合入后整份覆盖即可。
+
 用法：
     python3 tools/check-design.py                  # 扫整个设计系统包（自检）
     python3 tools/check-design.py 成品.docx         # 扫一份交付 docx
@@ -420,7 +427,85 @@ def scan_docx(path, allowed, strict=True):
 
 
 # ---------------------------------------------------------------- web
-RE_HEX = re.compile(r'#([0-9A-Fa-f]{6})\b')
+# 本仓库补丁①：只认 6 位 hex 是个直通的绕行口——#f0f / #ff00ff80 / rgb(255 0 255) / rgba(255,0,255,.8) /
+# color: red 都过闸。这里把各种写法归一成 6 位 hex（丢 alpha）再比对；透明度本身不是色板管的事。
+RE_HEX = re.compile(r'#([0-9A-Fa-f]{3,8})\b')
+RE_RGB = re.compile(r'(?i)\brgba?\(\s*([0-9.]+%?)\s*[, ]\s*([0-9.]+%?)\s*[, ]\s*([0-9.]+%?)')
+# 色彩函数只认 rgb/rgba；hsl/hwb/lab/lch/oklch/color() 没法与 hex 色板逐值比对，一律视为色板外写法
+RE_OTHER_COLOR_FN = re.compile(r'(?i)\b(hsla?|hwb|lab|lch|oklab|oklch|color)\(')
+CSS_NAMED_COLORS = set('''aliceblue antiquewhite aqua aquamarine azure beige bisque blanchedalmond blue blueviolet
+brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan
+darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred
+darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue
+dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray
+green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen
+lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink
+lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen
+linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue
+mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy
+oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip
+peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown
+seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal
+thistle tomato turquoise violet wheat yellow yellowgreen'''.split())
+# 命名色只在色彩属性的值里查（类名 .badge-blue、注释里的英文不算）；white/black 与中性 hex 同等放行
+RE_COLOR_DECL = re.compile(
+    r'(?i)(?:^|[\s;{])(?:color|background(?:-color)?|border(?:-(?:top|right|bottom|left))?(?:-color)?'
+    r'|outline(?:-color)?|fill|stroke|box-shadow|text-shadow|caret-color|text-decoration(?:-color)?)\s*:\s*([^;{}]*)')
+# 值里的独立单词才算候选：var(--blue) 里的变量名、COLORS.GREY 这类成员引用、#fff 后面的字母都不是命名色
+RE_VAR_FN = re.compile(r'var\([^)]*\)')
+RE_WORD = re.compile(r'(?<![\w.\-#])([A-Za-z]+)(?![\w.\-])')
+# 块注释整体抹成空白（保留换行以维持行号）：注释里写「border-radius: 0，圆只存在于…」这种说明不该被当声明扫；
+# 「ok:」豁免标记与骨架屏上下文仍看原文
+RE_BLOCK_COMMENT = re.compile(r'/\*.*?\*/', re.S)
+
+
+def blank_block_comments(src):
+    return RE_BLOCK_COMMENT.sub(lambda m: re.sub(r'[^\n]', ' ', m.group(0)), src)
+
+
+def norm_hex(h):
+    """3/4/6/8 位 hex → 6 位大写（4/8 位丢 alpha）；5/7 位不是合法 CSS，返回 None 交给调用方判错。"""
+    if len(h) in (3, 4):
+        return ''.join(c * 2 for c in h[:3]).upper()
+    if len(h) in (6, 8):
+        return h[:6].upper()
+    return None
+
+
+def rgb_to_hex(r, g, b):
+    def ch(v):
+        v = v.strip()
+        n = float(v[:-1]) * 255 / 100 if v.endswith('%') else float(v)
+        return max(0, min(255, int(round(n))))
+    try:
+        return '%02X%02X%02X' % (ch(r), ch(g), ch(b))
+    except ValueError:
+        return None
+
+
+JS_EXT = {'.js', '.jsx', '.ts', '.tsx'}
+RE_QUOTED_WORD = re.compile(r'''['"]([A-Za-z]+)['"]''')
+
+
+def line_colors(line, ext=''):
+    """一行里出现的所有色值，统一成 6 位 hex（或对无法归一的写法给出原文）。返回 [(hex 或 None, 原文)]
+    命名色：样式文件在色彩属性的值里查裸单词；JS 里 GREY / red 多半是标识符，只认带引号的字符串。"""
+    out = []
+    for h in RE_HEX.findall(line):
+        out.append((norm_hex(h), '#' + h))
+    for r, g, b in RE_RGB.findall(line):
+        out.append((rgb_to_hex(r, g, b), f'rgb({r}, {g}, {b})'))
+    for fn in RE_OTHER_COLOR_FN.findall(line):
+        out.append((None, fn + '(…)'))
+    if ext in JS_EXT:
+        words = RE_QUOTED_WORD.findall(line)
+    else:
+        words = [w for m in RE_COLOR_DECL.finditer(line) for w in RE_WORD.findall(RE_VAR_FN.sub(' ', m.group(1)))]
+    for w in words:
+        lw = w.lower()
+        if lw in CSS_NAMED_COLORS:
+            out.append(('FFFFFF' if lw == 'white' else '000000' if lw == 'black' else None, w))
+    return out
 RE_RADIUS = re.compile(r'border-radius\s*:\s*([^;}\n]+)')
 RE_BLUR = re.compile(r'backdrop-filter\s*:|(?<![\w-])-webkit-backdrop-filter\s*:')
 RE_GRAD = re.compile(r'(linear|radial|conic)-gradient\s*\(')
@@ -433,7 +518,9 @@ RE_SHADOW = re.compile(r'box-shadow\s*:\s*([^;}\n]+)')
 
 # 只放行"本体即圆形"与继承值。药丸形 999px/9999px 不在 DESIGN.md §5 例外清单里，
 # 真要用就写 /* ok: 理由 */，不给静默通道。
-RADIUS_OK = re.compile(r'^\s*(0|0px|0%|none|50%|inherit|initial|var\()')
+# 本仓库补丁②：整值匹配到行尾——原先前缀匹配，0.5rem / 08px / 0 0 8px 8px 都被开头的「0」放过
+RADIUS_OK = re.compile(
+    r'^\s*(?:var\(|(?:0|0px|0%|50%|none|inherit|initial)(?:\s+(?:0|0px|0%|50%))*\s*(?:!important)?\s*$)')
 
 
 def scan_web(path, allowed, strict):
@@ -443,23 +530,27 @@ def scan_web(path, allowed, strict):
         return
     rel = os.path.relpath(path, os.getcwd())
     lines = src.splitlines()
+    clean = blank_block_comments(src).splitlines()   # 本仓库补丁④：检测用抹掉块注释的文本，行号不变
 
-    for i, line in enumerate(lines, 1):
-        if line.lstrip().startswith(('*', '//', '<!--')):
+    for i, raw in enumerate(lines, 1):
+        if raw.lstrip().startswith(('*', '//', '<!--')):
             continue
-        if RE_OK.search(line):
+        if RE_OK.search(raw):
             continue
         # 骨架屏微光是渐变禁令的唯一豁免——标记可能写在上一两行的注释里
         ctx = '\n'.join(lines[max(0, i - 3):i]).lower()
+        line = clean[i - 1] if i - 1 < len(clean) else raw
 
         inline_logo = bool(RE_INLINE_LOGO.search(line))
-        for h in RE_HEX.findall(line):
-            H = h.upper()
+        for H, raw in line_colors(line, os.path.splitext(path)[1].lower()):   # 本仓库补丁①：hex 长短、rgb()/rgba()、命名色统一归一后比对
+            if H is None:
+                (fail if strict else warn)('PALETTE', f'{rel}:{i}', f'非色板写法或非法色值 {raw}（只认色板 hex / rgb·rgba）')
+                continue
             if H in allowed or H in NEUTRAL or H in ALLOWED_EXTRA:
                 continue
             if inline_logo and H in LOGO_ALLOWED:
                 continue   # 内联标志原件里的品牌资产色（含渐变站）合法，裸用仍 FAIL
-            (fail if strict else warn)('PALETTE', f'{rel}:{i}', f'色板外色值 #{h}')
+            (fail if strict else warn)('PALETTE', f'{rel}:{i}', f'色板外色值 {raw}')
 
         m = RE_RADIUS.search(line)
         if m and not RADIUS_OK.match(m.group(1)):
@@ -584,10 +675,12 @@ def main(argv):
         else:
             print('  · 未找到 skill 安装目录，跳过（可用 --mirror=<路径> 指定）')
 
+    # 本仓库补丁③：标志青围栏对显式目标也跑——#7ED1CD 在色板白名单里，普通扫描认不出它当了前景，
+    # 原先只在自检模式跑，npm run design:check 传目录时这条规则形同虚设
+    print('\n[LOGO] 标志原件与标志青围栏')
     if targets == [ROOT]:
-        print('\n[LOGO] 标志原件与标志青围栏')
         check_logo(ROOT)
-        check_teal_containment(ROOT, targets)
+    check_teal_containment(ROOT, targets)
 
     print('\n[SCAN] 文件扫描')
     n = 0
