@@ -6,10 +6,18 @@
    BRAND-LANGUAGE 日用层「青面只在里程碑」，钱到账就是这页唯一的里程碑。
    块内文字一律继承块的 color（赭块白 / 青面墨），不在子元素上写第二套色 */
 .reward-block {
+  position: relative; /* 轮印定位基准 */
   margin-top: 16rpx;
   padding: 48rpx 40rpx 40rpx;
   text-align: center;
   color: #ffffff;
+}
+/* 到账块角落的轮印（v5.5 闲章）。kit 的 .round-seal 默认 text-dark，深色模式会翻白——青面上一律墨，压回 --color-ink */
+.rb-seal {
+  position: absolute;
+  top: 24rpx;
+  right: 24rpx;
+  color: var(--color-ink);
 }
 /* 页面 wxss 晚于 app.wxss 生效，单类 .reward-block 的白字会压过 app.wxss 的 .field-brand 墨字——
    青面上白字只有 1.77:1（BRAND.md §2 明禁），这里用复合选择器把墨字压回去 */

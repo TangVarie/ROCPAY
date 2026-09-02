@@ -9,6 +9,9 @@ Page({
     amtText: '--',
     remark: '',
     tokenGone: '', // 非空 = 令牌已终结（过期/已领/已撤回），显示终态而不是可点的领取块
+    // 入口数据已到齐（开屏据此淡出）：令牌流程要等 /api/claim/status 回来（成功、终态或兜底都算），
+    // 直接打开要等 checkMine 落定（mine/empty/error 都算）。不能用 mode 判——mode 在发请求前就已是 token
+    entryReady: false,
     // 定向领取（身份识别）
     mineAmt: '',
     mineRemark: '',
@@ -68,7 +71,8 @@ Page({
         };
         this.setData({ tokenGone: map[res.state] || '该奖励当前不可领取' });
       })
-      .catch(() => this._tokenFallback());
+      .catch(() => this._tokenFallback())
+      .then(() => this.setData({ entryReady: true })); // 成功 / 终态 / 兜底三条路都算"到了"
   },
   // 校验接口不可达（冷启动/网络抖动）：退回 URL 金额兜底展示；点领取仍有后端强校验把关
   _tokenFallback() {
@@ -164,7 +168,10 @@ Page({
               : '';
         this.setData({ ...base, mode: 'empty', emptyReason: reasonText });
       }
-    });
+    }).then(
+      () => this.setData({ entryReady: true }),
+      () => this.setData({ entryReady: true }) // 处理函数自身抛错也要放开屏走，页面停在 loading 态由用户重试
+    );
   },
 
   retry() { this.checkMine(); },

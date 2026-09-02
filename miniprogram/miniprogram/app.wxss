@@ -3,12 +3,12 @@
    编辑部亮色块 × 青赭双色制：深青＝动作与结构，赭石＝价值与增长，
    标志青＝品牌面色（v5.1：只做底不做字，块内墨字，每屏 ≤1 块），语义色只表状态
    画布比表面深一档（白块无阴影也能"浮起成形"）；黑色阶文字；禁 emoji/渐变/毛玻璃/阴影
-   直角制度：一切容器/按钮/输入/chip/徽标 border-radius: 0，"圆"只存在于状态圆点与勾选画勾
+   直角制度：一切容器/按钮/输入/chip/徽标圆角一律 0，"圆"只存在于状态圆点与勾选画勾
 
-   token 来源：tokens/miniprogram.wxss = 设计系统包原件（相对上游只修两处，见该文件头注）。
+   token 来源：tokens/miniprogram.wxss = 设计系统包 v5.5.1 原件（未改一字；升级整份覆盖）。
    这里只放 kit 没有的本项目扩展 token 与组件；深色模式：app.json darkmode:true + theme.json 管导航栏，
    token 翻转在 tokens/miniprogram.wxss 与下方扩展块各自的 @media 里。
-   交付前跑 npm run design:check（design/tools/check-design.py，色板外色值即 FAIL）。
+   交付前跑 npm run design:check（design/tools/check-design.py 同为原件，色板外色值即 FAIL）。
    ============================================================ */
 @import "tokens/miniprogram.wxss";
 
@@ -224,6 +224,15 @@ page {
   letter-spacing: 6rpx;
   color: var(--color-text-faint);
 }
+
+/* ---- 轮印里的山形（v5.5）：kit 只给了 .round-seal 的框与三行字，.mark 留给使用方——
+   按 band-spinner 同款四条横条静态排布（不动画：印是签章），高 ≈ 印边长 22%（BRAND.md §3 轮印段） ---- */
+.round-seal .mark { display: flex; flex-direction: column; align-items: center; gap: 3rpx; margin-bottom: 2rpx; }
+.round-seal .mark .b { height: 3rpx; background: currentColor; }
+.round-seal .mark .b1 { width: 14rpx; }
+.round-seal .mark .b2 { width: 22rpx; }
+.round-seal .mark .b3 { width: 30rpx; }
+.round-seal .mark .b4 { width: 38rpx; }
 
 /* ---- 加载：.band-spinner 与 .skeleton-base 由 kit 提供；这里只补骨架行的排版 ----
    列表加载优先用骨架行（scenarios/04「骨架屏优先」），≥3 行占位；行高对齐真实列表行 */
