@@ -3,13 +3,6 @@
 
 一条命令扫全轨。品牌跑偏从此是构建错误，不是审美分歧。
 
-—— 本仓库副本（ROCPAY）相对设计系统包 v5.4.0 原件的补丁（PR #21 评审）：
-  ① 色值扫描扩到 3/4/8 位 hex、rgb()/rgba()（逗号与空格语法）与 CSS 命名色，统一归一到 6 位比对；
-  ② border-radius 白名单改为整值匹配（原先前缀匹配放过 0.5rem / 08px / 0 0 8px 8px）；
-  ③ 标志青围栏对显式目标也跑（原先只在自检模式跑，npm run design:check 传目录时形同虚设）；
-  ④ 扫描前抹掉块注释（保留行号）——注释里的说明文字不再被当成声明。
-  四处都标了「本仓库补丁」；上游合入后整份覆盖即可。
-
 用法：
     python3 tools/check-design.py                  # 扫整个设计系统包（自检）
     python3 tools/check-design.py 成品.docx         # 扫一份交付 docx
@@ -22,17 +15,22 @@
                bywood-fonts.conf）是否与本包同版——COLORS、白名单、版本戳逐值比对，
                模板正文（头部方向说明段之外）与 fonts.conf 逐字节比对。
                自检模式下自动定位 skill 目录，或用 --mirror=<路径> 指定
-    [PALETTE]  文件里出现色板外色值
+    [PALETTE]  文件里出现色板外色值——六位 hex、#rgb / #rgba / #rrggbbaa、rgb() / rgba() / hsl() / hsla()
+               一律归一到六位比对（v5.5.1 起；透明度不参与比对）；oklch / lab / hwb / color-mix 写法直接判不认
     [FIG]      docx 里每张图之后紧跟的那一段必须含「来源｜」（模板 v5.1 起图只走 FIG()，
                来源行是构件的一部分；缺 = 手写版式绕过了模板，负面清单「无来源行的图」）。
-               默认 FAIL，--lenient 降为提示（已交付旧版带图文档探查用）
-    [RADIUS]   border-radius 非 0（例外：50% 圆形本体、系统件）
+               默认 FAIL，--lenient 降为提示（已交付旧版带图文档探查用）。
+               模板 v5.3 内嵌的标志图形（docPr name 以 bywood- 开头）不是图，不计
+    [ROUND]    对客 docx 是否有轮页栏目「这一轮」（模板 v5.4 ROUND()）。提示级，不判 FAIL
+    [SYNTAX]   css / wxss 花括号配平（v5.4.1：多一个 } 会让小程序 @import 整份失败）
+    [RADIUS]   border-radius 非 0（例外：50% 圆形本体、系统件）；整值匹配，0.5rem / 08px / "0 0 4px 0" 都不放行（v5.5.1）
     [BLUR]     backdrop-filter（毛玻璃，零豁免）
     [GRADIENT] UI 渐变（例外：骨架屏微光）
     [SHADOW]   box-shadow（例外：抽屉 --shadow-sheet）
     [CONTRAST] palette.json 自身的关键配色对比度是否达标
     [LOGO]     标志原件走独立白名单；标志青在 logo/ 之外只许做品牌面色（background），
-               当前景（color / border / stroke / fill）即 FAIL（v5.1 起）
+               当前景（color / border / stroke / fill）即 FAIL（v5.1 起）。围栏对显式扫描目标也跑，
+               认 hex / rgb() / hsl() 任何写法（v5.5.1）
 
 退出码：0 全过；1 有 FAIL。
 """
@@ -259,18 +257,33 @@ def check_sync(p):
                     fail('SYNC', 'tokens/globals.css',
                          f'{mode} {var} = {m.group(1)}，palette.json 是 {want}')
 
-    # 3. miniprogram.wxss：亮色 hex token 逐值比对
+    # 3. miniprogram.wxss：亮色块与深色块的 hex token 分别逐值比对
+    #    v5.4.1 起深色块也比——此前只比亮色块，深色块从 v4 起写着亮色值，直到外部使用者报上来才发现。
     wx = os.path.join(ROOT, 'tokens', 'miniprogram.wxss')
     if os.path.exists(wx):
         src = open(wx, encoding='utf-8').read()
+        dk = src.find('@media (prefers-color-scheme: dark)')
+        light_blk, dark_blk = (src[:dk], src[dk:]) if dk != -1 else (src, '')
         for key, var in CSS_VAR.items():
             want = p['screen']['light'].get(key, '')
             if not want.startswith('#'):
                 continue
-            m = re.search(re.escape(var) + r':\s*(#[0-9A-Fa-f]{3,8})\s*;', src)
+            m = re.search(re.escape(var) + r':\s*(#[0-9A-Fa-f]{3,8})\s*;', light_blk)
             if m and m.group(1).upper() != want.upper():
                 fail('SYNC', 'tokens/miniprogram.wxss',
-                     f'{var} = {m.group(1)}，palette.json 是 {want}')
+                     f'亮色 {var} = {m.group(1)}，palette.json 是 {want}')
+            if not m:
+                continue   # 小程序 token 是子集：亮色块没定义的键不查深色块
+            want_d = p['screen']['dark'].get(key, '')
+            if not want_d.startswith('#'):
+                continue
+            md = re.search(re.escape(var) + r':\s*(#[0-9A-Fa-f]{3,8})\s*;', dark_blk)
+            if not md:
+                if want_d.upper() != want.upper():
+                    fail('SYNC', 'tokens/miniprogram.wxss', f'深色块里找不到 {var}（深色值 {want_d} 与亮色不同，必须覆盖）')
+            elif md.group(1).upper() != want_d.upper():
+                fail('SYNC', 'tokens/miniprogram.wxss',
+                     f'深色 {var} = {md.group(1)}，palette.json 是 {want_d}')
 
     # 4. chart-palette.py：四组色序全部比对
     cp = os.path.join(ROOT, 'tokens', 'chart-palette.py')
@@ -360,7 +373,12 @@ def check_mirror(p, d):
 
 # ---------------------------------------------------------------- docx
 W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+WP_NS = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing'
 RE_SOURCE_LINE = re.compile(r'来源[｜|]')
+# 模板 v5.3 起，标志图形（刊头 / 轮印里的山形）也是 <w:drawing>，靠 docPr name 前缀认：它们不是图，不要求来源行
+BRAND_DRAWING_PREFIX = 'bywood-'
+# v5.5.1 起查的是轮页栏目「这一轮」（模板 v5.4：印不计数，页眉不报轮次，轮页左格固定写「这一轮」）
+RE_ROUND_MARK = re.compile(r'这一轮')
 
 
 def check_fig_sources(path, xml, strict):
@@ -375,6 +393,7 @@ def check_fig_sources(path, xml, strict):
         fail('FIG', path, f'document.xml 解析失败：{e}')
         return
     P, DRAWING, T = f'{{{W_NS}}}p', f'{{{W_NS}}}drawing', f'{{{W_NS}}}t'
+    DOCPR = f'{{{WP_NS}}}docPr'
     # 文本框（drawing 里的 txbxContent）内的段落不算版面段落，先剔除
     nested = set()
     for d in root.iter(DRAWING):
@@ -383,14 +402,23 @@ def check_fig_sources(path, xml, strict):
     paras = [p for p in root.iter(P) if id(p) not in nested]
     missing = []
     n_fig = 0
+    n_brand = 0
     for i, p in enumerate(paras):
-        if p.find(f'.//{DRAWING}') is None:
+        drawings = p.findall(f'.//{DRAWING}')
+        if not drawings:
+            continue
+        # 段里的 drawing 全是标志图形（docPr name 以 bywood- 开头）→ 不是图，跳过
+        names = [(d.find(f'.//{DOCPR}').get('name') or '') if d.find(f'.//{DOCPR}') is not None else '' for d in drawings]
+        if names and all(nm.startswith(BRAND_DRAWING_PREFIX) for nm in names):
+            n_brand += 1
             continue
         n_fig += 1
         nxt = paras[i + 1] if i + 1 < len(paras) else None
         text = ''.join(t.text or '' for t in nxt.iter(T)) if nxt is not None else ''
         if not RE_SOURCE_LINE.search(text):
             missing.append(n_fig)
+    if n_brand:
+        print(f'    {n_brand} 处标志图形（docPr bywood-*，模板 v5.3 内嵌）不计入图')
     if n_fig == 0:
         return
     if missing:
@@ -424,88 +452,75 @@ def scan_docx(path, allowed, strict=True):
                   + '、'.join(f'{c}（{V4_RETIRED_TINTS[c]}）' for c in sorted(tints)))
             print('    新构建的文档应使用 v4 模板（零底纹，templates/docx-template.js）；本文件若为已交付旧版则忽略本提示。')
     check_fig_sources(path, xml, strict)
+    check_round_mark(path, xml)
+
+
+def check_round_mark(path, xml):
+    """轮页（BRAND-LANGUAGE 不变量 4，模板 v5.4 的 ROUND()）：对客 docx 该有固定栏目「这一轮」。
+    提示级（WARN 不 FAIL）：旧件与内部件不追溯。只查正文 document.xml——印与页眉自 v5.4 起不计数、不报轮次。"""
+    plain = re.sub(r'<[^>]+>', '', xml)
+    if not RE_ROUND_MARK.search(plain):
+        warn('ROUND', path, '没有「这一轮」栏目——对客件在刊头之下放 ROUND({ span, goal, prev, now, next })；'
+                            '首轮 / 单轮短期项目传 first: true；旧件与内部件忽略本提示')
+    else:
+        print('    轮页「这一轮」在')
 
 
 # ---------------------------------------------------------------- web
-# 本仓库补丁①：只认 6 位 hex 是个直通的绕行口——#f0f / #ff00ff80 / rgb(255 0 255) / rgba(255,0,255,.8) /
-# color: red 都过闸。这里把各种写法归一成 6 位 hex（丢 alpha）再比对；透明度本身不是色板管的事。
-RE_HEX = re.compile(r'#([0-9A-Fa-f]{3,8})\b')
-RE_RGB = re.compile(r'(?i)\brgba?\(\s*([0-9.]+%?)\s*[, ]\s*([0-9.]+%?)\s*[, ]\s*([0-9.]+%?)')
-# 色彩函数只认 rgb/rgba；hsl/hwb/lab/lch/oklch/color() 没法与 hex 色板逐值比对，一律视为色板外写法
-RE_OTHER_COLOR_FN = re.compile(r'(?i)\b(hsla?|hwb|lab|lch|oklab|oklch|color)\(')
-CSS_NAMED_COLORS = set('''aliceblue antiquewhite aqua aquamarine azure beige bisque blanchedalmond blue blueviolet
-brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan
-darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred
-darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue
-dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray
-green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen
-lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink
-lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen
-linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue
-mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy
-oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip
-peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown
-seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal
-thistle tomato turquoise violet wheat yellow yellowgreen'''.split())
-# 命名色只在色彩属性的值里查（类名 .badge-blue、注释里的英文不算）；white/black 与中性 hex 同等放行
-RE_COLOR_DECL = re.compile(
-    r'(?i)(?:^|[\s;{])(?:color|background(?:-color)?|border(?:-(?:top|right|bottom|left))?(?:-color)?'
-    r'|outline(?:-color)?|fill|stroke|box-shadow|text-shadow|caret-color|text-decoration(?:-color)?)\s*:\s*([^;{}]*)')
-# 值里的独立单词才算候选：var(--blue) 里的变量名、COLORS.GREY 这类成员引用、#fff 后面的字母都不是命名色
-RE_VAR_FN = re.compile(r'var\([^)]*\)')
-RE_WORD = re.compile(r'(?<![\w.\-#])([A-Za-z]+)(?![\w.\-])')
-# 块注释整体抹成空白（保留换行以维持行号）：注释里写「border-radius: 0，圆只存在于…」这种说明不该被当声明扫；
-# 「ok:」豁免标记与骨架屏上下文仍看原文
-RE_BLOCK_COMMENT = re.compile(r'/\*.*?\*/', re.S)
+RE_HEX = re.compile(r'#([0-9A-Fa-f]{6})\b')
+# v5.5.1：色值不只有六位 hex。#rgb / #rgba / #rrggbbaa / rgb() / rgba() / hsl() / hsla() 此前一概不认，
+# 等于给闸门留了一扇后门（外部使用者的代码审查指出）。统一归一到六位 hex 再比对；透明度不参与比对——
+# 色板色带 alpha 仍是色板色（文字四阶、徽标浅底都是这种写法）。
+RE_COLOR = re.compile(
+    r'#([0-9A-Fa-f]{8}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{3,4})(?![0-9A-Fa-f\w-])'
+    r'|\b(rgba?|hsla?)\(\s*([^()]*?)\s*\)', re.I)
+RE_COLOR_FN_UNKNOWN = re.compile(r'\b(oklch|oklab|lab|lch|hwb|color-mix)\(', re.I)
 
 
-def blank_block_comments(src):
-    return RE_BLOCK_COMMENT.sub(lambda m: re.sub(r'[^\n]', ' ', m.group(0)), src)
+def _num(tok, scale):
+    tok = tok.strip().lower().replace('deg', '')
+    if tok.endswith('%'):
+        return float(tok[:-1]) / 100 * scale
+    return float(tok)
 
 
-def norm_hex(h):
-    """3/4/6/8 位 hex → 6 位大写（4/8 位丢 alpha）；5/7 位不是合法 CSS，返回 None 交给调用方判错。"""
-    if len(h) in (3, 4):
-        return ''.join(c * 2 for c in h[:3]).upper()
-    if len(h) in (6, 8):
-        return h[:6].upper()
-    return None
+def _hsl_to_rgb(h, sl, l):
+    h = (h % 360) / 360
+    c = (1 - abs(2 * l - 1)) * sl
+    x = c * (1 - abs((h * 6) % 2 - 1))
+    m = l - c / 2
+    r, g, b = [(c, x, 0), (x, c, 0), (0, c, x), (0, x, c), (x, 0, c), (c, 0, x)][int(h * 6) % 6]
+    return [round((v + m) * 255) for v in (r, g, b)]
 
 
-def rgb_to_hex(r, g, b):
-    def ch(v):
-        v = v.strip()
-        n = float(v[:-1]) * 255 / 100 if v.endswith('%') else float(v)
-        return max(0, min(255, int(round(n))))
-    try:
-        return '%02X%02X%02X' % (ch(r), ch(g), ch(b))
-    except ValueError:
-        return None
-
-
-JS_EXT = {'.js', '.jsx', '.ts', '.tsx'}
-RE_QUOTED_WORD = re.compile(r'''['"]([A-Za-z]+)['"]''')
-
-
-def line_colors(line, ext=''):
-    """一行里出现的所有色值，统一成 6 位 hex（或对无法归一的写法给出原文）。返回 [(hex 或 None, 原文)]
-    命名色：样式文件在色彩属性的值里查裸单词；JS 里 GREY / red 多半是标识符，只认带引号的字符串。"""
-    out = []
-    for h in RE_HEX.findall(line):
-        out.append((norm_hex(h), '#' + h))
-    for r, g, b in RE_RGB.findall(line):
-        out.append((rgb_to_hex(r, g, b), f'rgb({r}, {g}, {b})'))
-    for fn in RE_OTHER_COLOR_FN.findall(line):
-        out.append((None, fn + '(…)'))
-    if ext in JS_EXT:
-        words = RE_QUOTED_WORD.findall(line)
-    else:
-        words = [w for m in RE_COLOR_DECL.finditer(line) for w in RE_WORD.findall(RE_VAR_FN.sub(' ', m.group(1)))]
-    for w in words:
-        lw = w.lower()
-        if lw in CSS_NAMED_COLORS:
-            out.append(('FFFFFF' if lw == 'white' else '000000' if lw == 'black' else None, w))
-    return out
+def colors_in(line):
+    """yield (原文, 六位大写 hex)。认不出的写法（oklch / lab / hwb / color-mix）单独由调用方判。
+    短写 hex（#rgb / #rgba / #rrggbbaa）只在取值位认：前面同一声明里有 : 或 =（排掉 #abc 这类 id 选择器与锚点）。"""
+    for m in RE_COLOR.finditer(line):
+        if m.group(1) is not None:
+            h = m.group(1)
+            if len(h) != 6:
+                before = line[:m.start()]
+                decl = re.split(r'[;{}]', before)[-1]
+                if not re.search(r'[:=]', decl) or re.search(r'(href\s*=\s*["\']?|url\(\s*["\']?)$', before):
+                    continue
+            if len(h) in (3, 4):
+                h = ''.join(ch * 2 for ch in h[:3])
+            yield m.group(0), h[:6].upper()
+            continue
+        fn, args = m.group(2).lower(), m.group(3)
+        parts = [t for t in re.split(r'[,\s/]+', args) if t]
+        if len(parts) < 3:
+            continue
+        try:
+            if fn.startswith('rgb'):
+                rgb = [max(0, min(255, round(_num(t, 255)))) for t in parts[:3]]
+            else:
+                rgb = _hsl_to_rgb(_num(parts[0], 360), _num(parts[1], 1) if parts[1].endswith('%') else float(parts[1]) / 100,
+                                  _num(parts[2], 1) if parts[2].endswith('%') else float(parts[2]) / 100)
+        except ValueError:
+            continue
+        yield m.group(0), '%02X%02X%02X' % tuple(rgb)
 RE_RADIUS = re.compile(r'border-radius\s*:\s*([^;}\n]+)')
 RE_BLUR = re.compile(r'backdrop-filter\s*:|(?<![\w-])-webkit-backdrop-filter\s*:')
 RE_GRAD = re.compile(r'(linear|radial|conic)-gradient\s*\(')
@@ -518,9 +533,8 @@ RE_SHADOW = re.compile(r'box-shadow\s*:\s*([^;}\n]+)')
 
 # 只放行"本体即圆形"与继承值。药丸形 999px/9999px 不在 DESIGN.md §5 例外清单里，
 # 真要用就写 /* ok: 理由 */，不给静默通道。
-# 本仓库补丁②：整值匹配到行尾——原先前缀匹配，0.5rem / 08px / 0 0 8px 8px 都被开头的「0」放过
-RADIUS_OK = re.compile(
-    r'^\s*(?:var\(|(?:0|0px|0%|50%|none|inherit|initial)(?:\s+(?:0|0px|0%|50%))*\s*(?:!important)?\s*$)')
+# v5.5.1：整值匹配。此前只匹配前缀，0.5rem / 08px / "0 0 4px 0" 都从 0 那条缝里漏过去（外部代码审查指出）。
+RADIUS_OK = re.compile(r'^\s*(?:0|0px|0%|none|50%|inherit|initial|unset|var\([^)]*\))\s*(?:!important\s*)?$', re.I)
 
 
 def scan_web(path, allowed, strict):
@@ -530,27 +544,34 @@ def scan_web(path, allowed, strict):
         return
     rel = os.path.relpath(path, os.getcwd())
     lines = src.splitlines()
-    clean = blank_block_comments(src).splitlines()   # 本仓库补丁④：检测用抹掉块注释的文本，行号不变
 
-    for i, raw in enumerate(lines, 1):
-        if raw.lstrip().startswith(('*', '//', '<!--')):
+    # 样式表括号配平（v5.4.1）：多一个或少一个花括号，wxss 的 @import 会整份失败，css 会静默丢掉后面的规则
+    if os.path.splitext(path)[1].lower() in ('.css', '.wxss'):
+        body = re.sub(r'/\*.*?\*/', '', src, flags=re.S)
+        body = re.sub(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'', '', body)
+        o, c = body.count('{'), body.count('}')
+        if o != c:
+            fail('SYNTAX', rel, f'花括号不配平：{{ ×{o}，}} ×{c}——多余或缺失的括号会让整份样式表失效')
+
+    for i, line in enumerate(lines, 1):
+        if line.lstrip().startswith(('*', '//', '<!--')):
             continue
-        if RE_OK.search(raw):
+        if RE_OK.search(line):
             continue
         # 骨架屏微光是渐变禁令的唯一豁免——标记可能写在上一两行的注释里
         ctx = '\n'.join(lines[max(0, i - 3):i]).lower()
-        line = clean[i - 1] if i - 1 < len(clean) else raw
 
         inline_logo = bool(RE_INLINE_LOGO.search(line))
-        for H, raw in line_colors(line, os.path.splitext(path)[1].lower()):   # 本仓库补丁①：hex 长短、rgb()/rgba()、命名色统一归一后比对
-            if H is None:
-                (fail if strict else warn)('PALETTE', f'{rel}:{i}', f'非色板写法或非法色值 {raw}（只认色板 hex / rgb·rgba）')
-                continue
+        for lit, H in colors_in(line):
             if H in allowed or H in NEUTRAL or H in ALLOWED_EXTRA:
                 continue
             if inline_logo and H in LOGO_ALLOWED:
                 continue   # 内联标志原件里的品牌资产色（含渐变站）合法，裸用仍 FAIL
-            (fail if strict else warn)('PALETTE', f'{rel}:{i}', f'色板外色值 {raw}')
+            shown = lit if lit.startswith('#') else f'{lit} → #{H}'
+            (fail if strict else warn)('PALETTE', f'{rel}:{i}', f'色板外色值 {shown}')
+        mu = RE_COLOR_FN_UNKNOWN.search(line)
+        if mu:
+            (fail if strict else warn)('PALETTE', f'{rel}:{i}', f'{mu.group(1)}() 写法闸门不认——色值一律用 token 或色板 hex')
 
         m = RE_RADIUS.search(line)
         if m and not RADIUS_OK.match(m.group(1)):
@@ -593,7 +614,9 @@ def check_logo(root):
 
 # 标志青作「面色」的合法写法（v5.1）：只许出现在 background / background-color 里，
 # 或 token 定义行 --color-field-brand。写进 color / border / stroke / fill / box-shadow = 当前景用 = 溢出。
-RE_TEAL_FIELD = re.compile(r'(?i)(background(?:-color)?\s*:[^;{}]*#7ED1CD|--color-field-brand\s*:\s*#7ED1CD)')
+# 品牌面色的两种合法写法（整段声明剔除后再看剩余部分里还有没有标志青）
+RE_TEAL_FIELD = re.compile(r'(?i)(background(?:-color)?\s*:[^;{}]*|--color-field-brand\s*:[^;{}]*)')
+TEAL = '7ED1CD'
 
 
 def check_teal_containment(root, targets):
@@ -603,7 +626,7 @@ def check_teal_containment(root, targets):
     写进 color / border / stroke / fill 就是把 1.77:1 的青当前景用，照旧 FAIL。
     青面块内的文字对比由 palette.json 的 _contrastPairs 保证（墨字 9.85 / 主色字 5.06），
     但赭石压青只有 2.81、白字压青 1.77——这两条闸门测不到，靠 BRAND.md §2 的用法纪律。"""
-    teal = re.compile(r'#7ED1CD\b', re.I)
+    has_teal = lambda text: any(H == TEAL for _, H in colors_in(text))   # 任何写法：hex / rgb() / hsl()
     inlined_logo = RE_INLINE_LOGO
     logo_dir = os.path.join(root, 'logo') + os.sep
     hits = []
@@ -616,12 +639,12 @@ def check_teal_containment(root, targets):
                 continue
             src = open(path, encoding='utf-8', errors='replace').read()
             for i, line in enumerate(src.splitlines(), 1):
-                if not teal.search(line) or RE_OK.search(line) or inlined_logo.search(line):
+                if not has_teal(line) or RE_OK.search(line) or inlined_logo.search(line):
                     continue
-                # 同一行里所有的 #7ED1CD 都必须是面色写法；去掉合法片段后若还剩，就是前景用法
+                # 同一行里所有的标志青都必须是面色写法；去掉合法片段后若还剩，就是前景用法
                 rest = RE_TEAL_FIELD.sub('', line)
-                if teal.search(rest):
-                    hits.append(f'{os.path.relpath(path, root)}:{i}')
+                if has_teal(rest):
+                    hits.append(f'{os.path.relpath(path, os.getcwd())}:{i}')
                 else:
                     fields += 1
     for h in hits:
@@ -675,11 +698,11 @@ def main(argv):
         else:
             print('  · 未找到 skill 安装目录，跳过（可用 --mirror=<路径> 指定）')
 
-    # 本仓库补丁③：标志青围栏对显式目标也跑——#7ED1CD 在色板白名单里，普通扫描认不出它当了前景，
-    # 原先只在自检模式跑，npm run design:check 传目录时这条规则形同虚设
     print('\n[LOGO] 标志原件与标志青围栏')
     if targets == [ROOT]:
         check_logo(ROOT)
+    # v5.5.1：围栏对显式目标也跑。此前只在整包自检时跑，业务仓库按文档跑 check-design.py src/ 时，
+    # #7ED1CD 因为在色板白名单里被普通扫描放行，color: #7ED1CD 也能过闸（外部代码审查指出）
     check_teal_containment(ROOT, targets)
 
     print('\n[SCAN] 文件扫描')

@@ -1,5 +1,6 @@
-<!-- 开屏放级联容器之外（fixed 浮层不进 .stagger-in）；只在冷启动亮（app.js onLaunch 置位） -->
-<splash />
+<!-- 开屏放级联容器之外（fixed 浮层不进 .stagger-in）；只在冷启动亮（app.js onLaunch 置位）。
+     ready 绑页面加载态：识别完（含出错）才算到，开屏等它到了再淡出，不叠两个等待屏 -->
+<splash ready="{{mode !== 'loading'}}" />
 <view class="page stagger-in">
 
   <!-- 识别中：品牌山形弧带加载动效（四条弧带由下至上逐层点亮） -->
@@ -30,6 +31,11 @@
     </view>
 
     <view wx:else class="reward-block {{status==='ok' ? 'field-brand' : 'block-red'}} {{celebrate ? 'celebrate' : ''}} block">
+      <!-- 到账 = 结算通知/里程碑：角落落一枚轮印（v5.5 闲章，内容固定不计数；青面上墨色），一屏一枚 -->
+      <view class="round-seal rb-seal" wx:if="{{status==='ok'}}" aria-hidden="true">
+        <view class="mark"><view class="b b1"></view><view class="b b2"></view><view class="b b3"></view><view class="b b4"></view></view>
+        <text class="n">扶摇</text><text class="r">ROC</text><text class="u">结构性复利</text>
+      </view>
       <view class="rb-checkwrap" wx:if="{{status==='ok'}}"><view class="rb-check"></view></view>
       <view class="rb-label">{{ status==='ok' ? '已到账微信零钱' : (mode==='mine' ? '属于你的奖励' : '你收到一笔奖励') }}</view>
       <view class="rb-amount"><text class="rb-sign num">¥</text><text class="rb-num num">{{ mode==='mine' ? mineAmt : amtText }}</text></view>

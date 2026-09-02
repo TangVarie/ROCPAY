@@ -19,32 +19,48 @@
 @keyframes splashIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes splashOut { from { opacity: 1; } to { opacity: 0; } }
 
-/* 词标作签章：≤ 面高 6%（BRAND.md §3 标志上限）——1334px 高的屏 6% ≈ 80px = 160rpx，取 120rpx 留余量 */
-.splash-mark {
-  font-size: 120rpx;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -4rpx;
+/* 轮印落角落（scenarios/04：启动页角落一枚，墨色）。kit 的 .round-seal 默认 text-dark，
+   深色模式会翻成白——青面上一律墨，这里压回 --color-ink */
+.splash-seal {
+  position: absolute;
+  top: 32rpx;
+  right: 32rpx;
+  color: var(--color-ink);
 }
-/* 一句话：品牌衬线时刻（BRAND.md §5：界面轨每页 ≤1 处；小程序不加载网络字体，走系统衬线栈） */
+
+/* 一句话是整屏的主角：品牌衬线时刻（BRAND.md §5：界面轨每页 ≤1 处；小程序不加载网络字体，走系统衬线栈），
+   21px 导语档 */
 .splash-line {
-  margin-top: 32rpx;
   font-family: 'Songti SC', 'Noto Serif SC', 'STSong', 'SimSun', serif;
-  font-size: 34rpx;
+  font-size: 42rpx;
   font-weight: 600;
-  letter-spacing: 4rpx;
+  letter-spacing: 6rpx;
 }
 .splash-foot {
-  position: absolute;
-  left: 0; right: 0;
-  bottom: calc(64rpx + env(safe-area-inset-bottom));
-  text-align: center;
+  margin-top: 24rpx;
   font-size: 24rpx;
   letter-spacing: 6rpx;
-  color: var(--color-ink);
   opacity: 0.65; /* 墨字 9.85:1，降到 65% 仍 >4.5:1；层级差只来自透明度 */
 }
 
+/* 超过最短停留仍在等页面数据：底部亮山形弧带 + 一句话。弧带默认主色，深色模式是亮青，
+   在青面上会消失——改跟随墨字 */
+.splash-wait {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(96rpx + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: splashIn 240ms ease-out backwards;
+}
+.splash-wait .band-spinner .band { background: currentColor; }
+.splash-wait-t {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  opacity: 0.65;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .splash, .splash-leave { animation: none; }
+  .splash, .splash-leave, .splash-wait { animation: none; }
 }
