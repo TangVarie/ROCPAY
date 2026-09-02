@@ -1,0 +1,344 @@
+{
+  "$schema": "内部约定，非标准 JSON Schema",
+  "meta": {
+    "version": "v5.1",
+    "updated": "2026-09-02",
+    "authority": "本文件是 BYWOOD 全轨色板的唯一事实源。四个派生文件——tokens/globals.css、tokens/miniprogram.wxss、templates/docx-template.js 的 COLORS 常量、tokens/chart-palette.py——全部从这里取值；任何一处与本文件不一致 = 构建错误，不是审美分歧。",
+    "howToChange": "改色板 = 改本文件 → 同步四个派生文件 → 跑 tools/check-design.py（会逐个比对派生文件与本文件，不一致直接 FAIL）→ 更新 CHANGELOG。禁止只改派生文件。",
+    "v3Decision": "v3 取消克莱因蓝 #012FA7（IKB，来自第三方 Swiss 模板的默认高亮色，非本品牌识别源），全轨统一到标志藏蓝 #235E8E。同时合并两组近似色：钢蓝 #146292 → 藏蓝 #235E8E（RGB 差 15/4/4）、旧品牌红 #E7141A → 品牌红适配档 #D9232B（差 14/15/17）。注意并入目标不是标志正红 #E5262B——那一档只给标志图形，文字线条色块都不用。回退方法见 CHANGELOG.md §回退。",
+    "namingRule": "token 名一律按角色命名，不按色相。v4→v5 的迁移成本九成来自 blue/red/sky/blush 这类色相名——换一次品牌色就要改一遍键名、CSS 变量、模板与散文。v5 起：brand=primary/accent 系，screen=blockPrimary/tintAccent 系，doc=PRIMARY/ACCENT/TINT_* 系。下次换色只改值，不改名。新增 token 若带色相名，机器闸 NAMING 判 FAIL。",
+    "v5Decision": "v5 换标升级：标志由「双箭分发」（藏蓝 #235E8E + 正红 #E5262B）换为「山形」（标志青 #7ED1CD）。色板随之换届为青赭双色制：primary 藏青 #1C4F62 接『动作与结构』，accent 赭石 #B8502F 接旧品牌红的『价值与增长』全部角色；标志青隔离为仅标志图形可用（白底 1.77:1）。渐变版 Logo 整体退役。双箭图形语言退役，由山形弧带接替。三项待决已裁：(1) 警示 callout 跟 accent 走，与打法句共用赭杠，「警示｜」由区分手段升为强制前缀；(2) demo-v5 与本文件冲突时以本文件为准，demo 重刷；(3) 负面清单 #4 由「以标志为唯一基准」改写为「取值色/推导色二分 + 来源必须留痕」，本节 brand 各色的 source 字段即该制度的落地物。回退方法：brand/screen/doc/chart 四节改回 v4.0 值（见 CHANGELOG v3.0/v4.0 节）→ 同步四个派生文件 → logo/ 换回双箭原件 → 跑 check-design.py → CHANGELOG 记一笔。 【拿到标志原件后的四处修正】(a) primary 的出身更正为标志渐变冷端 #3CAAD2 的深色档，同色相同饱和，#4 的合规性由此坐实；(b) 深色模式主色由推导色 #4E94A9 换为取值色 #3CAAD2（对比 5.44→6.99），按钮文字随之由白字改墨字——v4 的白字压主色本就只有 3.42:1，是顺带修掉的旧账；(c) 渐变版 Logo 由「整体退役」改为「围栏保留」，见 DESIGN.md 负面清单 #2；(d) teal-on-light 的 ≥24px 下限撤销，改为只约束独立山形，理由见 BRAND.md §3 实测。",
+    "v51Decision": "v5.1 标志青回归（2026-09-02 拍板，按业界通行做法裁决）：(1) 工作主色回到标志本体的色相——标志实心青 #7ED1CD 是 H177°，v5.0 的主色 #1C4F62 取自渐变冷端 #3CAAD2（H196°），比标志偏蓝 19°，整套产物读成「深湖蓝」而认不出标志。新主色 #1E5754 = 标志青同色相同饱和（H177° S49%）的深档（L66%→23%），白底 8.25:1，标志青压其上 4.67:1；换色相不是无障碍逼的——H177° 上同样取得到 8–9:1。(2) 标志青由「仅标志图形」放开为「标志图形 + 品牌面色（field）」：做底不做字。墨字压青 9.85:1、主色字压青 4.67:1 都过，赭石压青 2.81 不许，白字压青 1.77 不许；青面上标志用单色墨版（青山形在青面上会消失）。这正是 Tiffany 这类浅青签名色的通行用法——盒子是青的，字是黑的。docx 轨零底纹不收青面。(3) 深色模式主色由渐变冷端 #3CAAD2 换为渐变暖端 #6AC1BD（H177°，取值色），深底 8.85:1；按钮仍压墨字。(4) 图表四组标尺按新主色重推导（顺序标尺亮度等步；发散两极亮度差 21%→9%；第 3 序中青下调到 2/3 序与 3/4 序灰度可分性各约 1.2，v5.0 的 1.12 继承伤两侧配平）。(5) 命名零变更（只改值不改名，v5 namingRule 的第一次兑现）；新增 screen.*.fieldBrand 一个角色 token。回退：本节四色改回 v5.0 值 → 同步四个派生文件 → check-design.py → CHANGELOG 记一笔。"
+  },
+  "brand": {
+    "logoMark": {
+      "hex": "#7ED1CD",
+      "name": "标志主青",
+      "role": "标志图形、授权弧带装饰，以及 v5.1 起的**品牌面色**（field）：做底不做字。青面上只放墨字 #1A1A1A（9.85:1）或主色字（4.67:1），不放赭石（2.81）、不放白字（1.77）；青面上的标志用单色墨版 horizontal-black / mark-black。白底 1.77:1 管的仍是「青作前景」：文字、线条、独立山形都不用",
+      "source": "取值色 · 标志实心版主色（H177°，渐变暖端 #6AC1BD 同族）",
+      "hsl": "177, 47%, 66%",
+      "contrastOnWhite": 1.77,
+      "contrastOnPrimary": 4.67,
+      "inkOnField": 9.85,
+      "primaryOnField": 4.67
+    },
+    "primary": {
+      "hex": "#1E5754",
+      "name": "深青",
+      "role": "品牌主色。动作与结构：主按钮、激活态、聚焦环、主数据块、H1 标题、表头、图表第一系列",
+      "source": "取值色 · 标志实心青 #7ED1CD（H177° S47%）同色相同饱和的深档（L 66%→23%）。v5.0 曾取渐变冷端 #3CAAD2（H196°）的深档 #1C4F62，比标志偏蓝 19°，v5.1 收回到标志本体色相",
+      "hsl": "177, 49%, 23%",
+      "contrastOnWhite": 8.25
+    },
+    "primaryDeep": {
+      "hex": "#16413F",
+      "name": "墨青",
+      "role": "按下态、深色块背景（白字）、演示轨高冲击底色。想要更强冲击就用它，不要去借外部的青",
+      "source": "推导色 · primary 明度下调一档（与 primary 对比 1.37，比照 v5.0 的 1.36 / v4 的 1.35）",
+      "contrastOnWhite": 11.28
+    },
+    "accent": {
+      "hex": "#B8502F",
+      "name": "赭石",
+      "role": "价值与增长（完整继承 v4 品牌红角色）：金额/收益数字、链接、增量 +N、强调数据块、docx 信号系统三位置、警示 callout（靠「警示｜」强制前缀区分）",
+      "source": "推导色 · 「山—土」调性对偶，暖土色系取白底 ≥4.5:1 的最深可用档。注：本色不是标志青的色轮互补色（那是 H357，即已退役的旧品牌红），互补论证不成立，理由以调性对偶为准",
+      "hsl": "14, 59%, 45%",
+      "contrastOnWhite": 4.97
+    },
+    "accentDeep": {
+      "hex": "#8A3A20",
+      "name": "深赭石",
+      "role": "accent 的加深档：浅调块上的文字、徽标文字、细线强调、发散标尺赭极",
+      "source": "推导色 · accent 明度下调一档，白底 ≥7:1",
+      "hsl": "15, 62%, 33%",
+      "contrastOnWhite": 7.76
+    },
+    "primaryLight": {
+      "hex": "#6AC1BD",
+      "name": "亮青",
+      "role": "标志渐变暖端本色。深色模式主色、深底上的链接与可触元素、图表深色序第一位。白底仅 2.11:1，**亮色轨不做文字色**，只在深底与标志内部出现",
+      "source": "取值色 · 标志渐变左端（暖端）起点，H177° 与标志实心青同色相。v5.0 用的是冷端 #3CAAD2（H196°）",
+      "contrastOnWhite": 2.11,
+      "contrastOnDarkBg": 8.85
+    }
+  },
+  "ratio": {
+    "brandAreaMax": "一屏/一页品牌色总面积 ≤25%",
+    "primaryToAccent": "主色与强调色出现频次约 3:1",
+    "accentBlockMax": "强调色大面积块每屏/每页 ≤1 个",
+    "dualColorMoment": "两色同时高饱和出现只留给品牌时刻：Logo（深底）、启动页、登录页、封面、里程碑"
+  },
+  "screen": {
+    "_comment": "界面轨专用（App/H5/官网/后台/小程序）。派生文件：tokens/globals.css、tokens/miniprogram.wxss。v5.1 新增 fieldBrand（品牌面色 = 标志青）：只做底，块内墨字或主色字；每屏 ≤1 块，不与主色块相邻",
+    "light": {
+      "primary": "#1E5754",
+      "primaryDark": "#16413F",
+      "accent": "#B8502F",
+      "money": "#B8502F",
+      "blockPrimary": "#1E5754",
+      "blockAccent": "#B8502F",
+      "tintPrimary": "#E3EFEF",
+      "tintAccent": "#F8EAE2",
+      "fieldBrand": "#7ED1CD",
+      "success": "#00B578",
+      "warning": "#FF8F1F",
+      "danger": "#D92B3C",
+      "dangerDark": "#B02330",
+      "successDeep": "#006B4A",
+      "warningDeep": "#995400",
+      "dangerDeep": "#B02330",
+      "bg": "#F3F4F6",
+      "bgSecondary": "#EAECEF",
+      "surface": "#FFFFFF",
+      "fill": "rgba(0,0,0,0.045)",
+      "textDark": "rgba(0,0,0,0.90)",
+      "text": "rgba(0,0,0,0.65)",
+      "textLight": "rgba(0,0,0,0.55)",
+      "textFaint": "rgba(0,0,0,0.30)",
+      "border": "rgba(0,0,0,0.08)",
+      "borderStrong": "#E5E6EB"
+    },
+    "dark": {
+      "primary": "#6AC1BD",
+      "primaryDark": "#48A8A3",
+      "accent": "#D97E55",
+      "money": "#D97E55",
+      "blockPrimary": "#1E5754",
+      "blockAccent": "#A84528",
+      "tintPrimary": "#163B39",
+      "tintAccent": "#3D291F",
+      "fieldBrand": "#7ED1CD",
+      "success": "#21B183",
+      "warning": "#FFA24D",
+      "danger": "#E8575C",
+      "dangerDark": "#C64449",
+      "successDeep": "#7FE0BD",
+      "warningDeep": "#FFC38A",
+      "dangerDeep": "#FF9A9E",
+      "bg": "#0F1318",
+      "bgSecondary": "#151A20",
+      "surface": "#1B222B",
+      "fill": "rgba(255,255,255,0.06)",
+      "textDark": "rgba(255,255,255,0.92)",
+      "text": "rgba(255,255,255,0.70)",
+      "textLight": "rgba(255,255,255,0.55)",
+      "textFaint": "rgba(255,255,255,0.34)",
+      "border": "rgba(255,255,255,0.10)",
+      "borderStrong": "#2B3440"
+    },
+    "_darkButtonRule": "深色模式主色按钮用 bg 墨字（#0F1318）不用白字：亮青上白字仅 2.11:1，墨字 8.85:1"
+  },
+  "doc": {
+    "_comment": "文档轨专用（对客 docx / pptx）。派生文件：templates/docx-template.js 的 COLORS 常量。docx 色板白名单 = 本节全部值 + FFFFFF/000000/auto，宽度恒为 10 色。v5：BLUE→PRIMARY、RED→ACCENT、SKY_*→TINT_*（键名去色相化，见 meta.namingRule）。不新增赭石浅调位——doc 轨自 v4 起零底纹，没有构件会用它，也没有旧件需要它合法。 v5.1：主色换值不换名；标志青面色不进 docx 白名单（纸面零底纹）。",
+    "PRIMARY": "1E5754",
+    "PRIMARY_DEEP": "16413F",
+    "ACCENT": "B8502F",
+    "INK": "1A1A1A",
+    "GREY": "6B6B6B",
+    "LINE": "D8DEE4",
+    "TINT_050": "F0F6F6",
+    "TINT_100": "E3EFEF",
+    "TINT_200": "CFE3E4",
+    "ZEBRA": "F6F7F9",
+    "_roles": {
+      "PRIMARY": "H1 章号 + 粗规则线 + 表顶线与图顶线 + H2 编号 + 图题编号 + 次级引用杠 + 页眉页脚细节（白底 8.25:1）",
+      "PRIMARY_DEEP": "深色块底（白字）备用档，v5 无 docx 构件使用，留给演示轨满版底",
+      "ACCENT": "赭＝信号系统（继承 v4 红＝信号系统）：封面信息行底线 + 打法句赭杠 + 每页 ≤1 处关键数字。警示与打法共用赭杠，靠「警示｜」强制前缀区分——赭石的内在警示语义弱于红，前缀是必写项不是可选项",
+      "INK": "正文与 H2（不变）",
+      "GREY": "NOTE 灰注、页脚（不变）",
+      "LINE": "发丝线（不变）",
+      "TINT_050/100/200": "v4 以线代底冻结位：白名单内合法（旧件），v5 构件不使用，新件命中即提示",
+      "ZEBRA": "冻结位（不变）"
+    }
+  },
+  "chart": {
+    "_comment": "横切层：界面轨图表、文档轨嵌图、演示轨图表共用同一套。派生文件：tokens/chart-palette.py（light 全取，dark 只导出 CATEGORICAL_DARK；深色只出现在界面轨的深色模式）",
+    "light": {
+      "categorical": [
+        "#1E5754",
+        "#B8502F",
+        "#528986",
+        "#8C8C8C",
+        "#9BC5C2",
+        "#E0B3A2"
+      ],
+      "sequential": [
+        "#E3EFEF",
+        "#9ACBC9",
+        "#57A8A4",
+        "#367D79",
+        "#1E5754"
+      ],
+      "diverging": [
+        "#8A3A20",
+        "#E0B3A2",
+        "#F3F4F6",
+        "#9BC5C2",
+        "#1E5754"
+      ],
+      "grid": "#E5E6EB",
+      "axis": "#8C8C8C",
+      "label": "#1A1A1A"
+    },
+    "dark": {
+      "categorical": [
+        "#6AC1BD",
+        "#D97E55",
+        "#3E7A77",
+        "#9AA4AE",
+        "#2A5553",
+        "#7A4A38"
+      ],
+      "sequential": [
+        "#163B39",
+        "#235C5A",
+        "#327B77",
+        "#439D99",
+        "#6AC1BD"
+      ],
+      "diverging": [
+        "#D97E55",
+        "#7A4A38",
+        "#2B3440",
+        "#2A5553",
+        "#6AC1BD"
+      ],
+      "grid": "#2B3440",
+      "axis": "#9AA4AE",
+      "label": "rgba(255,255,255,0.92)"
+    },
+    "categoricalRoles": [
+      "我方 / 主体 / 建议方向（深青）",
+      "现状 / 对照 / 增长值（赭石）",
+      "次要系列（中青）",
+      "大盘 / 行业基准（灰）",
+      "第五序（浅青，必须直接标注）",
+      "第六序（浅赭，必须直接标注）"
+    ],
+    "areaFillOpacity": 0.12,
+    "rules": [
+      "一种颜色跨图固定代表一个角色，全文不换所指",
+      "系列 ≥4 时颜色不再是唯一区分手段：必须叠加线型/标记形状/直接标注",
+      "文档轨（docx/PDF）柱形与堆叠图没有线型可叠，第 2/3 序与 3/4 序灰度只差约 1.2:1（v5.1 把中青下调一档，把 v5.0 的 1.12 配平到两侧各约 1.2），因此文档轨的 ≥4 序图表一律「必须直接标注」，不许用三选一兜底",
+      "禁渐变填充、禁 3D、柱体直角、面积填充只用主色 12%",
+      "空数据给空态文案，不给空坐标系",
+      "密图降噪：逐记录图默认全体大盘灰、主角深青，警示项才动赭石"
+    ]
+  },
+  "_contrastPairs": [
+    {
+      "name": "主色 on 白",
+      "fg": "brand.primary.hex",
+      "bg": "#FFFFFF",
+      "min": 4.5
+    },
+    {
+      "name": "强调色 on 白",
+      "fg": "brand.accent.hex",
+      "bg": "#FFFFFF",
+      "min": 4.5
+    },
+    {
+      "name": "深强调 on 白",
+      "fg": "brand.accentDeep.hex",
+      "bg": "#FFFFFF",
+      "min": 7.0
+    },
+    {
+      "name": "白字 on 主色块",
+      "fg": "#FFFFFF",
+      "bg": "brand.primary.hex",
+      "min": 4.5
+    },
+    {
+      "name": "白字 on 深主色块",
+      "fg": "#FFFFFF",
+      "bg": "brand.primaryDeep.hex",
+      "min": 4.5
+    },
+    {
+      "name": "白字 on 强调块",
+      "fg": "#FFFFFF",
+      "bg": "brand.accent.hex",
+      "min": 4.5
+    },
+    {
+      "name": "标志青 on 深主色",
+      "fg": "brand.logoMark.hex",
+      "bg": "brand.primary.hex",
+      "min": 3.0
+    },
+    {
+      "name": "深强调 on 强调浅调",
+      "fg": "brand.accentDeep.hex",
+      "bg": "screen.light.tintAccent",
+      "min": 4.5
+    },
+    {
+      "name": "正文黑 on 主浅调",
+      "fg": "doc.INK",
+      "bg": "doc.TINT_100",
+      "min": 4.5
+    },
+    {
+      "name": "正文黑 on 强调行底",
+      "fg": "doc.INK",
+      "bg": "doc.TINT_200",
+      "min": 4.5
+    },
+    {
+      "name": "深色主色 on 深底",
+      "fg": "screen.dark.primary",
+      "bg": "screen.dark.bg",
+      "min": 4.5
+    },
+    {
+      "name": "深色强调 on 深底",
+      "fg": "screen.dark.accent",
+      "bg": "screen.dark.bg",
+      "min": 4.5
+    },
+    {
+      "name": "深色主色 on 深底（渐变暖端本色）",
+      "fg": "brand.primaryLight.hex",
+      "bg": "screen.dark.bg",
+      "min": 4.5
+    },
+    {
+      "name": "深色主色按钮压墨字",
+      "fg": "screen.dark.bg",
+      "bg": "screen.dark.primary",
+      "min": 4.5
+    },
+    {
+      "name": "深色按下态 on 深底",
+      "fg": "screen.dark.primaryDark",
+      "bg": "screen.dark.bg",
+      "min": 4.5
+    },
+    {
+      "name": "标志青 on 深主色块（品牌时刻）",
+      "fg": "brand.logoMark.hex",
+      "bg": "brand.primaryDeep.hex",
+      "min": 3.0
+    },
+    {
+      "name": "墨字 on 品牌面色（标志青作底）",
+      "fg": "#1A1A1A",
+      "bg": "brand.logoMark.hex",
+      "min": 4.5
+    },
+    {
+      "name": "主色字 on 品牌面色",
+      "fg": "brand.primary.hex",
+      "bg": "brand.logoMark.hex",
+      "min": 4.5
+    },
+    {
+      "name": "主色 on 主浅调（tint 上的主色字）",
+      "fg": "brand.primary.hex",
+      "bg": "screen.light.tintPrimary",
+      "min": 4.5
+    }
+  ]
+}

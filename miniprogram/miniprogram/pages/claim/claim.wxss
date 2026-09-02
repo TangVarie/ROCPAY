@@ -1,40 +1,38 @@
-/* ===== 领取页 · BYWOOD ===== */
+/* ===== 领取页 · BYWOOD（色板 v5.1，token 见 app.wxss）=====
+   间距取阶梯 8/16/24/32/40/48/64/96 rpx；字号取移动端阶梯（大数字 80rpx = 40px 档）*/
 
-/* 奖励色块：纯色，块内纯白，无渐变无阴影 */
+/* 奖励色块：纯色，无渐变无阴影。
+   领取前 = 赭石块（价值/金额，块内恒白）；到账后 = 品牌面色（标志青做底 + 墨字，v5.1）——
+   BRAND-LANGUAGE 日用层「青面只在里程碑」，钱到账就是这页唯一的里程碑。
+   块内文字一律继承块的 color（赭块白 / 青面墨），不在子元素上写第二套色 */
 .reward-block {
   margin-top: 16rpx;
-  padding: 56rpx 44rpx 44rpx;
+  padding: 48rpx 40rpx 40rpx;
   text-align: center;
   color: #ffffff;
 }
+/* 页面 wxss 晚于 app.wxss 生效，单类 .reward-block 的白字会压过 app.wxss 的 .field-brand 墨字——
+   青面上白字只有 1.77:1（BRAND.md §2 明禁），这里用复合选择器把墨字压回去 */
+.reward-block.field-brand { color: var(--color-ink); }
 .rb-label {
   font-size: 26rpx;
   font-weight: 500;
-  color: #ffffff;
   letter-spacing: 1rpx;
 }
 .rb-amount {
-  margin: 28rpx 0 6rpx;
+  margin: 24rpx 0 8rpx;
   display: flex;
   align-items: baseline;
   justify-content: center;
-  color: #ffffff;
 }
 .rb-sign { font-size: 42rpx; margin-right: 8rpx; font-weight: 600; }
-.rb-num { font-size: 120rpx; line-height: 1.05; font-weight: 700; }
-.rb-remark {
-  font-size: 26rpx;
-  color: #ffffff;
-  margin-top: 10rpx;
-}
-/* 大额拆单：共 N 笔 · 合计 提示（赭底上白字不降透明度：纯白对 #B8502F ~4.9:1
+/* 40px 大数字档（v5.0.1 的 120rpx 在阶梯之外，DESIGN.md §3：梯外字号 = bug） */
+.rb-num { font-size: 80rpx; line-height: 1.15; font-weight: 700; }
+.rb-remark { font-size: 26rpx; margin-top: 8rpx; }
+/* 大额拆单：共 N 笔 · 合计 提示（赭底上白字不降透明度：纯白对赭石 4.97:1
    刚过小字 4.5:1，降透明度即不达标；层级差交给字号/字重，不牺牲对比度） */
-.rb-multi {
-  margin-top: 14rpx;
-  font-size: 24rpx;
-  color: #ffffff;
-  line-height: 1.5;
-}
+.rb-multi { margin-top: 16rpx; font-size: 24rpx; line-height: 1.5; }
+/* 领取按钮：赭块上白底 + 赭字（4.97:1；深色块底换深赭，白底上对比更高）。到账后按钮不再渲染 */
 .rb-btn {
   margin-top: 48rpx;
   height: 96rpx;
@@ -47,32 +45,19 @@
   font-weight: 600;
   border: none;
   background: #ffffff;
-  color: var(--block-red);
+  color: var(--color-block-accent);
   transition: transform 120ms ease-out;
 }
 .rb-btn::after { border: none; }
 .rb-btn:active { transform: scale(0.98); }
 .rb-btn[disabled] { background: rgba(255, 255, 255, 0.85); color: rgba(184, 80, 47, 0.55); }
-.rb-btn-blue { color: var(--block-blue); }
-.rb-btn-blue[disabled] { background: #ffffff; color: var(--block-blue); }
-.rb-tip {
-  margin-top: 24rpx;
-  font-size: 26rpx;
-  font-weight: 500;
-  color: #ffffff;
-  min-height: 34rpx;
-}
-.rb-fine {
-  margin-top: 16rpx;
-  font-size: 24rpx;
-  color: #ffffff;
-  line-height: 1.5;
-}
+.rb-tip { margin-top: 24rpx; font-size: 26rpx; font-weight: 500; min-height: 34rpx; }
+.rb-fine { margin-top: 16rpx; font-size: 24rpx; line-height: 1.5; }
 .after-note {
-  margin-top: 20rpx;
+  margin-top: 24rpx;
   text-align: center;
   font-size: 26rpx;
-  color: var(--text-light);
+  color: var(--color-text-light);
 }
 
 /* ===== 状态页（空/错/加载）：裸线性图标 + 两行文案 + 次按钮 ===== */
@@ -82,22 +67,13 @@
   flex-direction: column;
   align-items: center;
 }
-.state-icon { margin-bottom: 28rpx; }
-.state-t1 {
-  font-size: 34rpx;
-  font-weight: 600;
-  color: var(--text-dark);
-}
-.state-t2 {
-  margin-top: 8rpx;
-  font-size: 26rpx;
-  color: var(--text-light);
-  text-align: center;
-}
+.state-icon { margin-bottom: 32rpx; }
+.state-t1 { font-size: 34rpx; font-weight: 600; color: var(--color-text-dark); }
+.state-t2 { margin-top: 8rpx; font-size: 26rpx; color: var(--color-text-light); text-align: center; }
 .state-detail {
   margin-top: 16rpx;
   font-size: 24rpx;
-  color: var(--text-hint);
+  color: var(--color-text-hint);
   text-align: center;
   word-break: break-all;
   max-height: 200rpx;
@@ -110,64 +86,54 @@
   width: auto;
   height: auto;
   min-height: 96rpx;
-  padding: 12rpx 40rpx;
+  padding: 16rpx 40rpx;
   box-sizing: border-box;
 }
 
 /* ===== 员工入口（白底描边块） ===== */
 .join { margin-top: 8rpx; }
 .join-t { font-size: 30rpx; font-weight: 600; }
-.join-s { font-size: 26rpx; margin-top: 4rpx; }
+.join-s { font-size: 26rpx; margin-top: 8rpx; }
 .openid-row {
   margin-top: 24rpx;
   display: flex;
   align-items: center;
-  gap: 20rpx;
-  background: var(--fill);
+  gap: 24rpx;
+  background: var(--color-fill);
   border-radius: var(--r-control);
-  padding: 22rpx 26rpx;
+  padding: 24rpx;
 }
-.openid-text {
-  flex: 1;
-  word-break: break-all;
-  font-size: 24rpx;
-  color: var(--text-light);
-}
-.openid-copy {
-  flex: none;
-  font-size: 26rpx;
-  font-weight: 600;
-  color: var(--primary-onbg);
-  padding: 10rpx 14rpx;
-}
+.openid-text { flex: 1; word-break: break-all; font-size: 24rpx; color: var(--color-text-light); }
+.openid-copy { flex: none; font-size: 26rpx; font-weight: 600; color: var(--color-primary); padding: 8rpx 16rpx; }
 
 /* ===== 操作端主页（管理员进门即仪表盘） ===== */
-.ahome-lede { padding: 24rpx 4rpx 28rpx; }
-.ah-hero { margin-bottom: 20rpx; }
+.ahome-lede { padding: 24rpx 8rpx 32rpx; }
+.ah-hero { margin-bottom: 24rpx; }
 .ah-label { font-size: 26rpx; color: rgba(255, 255, 255, 0.85); }
 .ah-num { font-size: 80rpx; font-weight: 700; color: #ffffff; line-height: 1.15; margin-top: 8rpx; }
 .ah-sub { font-size: 24rpx; color: rgba(255, 255, 255, 0.8); margin-top: 8rpx; }
-.ah-low { color: #ffb0b0; } /* 额度告罄浅红 */
+/* 额度告罄：深色块内禁第三种彩色文字（DESIGN.md #13），告警由 ah-sub 文案承担，数字只加重 */
+.ah-low { font-weight: 800; }
 /* 异常警示块：语义 danger 浅底 + 加深档标题，进门可见、点击直达失败筛选。
-   v5：状态语义不借品牌赭浅调（tint-blush 归"价值/金额"类数据块用） */
-.ah-alert { margin-bottom: 20rpx; padding: 26rpx 30rpx; background: rgba(217, 43, 60, 0.08); }
+   状态语义不借品牌赭浅调（tint-blush 归"价值/金额"类数据块用） */
+.ah-alert { margin-bottom: 24rpx; padding: 24rpx 32rpx; background: var(--color-danger-tint); }
 .ah-alert:active { opacity: 0.85; }
-.ah-alert-t { font-size: 30rpx; font-weight: 700; color: var(--danger-dark); }
-.ah-alert-s { font-size: 24rpx; color: var(--text-light); margin-top: 4rpx; }
-.ah-minis { display: flex; gap: 20rpx; margin-bottom: 28rpx; }
-.ah-mini { flex: 1; padding: 22rpx 26rpx; }
-.ahm-label { font-size: 24rpx; color: var(--text-light); }
-.ahm-num { font-size: 42rpx; font-weight: 700; line-height: 1.2; margin-top: 2rpx; }
-.ah-tips { margin-top: 20rpx; text-align: center; font-size: 24rpx; letter-spacing: 1rpx; }
+.ah-alert-t { font-size: 30rpx; font-weight: 700; color: var(--color-danger-deep); }
+.ah-alert-s { font-size: 24rpx; color: var(--color-text-light); margin-top: 8rpx; }
+.ah-minis { display: flex; gap: 24rpx; margin-bottom: 32rpx; }
+.ah-mini { flex: 1; padding: 24rpx; }
+.ahm-label { font-size: 24rpx; color: var(--color-text-light); }
+.ahm-num { font-size: 42rpx; font-weight: 700; line-height: 1.2; margin-top: 8rpx; }
+.ah-tips { margin-top: 24rpx; text-align: center; font-size: 24rpx; letter-spacing: 1rpx; }
 
-/* ===== 到账仪式感（克制版：纯 CSS，无渐变无阴影） ===== */
-/* 描边画勾：与 .cb.on::after 同款，弹性放大入场 */
-.rb-checkwrap { display: flex; justify-content: center; margin-bottom: 12rpx; }
+/* ===== 到账仪式感（克制版：纯 CSS，无渐变无阴影；每屏动效焦点 ≤1 处 = 这一块）===== */
+/* 描边画勾：与 .cb.on::after 同款，颜色跟块内文字色（青面上是墨），弹性放大入场 */
+.rb-checkwrap { display: flex; justify-content: center; margin-bottom: 16rpx; }
 .rb-check {
   width: 52rpx;
   height: 26rpx;
-  border-left: 6rpx solid #ffffff;
-  border-bottom: 6rpx solid #ffffff;
+  border-left: 6rpx solid currentColor;
+  border-bottom: 6rpx solid currentColor;
   transform: rotate(-45deg);
   animation: checkPop 420ms cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
 }
@@ -175,14 +141,14 @@
   from { opacity: 0; transform: rotate(-45deg) scale(0.3); }
   to { opacity: 1; transform: rotate(-45deg) scale(1); }
 }
-/* 色块赭转青时一次轻微呼吸 */
+/* 色块赭转青面时一次轻微呼吸 */
 .reward-block.celebrate { animation: blockBreath 420ms ease-out; }
 @keyframes blockBreath {
   0% { transform: scale(1); }
   40% { transform: scale(1.02); }
   100% { transform: scale(1); }
 }
-/* 尊重系统「减弱动态效果」：庆祝动效停用，到账状态仍由色块变青表达 */
+/* 尊重系统「减弱动态效果」：庆祝动效停用，到账状态仍由色块变青面表达 */
 @media (prefers-reduced-motion: reduce) {
   .reward-block.celebrate { animation: none; }
   .rb-check { animation: none; }
@@ -192,4 +158,4 @@
 .lvcard { margin-top: 24rpx; }
 .lv-line1 { display: flex; align-items: center; gap: 16rpx; flex-wrap: wrap; }
 .lv-nums { font-size: 26rpx; }
-.lv-next { font-size: 24rpx; margin-top: 10rpx; }
+.lv-next { font-size: 24rpx; margin-top: 8rpx; }

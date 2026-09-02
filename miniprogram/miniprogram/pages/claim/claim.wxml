@@ -1,6 +1,6 @@
 <view class="page stagger-in">
 
-  <!-- 识别中：品牌双箭加载动效（蓝→红依次亮起） -->
+  <!-- 识别中：品牌山形弧带加载动效（四条弧带由下至上逐层点亮） -->
   <view class="state" wx:if="{{mode==='loading'}}">
     <view class="band-spinner state-icon" aria-label="加载中">
         <view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view>
@@ -18,7 +18,7 @@
     <button class="btn btn-fill state-btn" bindtap="retry">再试一次</button>
   </view>
 
-  <!-- 奖励色块：领取前红块 / 到账后蓝块，块内纯白 -->
+  <!-- 奖励色块：领取前赭石块（白字）/ 到账后品牌面色（标志青底 + 墨字，v5.1 里程碑用法） -->
   <block wx:if="{{mode==='token' || mode==='mine'}}">
     <!-- 令牌已终结（过期/已领/已撤回）：直接给终态，不再出现可点的领取按钮 -->
     <view class="state" wx:if="{{tokenGone}}">
@@ -27,7 +27,7 @@
       <view class="state-t2">{{tokenGone}}</view>
     </view>
 
-    <view wx:else class="reward-block {{status==='ok' ? 'block-blue' : 'block-red'}} {{celebrate ? 'celebrate' : ''}} block">
+    <view wx:else class="reward-block {{status==='ok' ? 'field-brand' : 'block-red'}} {{celebrate ? 'celebrate' : ''}} block">
       <view class="rb-checkwrap" wx:if="{{status==='ok'}}"><view class="rb-check"></view></view>
       <view class="rb-label">{{ status==='ok' ? '已到账微信零钱' : (mode==='mine' ? '属于你的奖励' : '你收到一笔奖励') }}</view>
       <view class="rb-amount"><text class="rb-sign num">¥</text><text class="rb-num num">{{ mode==='mine' ? mineAmt : amtText }}</text></view>
@@ -35,12 +35,15 @@
       <!-- 大额拆单：一人多笔串行领，先让客户看到全貌 -->
       <view class="rb-multi" wx:if="{{mode==='mine' && minePendCount > 1 && status!=='ok'}}">共 {{minePendCount}} 笔 · 合计 ¥{{minePendYuan}}，领完本笔自动出下一笔</view>
 
+      <!-- 到账后不再渲染按钮：终态由「已到账微信零钱」标题 + 墨色勾表达；
+           青面上只许墨字/主色字，一颗禁用按钮在这里既无动作也无合法配色 -->
       <button
-        class="rb-btn {{status==='ok' ? 'rb-btn-blue' : ''}}"
+        wx:if="{{status!=='ok'}}"
+        class="rb-btn"
         bindtap="{{ mode==='mine' ? 'onClaimMine' : 'onClaimToken' }}"
         loading="{{status==='loading'}}"
-        disabled="{{status==='loading' || status==='ok'}}"
-      >{{ status==='ok' ? '已到账' : '领取到微信零钱' }}</button>
+        disabled="{{status==='loading'}}"
+      >领取到微信零钱</button>
 
       <view class="rb-tip" wx:if="{{message}}">{{message}}</view>
       <view class="rb-fine">点领取后弹出微信官方「确认收款」，确认即到账</view>

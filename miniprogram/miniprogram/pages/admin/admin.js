@@ -470,7 +470,7 @@ Page({
       title: '确认发放',
       content,
       confirmText: '确认发放',
-      confirmColor: '#1c4f62', // v5 藏青主色（系统弹窗吃不到 CSS token，只能写值）
+      confirmColor: '#1e5754', // v5.1 深青主色 = palette.json brand.primary（系统弹窗吃不到 CSS token，只能写值）
       success: (r) => { if (r.confirm) this._doSubmitBatch(); },
     });
   },
