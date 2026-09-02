@@ -1,6 +1,7 @@
 <!-- 开屏放级联容器之外（fixed 浮层不进 .stagger-in）；只在冷启动亮（app.js onLaunch 置位）。
-     ready 绑页面加载态：识别完（含出错）才算到，开屏等它到了再淡出，不叠两个等待屏 -->
-<splash ready="{{mode !== 'loading'}}" />
+     ready 绑 entryReady：令牌流程等校验接口回来、直接打开等身份落定（含出错），开屏等它到了再淡出，
+     不叠两个等待屏。不能绑 mode——链接进入时 mode 在发请求前就是 token 了 -->
+<splash ready="{{entryReady}}" />
 <view class="page stagger-in">
 
   <!-- 识别中：品牌山形弧带加载动效（四条弧带由下至上逐层点亮） -->
