@@ -8,6 +8,41 @@ import { wechatpay } from './wechat-pay.js';
 
 const TRANSFER_PATH = '/v3/fund-app/mch-transfer/transfer-bills';
 
+// 微信「转账备注 / 场景报备内容」不接受表情符号等特殊字符：带 🎬 之类的备注会被整单打回
+// HTTP 400 PARAM_ERROR「输入参数不合法」（线上实测）。这里统一剔除：
+//   · 表情/图形符号（Extended_Pictographic，含 ☕ 这类 BMP 内的）及肤色修饰符
+//   · 变体选择符（FE0F 等）、键帽圈（20E3 等围绕标记 Me）、零宽连接符等格式字符（Cf）、控制字符（Cc）
+//     ——表情拆掉后残留的"胶水"
+//   · 基本平面之外的非汉字字符（4 字节 UTF-8：绝大多数 emoji）；扩展区生僻汉字（如 𠮷）保留，
+//     客户姓名里可能就有
+// 剩下中英文、数字、常规标点原样保留。
+const UNSUPPORTED_REMARK_RE =
+  /[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Me}\p{Cf}\p{Cc}\uFE00-\uFE0F]|(?!\p{Script=Han})[\u{10000}-\u{10FFFF}]/gu;
+
+/** 备注里是否含微信不接受的特殊字符（发放入口据此直接拦截，别拖到客户领取才炸）。空白不算 */
+export function remarkHasUnsupportedChars(text) {
+  UNSUPPORTED_REMARK_RE.lastIndex = 0;
+  return UNSUPPORTED_REMARK_RE.test(String(text || '').replace(/\s+/g, ' '));
+}
+
+/** 剔除特殊字符并收敛空白；老数据里已经带表情的备注领取时也能过（兜底，不依赖入口校验） */
+export function sanitizeRemark(text) {
+  return String(text || '')
+    .replace(UNSUPPORTED_REMARK_RE, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// 微信 4xx 响应常带 detail（指出具体哪个字段/位置不合法）：拼进错误信息，排查不用猜
+function wxErrorMessage(prefix, status, data) {
+  let msg = `${prefix}: HTTP ${status} ${data.code || ''} ${data.message || ''}`.trim();
+  if (data.detail != null) {
+    const d = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+    if (d && d !== '{}') msg += ` detail=${d}`;
+  }
+  return msg;
+}
+
 /**
  * 发起一笔商家转账
  * @param {object} p
@@ -34,15 +69,16 @@ export async function createTransferBill({ outBillNo, openid, amountFen, remark,
   // 不同转账场景要求的 info_type 不同（如 1000现金营销=活动名称/奖励说明，1005佣金报酬=岗位类型/报酬说明），
   // 必须和你申请到的场景严格一致，否则微信报「未传入完整且对应的转账场景报备信息」。
   // 支持在 info_content 里用占位符 {remark} 自动替换为本次备注。
-  const remarkText = String(remark || '客户奖励').slice(0, 32);
+  // 先剔特殊字符再截长：空备注或剔完只剩空串都退回默认文案
+  const remarkText = (sanitizeRemark(remark) || '客户奖励').slice(0, 32);
   const fillRemark = (arr) =>
     arr.map((i) => ({
       info_type: i.info_type,
-      info_content: String(i.info_content || '').replace(/\{remark\}/g, remarkText).slice(0, 32),
+      info_content: sanitizeRemark(String(i.info_content || '').replace(/\{remark\}/g, remarkText)).slice(0, 32),
     }));
   const reportInfos =
     sceneReportInfos && sceneReportInfos.length
-      ? sceneReportInfos
+      ? fillRemark(sceneReportInfos)
       : config.wechatpay.sceneReportInfos && config.wechatpay.sceneReportInfos.length
         ? fillRemark(config.wechatpay.sceneReportInfos)
         : [
@@ -74,7 +110,7 @@ export async function createTransferBill({ outBillNo, openid, amountFen, remark,
 
   const { status, data } = await wechatpay.request('POST', TRANSFER_PATH, body, opts);
   if (status !== 200) {
-    const err = new Error(`发起转账失败: HTTP ${status} ${data.code || ''} ${data.message || ''}`);
+    const err = new Error(wxErrorMessage('发起转账失败', status, data));
     err.status = status;
     err.data = data;
     throw err;
@@ -90,7 +126,7 @@ export async function cancelTransferByOutBillNo(outBillNo) {
   const path = `/v3/fund-app/mch-transfer/transfer-bills/out-bill-no/${encodeURIComponent(outBillNo)}/cancel`;
   const { status, data } = await wechatpay.request('POST', path);
   if (status !== 200) {
-    const err = new Error(`撤销转账失败: HTTP ${status} ${data.code || ''} ${data.message || ''}`);
+    const err = new Error(wxErrorMessage('撤销转账失败', status, data));
     err.status = status;
     err.data = data;
     throw err;
@@ -103,7 +139,7 @@ export async function queryTransferByOutBillNo(outBillNo) {
   const path = `/v3/fund-app/mch-transfer/transfer-bills/out-bill-no/${encodeURIComponent(outBillNo)}`;
   const { status, data } = await wechatpay.request('GET', path);
   if (status !== 200) {
-    const err = new Error(`查询转账单失败: HTTP ${status} ${data.code || ''} ${data.message || ''}`);
+    const err = new Error(wxErrorMessage('查询转账单失败', status, data));
     err.status = status;
     err.data = data;
     throw err;

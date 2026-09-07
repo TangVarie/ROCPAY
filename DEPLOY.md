@@ -188,6 +188,7 @@
 | `db.ok=false` 且日志 `ETIMEDOUT` | MySQL 与服务不在同一环境/网络不通 | 确认 MySQL 就在本服务所在环境里开的 |
 | diagnose `HTTP 406 传入了不支持的 Accept-Language` | 运行时/代理注入了微信不认的头 | 代码已写死 `Accept-Language: zh-CN`；确保跑的是最新构建 |
 | 转账 `PARAM_ERROR 未传入完整且对应的转账场景报备信息` | 报备字段和场景不符 | 按场景配 `WECHATPAY_SCENE_REPORT_INFOS`（见 §11） |
+| 转账 `PARAM_ERROR 输入参数不合法，请参考协议核对输入请求字段`（只有个别客户报） | 备注里带了表情符号（如 🎬），微信不接受 | 代码已在发放入口拦截、转账前自动剔除；报错信息里会附微信返回的 `detail` 指出具体字段 |
 | 转账 `INVALID_REQUEST 超过单笔转账上下限` | 金额低于系统最低额 / 高于你的单笔上限 | 金额取在下限~单笔上限之间；用 `MIN_AMOUNT_YUAN` 前端拦截 |
 | SIGN_ERROR 签名错误 | 证书序列号/私钥/APIv3 不对 | 用 `/api/diagnose` 自检 |
 | 客户收不到钱 | 客户没点确认收款 | 必须客户在微信里点「确认收款」，24h 不确认自动退回 |

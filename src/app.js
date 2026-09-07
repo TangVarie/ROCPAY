@@ -8,7 +8,12 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { createRewardToken, verifyRewardToken, newRid } from './reward-token.js';
-import { createTransferBill, queryTransferByOutBillNo, cancelTransferByOutBillNo } from './transfer-service.js';
+import {
+  createTransferBill,
+  queryTransferByOutBillNo,
+  cancelTransferByOutBillNo,
+  remarkHasUnsupportedChars,
+} from './transfer-service.js';
 import { wechatpay } from './wechat-pay.js';
 import { db } from './db.js';
 import { wecom } from './wecom.js';
@@ -18,7 +23,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p21-alert-ack';
+const BUILD = 'p22-remark-sanitize';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -41,6 +46,12 @@ function nameRuleError(yuan, name) {
   const hasName = !!(name && String(name).trim());
   if (yuan >= 2000 && !hasName) return '金额 ≥ 2000 元必须填写收款人真实姓名';
   if (yuan < 0.3 && hasName) return '金额 < 0.3 元不支持填写收款人姓名';
+  return null;
+}
+// 备注规则：微信转账备注不接受表情符号等特殊字符（否则领取时被微信打回 PARAM_ERROR，客户才看到报错）。
+// 发放入口就提示员工改掉；转账侧另有剔除兜底（老数据也能过），这里只管"别让新的带表情的单进库"
+function remarkRuleError(remark) {
+  if (remarkHasUnsupportedChars(remark)) return '备注不支持表情符号等特殊字符，请只用中英文、数字和常规标点';
   return null;
 }
 
@@ -499,6 +510,8 @@ app.post('/api/rewards', (req, res) => {
   }
   const nameErr = nameRuleError(yuan, name);
   if (nameErr) return res.status(400).json({ error: nameErr });
+  const remarkErr = remarkRuleError(remark);
+  if (remarkErr) return res.status(400).json({ error: remarkErr });
   const fen = Math.round(yuan * 100);
   try {
     // 幂等：前端带 clientKey 时 rid 由键确定性派生——重试得到同一 rid，
@@ -1274,6 +1287,11 @@ app.post('/api/rewards/batch', async (req, res) => {
     const itNameErr = nameRuleError(bills[0] / 100, it.name); // 拆后每笔 ≤ 单笔限额，按最大一笔校验姓名规则
     if (itNameErr) {
       errors.push({ i, target, error: itNameErr });
+      continue;
+    }
+    const itRemarkErr = remarkRuleError(it.remark);
+    if (itRemarkErr) {
+      errors.push({ i, target, error: itRemarkErr });
       continue;
     }
     totalBills += bills.length;
