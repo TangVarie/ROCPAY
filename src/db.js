@@ -9,6 +9,7 @@
 //      会用令牌里自带的信息补insert，保证 transfers 一定有对应 reward。
 //   4. 启动自动建表：CREATE TABLE IF NOT EXISTS，幂等安全。
 // ============================================================
+import crypto from 'node:crypto';
 import mysql from 'mysql2/promise';
 import { config } from './config.js';
 
@@ -179,6 +180,15 @@ const DDL = [
      v          TEXT         NULL COMMENT '设置值',
      updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通用键值设置(如打款周期清零点)'`,
+  `CREATE TABLE IF NOT EXISTS quota_ops (
+     op_key         VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '操作幂等键(前端生成，重试复用)',
+     mode           VARCHAR(8)   NOT NULL COMMENT 'add充值 | set校准',
+     amount_fen     BIGINT       NOT NULL COMMENT '输入金额(分)',
+     pending_fen    BIGINT       NOT NULL DEFAULT 0 COMMENT '以账户余额为准时扣掉的待领取(分)',
+     base_after_fen BIGINT       NOT NULL COMMENT '操作后的锚点剩余(分)',
+     created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     KEY idx_quota_ops_created_at (created_at)
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='可发额度充值/校准流水(兼作幂等键表)'`,
 ];
 
 /**
@@ -730,8 +740,9 @@ export async function setSetting(key, value) {
 //   生成即占用 —— CREATED(未过期)+CLAIMED+SUCCESS 都算"已承诺的钱"；
 //   撤回(CANCELLED)/失败(FAIL/CLOSED)/过期未领 自动不再占用 → 可发额度自动回流。
 //   这样"发出去、撤回来"在额度上立刻对得上，符合运营心智。
-const QUOTA_CONSUMED_SQL = `(status IN ('CLAIMED','SUCCESS')
-   OR (status = 'CREATED' AND (expires_at IS NULL OR expires_at > NOW())))`;
+// 待领取(未过期的 CREATED)：已计入占用，但钱还躺在商户可用余额里——校准时要单独扣掉
+const QUOTA_PENDING_SQL = `(status = 'CREATED' AND (expires_at IS NULL OR expires_at > NOW()))`;
+const QUOTA_CONSUMED_SQL = `(status IN ('CLAIMED','SUCCESS') OR ${QUOTA_PENDING_SQL})`;
 
 /**
  * 本期占用：自 since 起、按上面口径"已承诺"的金额与笔数。since 为空表示统计全部。
@@ -756,45 +767,92 @@ export async function adjustQuota({ mode, amountFen, opKey }) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    // 锁住设置行，序列化并发的充值/校准；quota_last_op 一并锁定用于防重
+    // 锁住设置行，序列化并发的充值/校准
     const [rows] = await conn.query(
-      `SELECT k, v FROM settings WHERE k IN ('quota_base_fen','quota_base_paid_fen','quota_last_op') FOR UPDATE`
+      `SELECT k, v FROM settings WHERE k IN ('quota_base_fen','quota_base_paid_fen') FOR UPDATE`
     );
     const map = {};
     for (const r of rows) map[r.k] = r.v;
-    // 幂等：同一操作键重复提交（响应丢失后的重试）直接当已成功，不再记第二次
-    if (opKey && map.quota_last_op === opKey) {
-      await conn.commit();
-      return false;
+    // 幂等：每个操作键在 quota_ops 里各占一行。不能只比对「最后一次」的键（评审发现）：
+    // A 已记账但响应丢失，其间别的管理员提交了 B，A 重试时就会被当成新操作再记一遍
+    const key = opKey || crypto.randomBytes(16).toString('hex'); // 老前端无键：照常记账、只留流水
+    if (opKey) {
+      const [dup] = await conn.query(`SELECT 1 FROM quota_ops WHERE op_key = :k`, { k: opKey });
+      if (dup.length) {
+        await conn.commit();
+        return { applied: false, pendingFen: 0 };
+      }
     }
-    const [[paid]] = await conn.query(
-      `SELECT COALESCE(SUM(amount_fen),0) AS paid_fen FROM rewards WHERE ${QUOTA_CONSUMED_SQL}`
+    // 占用与待领取用同一条语句读，拿到一致快照（两次查询之间有人领取会让两数对不上）
+    const [[agg]] = await conn.query(
+      `SELECT COALESCE(SUM(IF(${QUOTA_CONSUMED_SQL}, amount_fen, 0)),0) AS paid_fen,
+              COALESCE(SUM(IF(${QUOTA_PENDING_SQL}, amount_fen, 0)),0) AS pending_fen
+         FROM rewards`
     );
-    const allPaidFen = Number(paid.paid_fen);
+    const allPaidFen = Number(agg.paid_fen);
+    const baseRaw = 'quota_base_fen' in map ? map.quota_base_fen : null;
+    // 「以账户余额为准」的两种操作：校准，以及从未记过账时的首次充值（面板提示即「记入账户余额」）。
+    // 商户可用余额里还躺着待领取奖励的钱，而它们已计入上面的占用。不扣掉就会算两遍：
+    // 之后被领走（占用不变、余额下降）或过期（占用回流、余额不变），可发剩余都会虚高这笔
+    // ——线上出现过剩余比实际多 ¥992 的正是这个。已领待确认(CLAIMED)的钱微信已冻结、
+    // 不在可用余额里，不用扣
+    const fromBalance = mode === 'set' || baseRaw == null;
+    const pendingFen = fromBalance ? Number(agg.pending_fen) : 0;
     let newBaseFen;
-    if (mode === 'set') {
-      newBaseFen = amountFen;
+    if (fromBalance) {
+      newBaseFen = amountFen - pendingFen;
     } else {
-      const baseRaw = 'quota_base_fen' in map ? map.quota_base_fen : null;
       const baseFen = Number(baseRaw) || 0;
       const anchorPaidFen = Number(map.quota_base_paid_fen || '0') || 0;
-      const remainingNow = baseRaw != null ? baseFen - (allPaidFen - anchorPaidFen) : 0;
-      newBaseFen = remainingNow + amountFen;
+      newBaseFen = baseFen - (allPaidFen - anchorPaidFen) + amountFen;
     }
+    // 先写流水：主键兜住同键并发（首次记账时设置行还不存在，行锁锁不住），撞键即按重复处理
+    await conn.query(
+      `INSERT INTO quota_ops (op_key, mode, amount_fen, pending_fen, base_after_fen)
+       VALUES (:k, :m, :a, :pd, :b)`,
+      { k: key, m: mode === 'set' ? 'set' : 'add', a: amountFen, pd: pendingFen, b: newBaseFen }
+    );
     await conn.query(
       `INSERT INTO settings (k, v)
-       VALUES ('quota_base_fen', :b), ('quota_base_paid_fen', :p), ('quota_last_op', :op)
+       VALUES ('quota_base_fen', :b), ('quota_base_paid_fen', :p)
        ON DUPLICATE KEY UPDATE v=VALUES(v)`,
-      { b: String(newBaseFen), p: String(allPaidFen), op: opKey || '' }
+      { b: String(newBaseFen), p: String(allPaidFen) }
     );
     await conn.commit();
-    return true;
+    return { applied: true, pendingFen };
   } catch (e) {
     try { await conn.rollback(); } catch (_) { /* 回滚失败不掩盖原错误 */ }
+    if (e && e.code === 'ER_DUP_ENTRY' && opKey) return { applied: false, pendingFen: 0 };
     throw e;
   } finally {
     conn.release();
   }
+}
+
+/**
+ * 待领取且库里没有转账记录的奖励单号：给校准前核实用。
+ * 发起转账成功但 recordClaim 两次落库都失败时，钱已被微信冻结、行却还停在 CREATED，
+ * 也没有 transfers 行，自动对账扫不到（评审发现）。校准会把它当成还在可用余额里的钱扣掉。
+ */
+export async function listUnlinkedPendingRids(limit = 1000) {
+  if (!pool) return [];
+  const n = Math.max(1, Math.min(Number(limit) || 1000, 5000));
+  const [rows] = await pool.query(
+    `SELECT r.rid FROM rewards r
+       LEFT JOIN transfers t ON t.out_bill_no = r.rid
+      WHERE r.status = 'CREATED' AND (r.expires_at IS NULL OR r.expires_at > NOW())
+        AND t.out_bill_no IS NULL
+      ORDER BY r.created_at
+      LIMIT ${n}`
+  );
+  return rows.map((r) => r.rid);
+}
+
+/** 微信侧已有转账单、库里却还是 CREATED：补成 CLAIMED（终态由 updateTransferState 另行回写） */
+export async function markClaimedIfCreated(rid) {
+  if (!pool || !rid) return false;
+  const [r] = await pool.execute(`UPDATE rewards SET status='CLAIMED' WHERE rid=:rid AND status='CREATED'`, { rid });
+  return r.affectedRows > 0;
 }
 
 /** 近 7 天内未到终态(在途)的转账单号：给自动对账用（回调丢失/落库缺笔都能追平） */
@@ -1562,6 +1620,8 @@ export const db = {
   setSetting,
   getPeriodStats,
   adjustQuota,
+  listUnlinkedPendingRids,
+  markClaimedIfCreated,
   listUnfinishedTransfers,
   loadAdmins,
   upsertAdmin,

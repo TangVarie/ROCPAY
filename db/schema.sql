@@ -137,6 +137,17 @@ CREATE TABLE IF NOT EXISTS settings (
   updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通用键值设置(如打款周期)';
 
+-- 可发额度充值/校准流水（兼作幂等键表：每个操作键一行，重试撞主键即判重复）
+CREATE TABLE IF NOT EXISTS quota_ops (
+  op_key         VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '操作幂等键(前端生成，重试复用)',
+  mode           VARCHAR(8)   NOT NULL COMMENT 'add充值 | set校准',
+  amount_fen     BIGINT       NOT NULL COMMENT '输入金额(分)',
+  pending_fen    BIGINT       NOT NULL DEFAULT 0 COMMENT '以账户余额为准时扣掉的待领取(分)',
+  base_after_fen BIGINT       NOT NULL COMMENT '操作后的锚点剩余(分)',
+  created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_quota_ops_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='可发额度充值/校准流水(兼作幂等键表)';
+
 -- ============================================================
 --  老库升级（幂等，可重复执行）
 --  CREATE TABLE IF NOT EXISTS 对已存在的表不会补新列；DB_AUTO_MIGRATE=true（默认）
