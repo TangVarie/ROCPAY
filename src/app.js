@@ -15,6 +15,7 @@ import {
   remarkHasUnsupportedChars,
 } from './transfer-service.js';
 import { wechatpay } from './wechat-pay.js';
+import { verifyPendingRewards } from './pending-verify.js';
 import { db } from './db.js';
 import { wecom } from './wecom.js';
 import { weixin } from './weixin.js';
@@ -401,6 +402,10 @@ app.post('/api/period/adjust', async (req, res) => {
   const opKeyRaw = String(body.opKey || '');
   const opKey = /^[a-f0-9]{16,64}$/i.test(opKeyRaw) ? opKeyRaw.toLowerCase() : '';
   try {
+    // 以账户余额为准（校准、或首次记账）时会扣掉待领取，先向微信核实它们确实没被领走
+    if (mode === 'set' || (await db.getSetting('quota_base_fen', null)) == null) {
+      await verifyPendingRewards({ db, query: queryTransferByOutBillNo });
+    }
     // 事务 + 行锁（db.adjustQuota）：两位管理员同时充值也不会丢任何一笔
     const r = await db.adjustQuota({ mode, amountFen: amtFen, opKey });
     res.json({
@@ -409,7 +414,9 @@ app.post('/api/period/adjust', async (req, res) => {
       pendingDeductedYuan: r.pendingFen / 100, // 以账户余额为准时自动扣掉的待领取金额
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(e.status === 503 ? 503 : 500).json({
+      error: e.status === 503 ? '暂时无法向微信核实待领取状态，本次未记账，请稍后重试' : e.message,
+    });
   }
 });
 
