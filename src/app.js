@@ -23,7 +23,7 @@ import { verifyUrl, callbackEnabled } from './wecom-callback.js';
 const app = express();
 
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
-const BUILD = 'p22-remark-sanitize';
+const BUILD = 'p23-quota-ledger';
 
 // 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
@@ -358,7 +358,7 @@ app.get('/api/diagnose', async (req, res) => {
 // 可发额度台账（自家账本；微信余额查询接口已弃用——需单独开通权限、且此账本已覆盖需求）——「运行式余额」模型：
 //   剩余 = 锚点剩余(quota_base_fen) − 自锚点起已发放(allTimePaid − quota_base_paid_fen)
 //   充值时新剩余 = 当前剩余 + 充值额（携带上期结余，解决"还剩一点又充值"）
-//   校准时新剩余 = 直接设为实际余额（与商户平台核对时用）
+//   校准时新剩余 = 商户可用余额 − 待领取合计（待领取的钱还在账户里，但已计入发放）
 // 每次充值/校准都重新锚定(把"自锚点已发放"归零)。管理员/发放员均可见可操作。
 async function computeQuota() {
   const allTime = await db.getPeriodStats(null); // 全部已发放(已划走+在途冻结)
@@ -402,8 +402,12 @@ app.post('/api/period/adjust', async (req, res) => {
   const opKey = /^[a-f0-9]{16,64}$/i.test(opKeyRaw) ? opKeyRaw.toLowerCase() : '';
   try {
     // 事务 + 行锁（db.adjustQuota）：两位管理员同时充值也不会丢任何一笔
-    await db.adjustQuota({ mode, amountFen: amtFen, opKey });
-    res.json(await computeQuota());
+    const r = await db.adjustQuota({ mode, amountFen: amtFen, opKey });
+    res.json({
+      ...(await computeQuota()),
+      duplicate: !r.applied, // 同一操作键已记过账（超时后重点）：本次未重复记
+      pendingDeductedYuan: r.pendingFen / 100, // 以账户余额为准时自动扣掉的待领取金额
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

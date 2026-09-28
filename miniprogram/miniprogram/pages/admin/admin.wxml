@@ -247,8 +247,8 @@
           </view>
         </view>
         <block wx:if="{{period.hasQuota}}">
-          <view class="bal-num num {{period.low ? 'bal-low' : ''}}">¥{{period.remainingYuan}}</view>
-          <view class="bal-sub">自上次充值已发放 ¥{{period.paidSinceYuan}}{{period.low ? ' · 额度已用尽，请充值' : ''}}</view>
+          <view class="bal-num num {{period.low ? 'bal-low' : ''}}">{{period.neg ? '-' : ''}}¥{{period.remainingYuan}}</view>
+          <view class="bal-sub">自上次充值或校准已发放 ¥{{period.paidSinceYuan}}{{period.neg ? ' · 待领取已超出账户余额，请充值' : period.low ? ' · 额度已用尽，请充值' : ''}}</view>
         </block>
         <block wx:else>
           <view class="bal-num num">— —</view>
@@ -262,10 +262,10 @@
           <view class="ptitle t-dark">{{quotaPanel.mode === 'set' ? '校准余额' : '充值'}}</view>
           <view class="textbtn textbtn-plain" bindtap="cancelQuotaPanel">取消</view>
         </view>
-        <view class="psub t-light">{{quotaPanel.mode === 'set' ? '与商户平台核对后，把可发剩余直接设为账户实际余额' : '充值金额会累加进可发额度（自动携带上期结余）'}}</view>
+        <view class="psub t-light">{{quotaPanel.mode === 'set' ? '填商户平台的可用余额（不含冻结），系统会自动扣掉还没被领走的奖励' : '充值金额会累加进可发额度（自动携带上期结余）'}}</view>
         <view class="quota-row">
           <input class="input quota-input num" type="digit" focus="{{true}}"
-                 placeholder="{{quotaPanel.mode === 'set' ? '账户实际剩余(元)' : '本次充值金额(元)'}}" placeholder-class="ph"
+                 placeholder="{{quotaPanel.mode === 'set' ? '商户可用余额(元)' : '本次充值金额(元)'}}" placeholder-class="ph"
                  value="{{quotaPanel.value}}" bindinput="onQuotaInput" bindconfirm="confirmQuotaPanel" />
           <button class="btn btn-blue quota-btn" bindtap="confirmQuotaPanel" loading="{{quotaSaving}}" disabled="{{quotaSaving}}">{{quotaPanel.mode === 'set' ? '设为剩余' : '加进额度'}}</button>
         </view>

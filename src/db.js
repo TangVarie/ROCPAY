@@ -730,8 +730,9 @@ export async function setSetting(key, value) {
 //   生成即占用 —— CREATED(未过期)+CLAIMED+SUCCESS 都算"已承诺的钱"；
 //   撤回(CANCELLED)/失败(FAIL/CLOSED)/过期未领 自动不再占用 → 可发额度自动回流。
 //   这样"发出去、撤回来"在额度上立刻对得上，符合运营心智。
-const QUOTA_CONSUMED_SQL = `(status IN ('CLAIMED','SUCCESS')
-   OR (status = 'CREATED' AND (expires_at IS NULL OR expires_at > NOW())))`;
+// 待领取(未过期的 CREATED)：已计入占用，但钱还躺在商户可用余额里——校准时要单独扣掉
+const QUOTA_PENDING_SQL = `(status = 'CREATED' AND (expires_at IS NULL OR expires_at > NOW()))`;
+const QUOTA_CONSUMED_SQL = `(status IN ('CLAIMED','SUCCESS') OR ${QUOTA_PENDING_SQL})`;
 
 /**
  * 本期占用：自 since 起、按上面口径"已承诺"的金额与笔数。since 为空表示统计全部。
@@ -765,21 +766,30 @@ export async function adjustQuota({ mode, amountFen, opKey }) {
     // 幂等：同一操作键重复提交（响应丢失后的重试）直接当已成功，不再记第二次
     if (opKey && map.quota_last_op === opKey) {
       await conn.commit();
-      return false;
+      return { applied: false, pendingFen: 0 };
     }
-    const [[paid]] = await conn.query(
-      `SELECT COALESCE(SUM(amount_fen),0) AS paid_fen FROM rewards WHERE ${QUOTA_CONSUMED_SQL}`
+    // 占用与待领取用同一条语句读，拿到一致快照（两次查询之间有人领取会让两数对不上）
+    const [[agg]] = await conn.query(
+      `SELECT COALESCE(SUM(IF(${QUOTA_CONSUMED_SQL}, amount_fen, 0)),0) AS paid_fen,
+              COALESCE(SUM(IF(${QUOTA_PENDING_SQL}, amount_fen, 0)),0) AS pending_fen
+         FROM rewards`
     );
-    const allPaidFen = Number(paid.paid_fen);
+    const allPaidFen = Number(agg.paid_fen);
+    const baseRaw = 'quota_base_fen' in map ? map.quota_base_fen : null;
+    // 「以账户余额为准」的两种操作：校准，以及从未记过账时的首次充值（面板提示即「记入账户余额」）。
+    // 商户可用余额里还躺着待领取奖励的钱，而它们已计入上面的占用。不扣掉就会算两遍：
+    // 之后被领走（占用不变、余额下降）或过期（占用回流、余额不变），可发剩余都会虚高这笔
+    // ——线上出现过剩余比实际多 ¥992 的正是这个。已领待确认(CLAIMED)的钱微信已冻结、
+    // 不在可用余额里，不用扣
+    const fromBalance = mode === 'set' || baseRaw == null;
+    const pendingFen = fromBalance ? Number(agg.pending_fen) : 0;
     let newBaseFen;
-    if (mode === 'set') {
-      newBaseFen = amountFen;
+    if (fromBalance) {
+      newBaseFen = amountFen - pendingFen;
     } else {
-      const baseRaw = 'quota_base_fen' in map ? map.quota_base_fen : null;
       const baseFen = Number(baseRaw) || 0;
       const anchorPaidFen = Number(map.quota_base_paid_fen || '0') || 0;
-      const remainingNow = baseRaw != null ? baseFen - (allPaidFen - anchorPaidFen) : 0;
-      newBaseFen = remainingNow + amountFen;
+      newBaseFen = baseFen - (allPaidFen - anchorPaidFen) + amountFen;
     }
     await conn.query(
       `INSERT INTO settings (k, v)
@@ -788,7 +798,7 @@ export async function adjustQuota({ mode, amountFen, opKey }) {
       { b: String(newBaseFen), p: String(allPaidFen), op: opKey || '' }
     );
     await conn.commit();
-    return true;
+    return { applied: true, pendingFen };
   } catch (e) {
     try { await conn.rollback(); } catch (_) { /* 回滚失败不掩盖原错误 */ }
     throw e;

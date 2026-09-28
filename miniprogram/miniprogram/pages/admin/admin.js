@@ -713,7 +713,9 @@ Page({
     this.setData({
       period: {
         hasQuota: true,
-        remainingYuan: rem.toFixed(2),
+        // 负数 = 待领取已超出账户余额（校准会扣掉待领取，可能出现）。符号放 ¥ 前面，别显示成 ¥-12.00
+        remainingYuan: Math.abs(rem).toFixed(2),
+        neg: rem < 0,
         paidSinceYuan: (Number(res.paidSinceYuan) || 0).toFixed(2),
         low: rem <= 0, // 剩余告罄/超支
       },
@@ -724,10 +726,11 @@ Page({
   // 不支持 editable，弹窗里根本不显示输入框——"电脑上点充值看不到输入框"的根因
   openQuotaPanel(e) {
     const mode = e.currentTarget.dataset.mode === 'set' ? 'set' : 'add';
+    this._quotaKey = null; // 新开一次面板 = 新的一次记账意图
     this.setData({ quotaPanel: { mode, value: '' } });
   },
   onQuotaInput(e) { this.setData({ 'quotaPanel.value': e.detail.value }); },
-  cancelQuotaPanel() { this.setData({ quotaPanel: null }); },
+  cancelQuotaPanel() { this._quotaKey = null; this.setData({ quotaPanel: null }); },
   confirmQuotaPanel() {
     if (!this.data.quotaPanel || this.data.quotaSaving) return;
     const { mode, value } = this.data.quotaPanel;
@@ -739,13 +742,23 @@ Page({
       return wx.showToast({ title: '请输入正确金额', icon: 'none' });
     }
     this.setData({ quotaSaving: true });
-    // opKey：这次确认的幂等键。响应丢失后的重复提交只会记一次账
-    call('/api/period/adjust', 'POST', { mode, yuan, opKey: this._newKey() })
+    // opKey：这次打开面板的幂等键，失败重试复用同一个。超时不代表服务端没记上——
+    // 此前每点一次换新键，冷启动超时后重点就把同一笔充值记了两遍。成功或关掉面板才换键
+    if (!this._quotaKey) this._quotaKey = this._newKey();
+    call('/api/period/adjust', 'POST', { mode, yuan, opKey: this._quotaKey })
       .then((res) => {
         this.setData({ quotaSaving: false });
         if (res && res.error) return wx.showToast({ title: res.error, icon: 'none' });
+        this._quotaKey = null;
         this.setData({ quotaPanel: null });
-        wx.showToast({ title: isSet ? '已校准' : '已充值', icon: 'success' });
+        const pend = Number(res.pendingDeductedYuan) || 0;
+        if (res.duplicate) {
+          wx.showToast({ title: '上次已记账成功，未重复记', icon: 'none' });
+        } else if (pend > 0) {
+          wx.showToast({ title: `已${isSet ? '校准' : '记入'}，扣除待领取 ¥${pend.toFixed(2)}`, icon: 'none' });
+        } else {
+          wx.showToast({ title: isSet ? '已校准' : '已充值', icon: 'success' });
+        }
         this.applyPeriod(res);
       })
       .catch(() => {
