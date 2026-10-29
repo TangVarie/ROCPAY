@@ -412,6 +412,11 @@ app.post('/api/period/adjust', async (req, res) => {
       ...(await computeQuota()),
       duplicate: !r.applied, // 同一操作键已记过账（超时后重点）：本次未重复记
       pendingDeductedYuan: r.pendingFen / 100, // 以账户余额为准时自动扣掉的待领取金额
+      pendingCount: r.pendingCount, // 扣掉的待领取笔数（运营去台账筛「待领取」可逐笔核对）
+      // 本次记账前后的剩余（事务内同一快照）：账一直准时校准后数字不变，不给前后对比
+      // 运营会以为没校准上。beforeYuan=null 表示此前从未记过账；重复提交两者都是 null
+      beforeYuan: r.beforeFen == null ? null : r.beforeFen / 100,
+      afterYuan: r.afterFen == null ? null : r.afterFen / 100,
     });
   } catch (e) {
     res.status(e.status === 503 ? 503 : 500).json({

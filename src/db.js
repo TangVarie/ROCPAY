@@ -780,17 +780,21 @@ export async function adjustQuota({ mode, amountFen, opKey }) {
       const [dup] = await conn.query(`SELECT 1 FROM quota_ops WHERE op_key = :k`, { k: opKey });
       if (dup.length) {
         await conn.commit();
-        return { applied: false, pendingFen: 0 };
+        return { applied: false, pendingFen: 0, pendingCount: 0, beforeFen: null, afterFen: null };
       }
     }
     // 占用与待领取用同一条语句读，拿到一致快照（两次查询之间有人领取会让两数对不上）
     const [[agg]] = await conn.query(
       `SELECT COALESCE(SUM(IF(${QUOTA_CONSUMED_SQL}, amount_fen, 0)),0) AS paid_fen,
-              COALESCE(SUM(IF(${QUOTA_PENDING_SQL}, amount_fen, 0)),0) AS pending_fen
+              COALESCE(SUM(IF(${QUOTA_PENDING_SQL}, amount_fen, 0)),0) AS pending_fen,
+              COALESCE(SUM(${QUOTA_PENDING_SQL}),0) AS pending_count
          FROM rewards`
     );
     const allPaidFen = Number(agg.paid_fen);
     const baseRaw = 'quota_base_fen' in map ? map.quota_base_fen : null;
+    // 记账前的剩余（同 computeQuota 口径、同一快照）：给前端讲"校准前→后"。null=此前从未记过账
+    const anchorPaidFen = Number(map.quota_base_paid_fen || '0') || 0;
+    const beforeFen = baseRaw == null ? null : (Number(baseRaw) || 0) - (allPaidFen - anchorPaidFen);
     // 「以账户余额为准」的两种操作：校准，以及从未记过账时的首次充值（面板提示即「记入账户余额」）。
     // 商户可用余额里还躺着待领取奖励的钱，而它们已计入上面的占用。不扣掉就会算两遍：
     // 之后被领走（占用不变、余额下降）或过期（占用回流、余额不变），可发剩余都会虚高这笔
@@ -798,14 +802,7 @@ export async function adjustQuota({ mode, amountFen, opKey }) {
     // 不在可用余额里，不用扣
     const fromBalance = mode === 'set' || baseRaw == null;
     const pendingFen = fromBalance ? Number(agg.pending_fen) : 0;
-    let newBaseFen;
-    if (fromBalance) {
-      newBaseFen = amountFen - pendingFen;
-    } else {
-      const baseFen = Number(baseRaw) || 0;
-      const anchorPaidFen = Number(map.quota_base_paid_fen || '0') || 0;
-      newBaseFen = baseFen - (allPaidFen - anchorPaidFen) + amountFen;
-    }
+    const newBaseFen = fromBalance ? amountFen - pendingFen : beforeFen + amountFen;
     // 先写流水：主键兜住同键并发（首次记账时设置行还不存在，行锁锁不住），撞键即按重复处理
     await conn.query(
       `INSERT INTO quota_ops (op_key, mode, amount_fen, pending_fen, base_after_fen)
@@ -819,10 +816,18 @@ export async function adjustQuota({ mode, amountFen, opKey }) {
       { b: String(newBaseFen), p: String(allPaidFen) }
     );
     await conn.commit();
-    return { applied: true, pendingFen };
+    return {
+      applied: true,
+      pendingFen,
+      pendingCount: fromBalance ? Number(agg.pending_count) : 0,
+      beforeFen,
+      afterFen: newBaseFen, // 锚点刚重置（自锚点已发放=0），剩余即新锚点
+    };
   } catch (e) {
     try { await conn.rollback(); } catch (_) { /* 回滚失败不掩盖原错误 */ }
-    if (e && e.code === 'ER_DUP_ENTRY' && opKey) return { applied: false, pendingFen: 0 };
+    if (e && e.code === 'ER_DUP_ENTRY' && opKey) {
+      return { applied: false, pendingFen: 0, pendingCount: 0, beforeFen: null, afterFen: null };
+    }
     throw e;
   } finally {
     conn.release();

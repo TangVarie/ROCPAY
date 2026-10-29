@@ -751,20 +751,72 @@ Page({
         if (res && res.error) return wx.showToast({ title: res.error, icon: 'none' });
         this._quotaKey = null;
         this.setData({ quotaPanel: null });
-        const pend = Number(res.pendingDeductedYuan) || 0;
-        if (res.duplicate) {
-          wx.showToast({ title: '上次已记账成功，未重复记', icon: 'none' });
-        } else if (pend > 0) {
-          wx.showToast({ title: `已${isSet ? '校准' : '记入'}，扣除待领取 ¥${pend.toFixed(2)}`, icon: 'none' });
-        } else {
-          wx.showToast({ title: isSet ? '已校准' : '已充值', icon: 'success' });
-        }
+        if (res.duplicate) wx.showToast({ title: '上次已记账成功，未重复记', icon: 'none' });
+        else this._showQuotaResult(isSet, yuan, res);
         this.applyPeriod(res);
       })
       .catch(() => {
         this.setData({ quotaSaving: false });
         wx.showToast({ title: '网络错误，请刷新核对剩余后再试', icon: 'none' });
       });
+  },
+  // 充值/校准结果：讲清前后对比和怎么算的。账一直准时校准后数字不变——只弹一句「已校准」，
+  // 运营会以为没校准上或算错了；toast 一闪而过也写不下，改用要手动关的弹窗
+  _showQuotaResult(isSet, yuan, res) {
+    // 后端还没升级（没给前后对比）：退回原来的一句提示，别把缺字段当成「剩余 ¥0、首次记账」
+    if (res.afterYuan == null) return wx.showToast({ title: isSet ? '已校准' : '已充值', icon: 'success' });
+    const fmt = (v) => (v < 0 ? '-¥' : '¥') + Math.abs(v).toFixed(2);
+    const verb = isSet ? '校准' : '充值';
+    const before = res.beforeYuan; // null = 此前从未记过账
+    const after = Number(res.afterYuan) || 0;
+    const pend = Number(res.pendingDeductedYuan) || 0;
+    const fromBalance = isSet || before == null; // 以账户余额为准（与后端同口径）：要扣待领取
+    const diffFen = before == null ? 0 : Math.round((after - before) * 100); // 按分比，避开浮点尾差
+    const lines = [];
+    if (before == null) {
+      lines.push(`剩余 ${fmt(after)}（首次记账）`);
+    } else {
+      const diff = diffFen === 0 ? '没变' : `${diffFen > 0 ? '多了' : '少了'} ${fmt(Math.abs(diffFen) / 100)}`;
+      lines.push(`${verb}前剩余 ${fmt(before)}`, `${verb}后剩余 ${fmt(after)}（${diff}）`);
+      // 结论紧跟前后对比：运营最想知道的是「生效了没、为什么是这个数」
+      if (isSet) {
+        if (diffFen === 0) lines.push('数字没变说明台账一直和账户对得上，校准已生效，不用处理。');
+        else if (diffFen < 0) lines.push(`台账原来多算了 ${fmt(-diffFen / 100)}（比如在商户平台直接转出过钱），已按账户实际改正。`);
+        else lines.push(`台账原来少算了 ${fmt(diffFen / 100)}（比如往商户号充了钱、没在这里点「充值」），已按账户实际改正。`);
+      }
+    }
+    if (fromBalance) {
+      const cnt = res.pendingCount ? `（${res.pendingCount} 笔）` : '';
+      lines.push('', `算法：可用余额 ${fmt(yuan)} − 待领取 ${fmt(pend)}${cnt} = ${fmt(after)}`);
+      if (pend > 0) {
+        lines.push(
+          '待领取是已发出、客户还没领的钱：还在账户里但已承诺出去，所以扣掉。客户领走或过期后会自动对平，不用再校准。',
+          '',
+          `点「核对明细」逐笔看这些待领取，合计应为 ${fmt(pend)}。`
+        );
+      }
+    }
+    const canCheck = fromBalance && pend > 0;
+    wx.showModal({
+      title: `${verb}完成`,
+      content: lines.join('\n'),
+      showCancel: canCheck,
+      cancelText: '知道了',
+      confirmText: canCheck ? '核对明细' : '知道了',
+      success: (m) => {
+        if (canCheck && m.confirm) this._showPendingRecords();
+      },
+    });
+  },
+  // 台账切到「待领取 · 全部时间」并清掉其他筛选：发放合计即校准时扣掉的待领取（期间没人领的话）
+  _showPendingRecords() {
+    this.setData({
+      tab: 'records',
+      recQ: '',
+      recFilter: { status: 'created', days: 0, target: '', targetOpenid: '', targetLabel: '', batch: '', q: '', month: '' },
+    });
+    this._resetRecords();
+    this.loadRecords();
   },
 
   // 台账：more=true 追加下一页，否则按当前筛选重查。列表与汇总同口径（stats 即筛选范围的消耗）。

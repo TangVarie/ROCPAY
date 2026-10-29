@@ -262,7 +262,7 @@
           <view class="ptitle t-dark">{{quotaPanel.mode === 'set' ? '校准余额' : '充值'}}</view>
           <view class="textbtn textbtn-plain" bindtap="cancelQuotaPanel">取消</view>
         </view>
-        <view class="psub t-light">{{quotaPanel.mode === 'set' ? '填商户平台的可用余额（不含冻结），系统会自动扣掉还没被领走的奖励' : '充值金额会累加进可发额度（自动携带上期结余）'}}</view>
+        <view class="psub t-light">{{quotaPanel.mode === 'set' ? '填商户平台的可用余额（不含冻结）。校准后剩余 = 可用余额 − 待领取（已发出、客户还没领的钱），账一直准的话数字不会变' : '充值金额会累加进可发额度（自动携带上期结余）'}}</view>
         <view class="quota-row">
           <input class="input quota-input num" type="digit" focus="{{true}}"
                  placeholder="{{quotaPanel.mode === 'set' ? '商户可用余额(元)' : '本次充值金额(元)'}}" placeholder-class="ph"
