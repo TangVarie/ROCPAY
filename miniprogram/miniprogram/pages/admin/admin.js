@@ -18,6 +18,7 @@ Page({
     // ---- 发放 · 定向批量（主）----
     sendMode: 'target', // target | quick
     step: 'pick', // 定向发放四步：pick 选客户 | fill 填金额 | review 复核 | result 通知
+    detail: null, // 记录详情半屏面板（null=收起）
     review: null, // 复核页展示数据（人数/笔数/合计/最大单人/拆单/额度/警示/明细）
     fillTotalYuan: '0.00', // 填金额时底部操作栏的实时合计
     notifySum: null, // 通知结果按客户去向分四类：已直达 / 企微待员工发送 / 需转发 / 发送失败
@@ -1003,7 +1004,7 @@ Page({
       .then((res) => {
         if (seq !== this._recSeq) return; // 筛选已切换：旧响应作废
         if (!res || !res.list) return this.setData({ recLoading: false, recLoaded: true, recError: true });
-        const map = { SUCCESS: '已到账', WAIT_USER_CONFIRM: '待确认', FAIL: '失败', CLOSED: '已关闭', CANCELLED: '已撤回', CANCELING: '撤销中', CREATED: '待领取', CLAIMED: '待确认' };
+        const map = { SUCCESS: '已到账', WAIT_USER_CONFIRM: '待确认', ACCEPTED: '到账中', PROCESSING: '到账中', TRANSFERING: '到账中', FAIL: '失败', CLOSED: '已关闭', CANCELLED: '已撤回', CANCELING: '撤销中', CREATED: '待领取', CLAIMED: '待确认' };
         const records = res.list.map((r) => {
           const st = r.transfer_state || r.status || 'CREATED';
           // 过期未领（后端按 expires_at 判定）：链接已不可领、钱没动过、额度已回流——
@@ -1046,6 +1047,9 @@ Page({
             failReason: st === 'FAIL' || st === 'CLOSED' ? r.fail_reason || '' : '',
             revokedAt: (r.revoked_at || '').replace('T', ' '), // 撤回审计：谁在什么时候撤的
             revokedBy: r.revoked_by_name || (r.revoked_by ? '（已移除的员工）' : ''),
+            remark: r.remark || '',
+            issuer: by,
+            nextStep: this._nextStepOf(st, expired),
           };
         });
         const all = isMore ? this.data.records.concat(records) : records;
@@ -1074,6 +1078,15 @@ Page({
   loadMoreRecords() { this.loadRecords(true); },
   reloadRecords() { this.loadRecords(); },
   // 筛选条件变了：立即清掉旧列表换加载态，绝不允许"旧数据 + 新条件"同框
+  // 筛选后无结果：一键回到「全部 · 全部时间」，不再让"还没有发放记录"冒充筛选空
+  clearAllFilters() {
+    this.setData({
+      recQ: '',
+      recFilter: { status: 'all', days: 0, target: '', targetOpenid: '', targetLabel: '', batch: '', q: '', month: '' },
+    });
+    this._resetRecords();
+    this.loadRecords();
+  },
   _resetRecords() {
     this.setData({ records: [], recLoaded: false, recError: false, recOffset: 0, recHasMore: false, stats: null });
   },
@@ -1205,33 +1218,43 @@ Page({
     });
   },
   // 记录详情：对账取证用——完整时间 / 商户单号 rid / 微信转账单号，一键复制
+  // 每种状态下运营该做什么（详情面板的「下一步」）
+  _nextStepOf(st, expired) {
+    if (expired) return '超过领取有效期，客户已不能领。钱没动过、额度已自动回流，需要的话重新发一笔';
+    if (st === 'CREATED') return '客户还没领：可在发放页通知客户来领；发错了可以撤回';
+    if (st === 'CLAIMED' || st === 'WAIT_USER_CONFIRM') return '客户已点领取，还要在微信里确认收款才到账；24 小时内不确认，微信会自动退回';
+    if (st === 'ACCEPTED' || st === 'PROCESSING' || st === 'TRANSFERING') return '客户已确认收款，微信正在入账，通常几分钟内到账';
+    if (st === 'SUCCESS') return '已转入客户微信零钱，无需处理';
+    if (st === 'FAIL' || st === 'CLOSED') return '钱没有转出、已退回商户余额。按失败原因处理后可重新发放';
+    if (st === 'CANCELLED' || st === 'CANCELING') return '已撤回：钱没有转出（待确认的已向微信撤销），额度已回流';
+    return '';
+  },
+  // 点行打开详情半屏面板：失败原因、发放人、批次、完整单号、撤回记录、下一步都放得下，
+  // 单号可单独复制，常用动作（撤回 / 只看此客户 / 查看本批）就在面板里
   showRecDetail(e) {
     const r = this.data.records[e.currentTarget.dataset.i];
-    if (!r) return;
-    const lines = [
-      `¥${r.yuan} · ${r.statusText}`,
-      r.who ? `客户：${r.who}` : '',
-      `备注：${r.sub}`,
-      `创建：${r.createdFull}`,
-      r.updatedFull && r.updatedFull !== r.createdFull ? `状态更新：${r.updatedFull}` : '',
-      r.failReason ? `失败原因：${r.failReason}` : '',
-      r.revokedAt ? `撤回：${r.revokedAt}${r.revokedBy ? ' · ' + r.revokedBy : ''}` : '',
-      `商户单号：${r.rid}`,
-      `微信单号：${r.billNo || '—（转账发起后生成）'}`,
-      r.batchId ? `批次号：${r.batchId}` : '',
-    ].filter(Boolean);
-    const copyVal = r.billNo || r.rid;
-    wx.showModal({
-      title: '记录详情',
-      content: lines.join('\n'),
-      confirmText: '复制单号', // 有微信单号复制微信单号，否则复制商户单号
-      cancelText: '关闭',
-      success: (res) => {
-        if (res.confirm && copyVal) {
-          wx.setClipboardData({ data: copyVal, success: () => wx.showToast({ title: '已复制', icon: 'success' }) });
-        }
-      },
-    });
+    if (r) this.setData({ detail: r });
+  },
+  closeDetail() { this.setData({ detail: null }); },
+  noop() {},
+  // 面板里的动作：先收起面板，再复用列表行上的同一套处理
+  detailRevoke() {
+    const d = this.data.detail;
+    if (!d) return;
+    this.closeDetail();
+    this.revokeReward({ currentTarget: { dataset: { rid: d.rid, yuan: d.yuan, who: d.who } } });
+  },
+  detailCustomer() {
+    const d = this.data.detail;
+    if (!d) return;
+    this.closeDetail();
+    this.filterByCustomer({ currentTarget: { dataset: { eu: d.eu, oid: d.oid, label: d.who } } });
+  },
+  detailBatch() {
+    const d = this.data.detail;
+    if (!d) return;
+    this.closeDetail();
+    this.filterByBatch({ currentTarget: { dataset: { batch: d.batchId } } });
   },
   // ============ 客户榜（等级总榜 + 分布 + 筛选 + 分页） ============
   // more=true 追加下一页；否则重查。分布 dist/total 只在第一页返回，不覆盖翻页。
@@ -1285,11 +1308,14 @@ Page({
   },
   // 点榜单行 → 跳到记录页只看该客户的资金往来（单人台账）
   goCustomerLedger(e) {
-    const { eu, label } = e.currentTarget.dataset;
-    if (!eu) return wx.showToast({ title: '该客户不在企微档案，暂无法跳转', icon: 'none' });
+    const { eu, oid, label } = e.currentTarget.dataset;
+    if (!eu && !oid) return wx.showToast({ title: '该客户暂无可查的往来记录', icon: 'none' });
+    // 企微客户按企微档案看；直连客户（没有企微档案）按领取人 openid 看——原先直接提示"不在企微档案"
     this.setData({
       tab: 'records',
-      recFilter: Object.assign({}, this.data.recFilter, { target: eu, targetLabel: label || '该客户' }),
+      recFilter: Object.assign({}, this.data.recFilter, eu
+        ? { target: eu, targetOpenid: '', targetLabel: label || '该客户' }
+        : { target: '', targetOpenid: oid, targetLabel: label || '该客户' }),
     });
     this._resetRecords();
     this.loadRecords();

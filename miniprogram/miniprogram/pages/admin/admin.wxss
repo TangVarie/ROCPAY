@@ -427,3 +427,41 @@
 .nsum-h { display: flex; justify-content: space-between; font-size: 30rpx; font-weight: 600; }
 .nsum-d { margin-top: 8rpx; font-size: 24rpx; line-height: 1.6; color: var(--color-text-light); }
 .t-danger { color: var(--color-danger); }
+
+/* ===== 记录详情半屏面板 ===== */
+/* 遮罩：取色板浅色「浅字」档的黑 55%，深浅两种模式都压暗底层 */
+.sheet-mask { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 40; background: rgba(0, 0, 0, 0.55); }
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 41;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  padding-bottom: env(safe-area-inset-bottom);
+  box-sizing: border-box;
+  animation: sheetIn 200ms ease-out;
+}
+@keyframes sheetIn {
+  from { opacity: 0; transform: translateY(32rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 24rpx 32rpx 8rpx; }
+.sheet-head .textbtn { padding-right: 0; }
+.sheet-title { font-size: 34rpx; font-weight: 600; color: var(--color-text-dark); }
+.sheet-body { flex: 1; overflow-y: auto; padding: 0 32rpx 24rpx; }
+.sh-amt { display: flex; align-items: center; gap: 16rpx; margin-top: 8rpx; font-size: 56rpx; font-weight: 700; color: var(--color-text-dark); }
+.sh-next { margin: 16rpx 0 8rpx; padding: 16rpx 24rpx; background: var(--color-fill); font-size: 26rpx; line-height: 1.6; color: var(--color-text); }
+.sh-kv { display: flex; align-items: baseline; gap: 16rpx; padding: 16rpx 0; border-bottom: 1px solid var(--color-border); font-size: 26rpx; }
+.sh-k { flex: none; width: 140rpx; color: var(--color-text-light); }
+.sh-v { flex: 1; min-width: 0; word-break: break-all; color: var(--color-text-dark); }
+.sh-copy { flex: none; padding: 8rpx 0 8rpx 16rpx; font-weight: 600; color: var(--color-primary); }
+.sh-copy:active { opacity: 0.6; }
+.sheet-acts { display: flex; gap: 16rpx; padding: 16rpx 32rpx 24rpx; border-top: 1px solid var(--color-border); }
+.sh-btn { flex: 1; height: 88rpx; margin: 0; font-size: 28rpx; }
+@media (prefers-reduced-motion: reduce) {
+  .sheet { animation: none; }
+}

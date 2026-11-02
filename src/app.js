@@ -458,7 +458,8 @@ app.get('/api/leaderboard', async (req, res) => {
       return {
         rank: offset + i + 1,
         name: r.remark || r.name || '客户' + String(r.claimer_openid || '').slice(-4),
-        eu: r.external_userid || '', // 有企微档案才可跳单人台账
+        eu: r.external_userid || '', // 有企微档案：按企微客户看单人台账
+        openid: r.claimer_openid || '', // 没有企微档案（直连客户）：按领取人 openid 看单人台账
         count: Number(r.n),
         totalYuan: Number(r.fen) / 100,
         lv: lv.lv,

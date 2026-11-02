@@ -282,9 +282,10 @@
           <text class="flabel">备注</text>
           <input class="input finput" placeholder="客户可见，如 老客户回馈" placeholder-class="ph" value="{{remark}}" bindinput="onRemark" />
         </view>
-        <view class="field">
+        <!-- 实名姓名只在单笔 ≥2000 元时微信才要求；快发单笔上限是拆单额度（通常 ¥200），够不到就不显示 -->
+        <view class="field" wx:if="{{splitCapYuan >= 2000}}">
           <text class="flabel">姓名</text>
-          <input class="input finput" placeholder="选填，2000元及以上必填" placeholder-class="ph" value="{{name}}" bindinput="onName" />
+          <input class="input finput" placeholder="单笔 2000 元及以上必填实名" placeholder-class="ph" value="{{name}}" bindinput="onName" />
         </view>
         <button class="btn btn-blue btn-block" bindtap="onGenerate" loading="{{loading}}" disabled="{{loading}}">生成奖励</button>
         <view class="err" wx:if="{{error}}">{{error}}</view>
@@ -444,6 +445,13 @@
           <view class="skeleton-base sk-tail"></view>
         </view>
       </view>
+      <!-- 筛选后没有结果 ≠ 还没有记录：给出清除筛选，不让空态说谎 -->
+      <view class="state" wx:elif="{{recFilter.status !== 'all' || recFilter.days || recFilter.month || recFilter.target || recFilter.targetOpenid || recFilter.batch || recFilter.q}}">
+        <view class="li li-inbox state-icon"></view>
+        <view class="state-t1">没有符合筛选条件的记录</view>
+        <view class="state-t2">换个筛选条件，或清除筛选看全部记录</view>
+        <button class="btn btn-fill state-btn" bindtap="clearAllFilters">清除筛选</button>
+      </view>
       <view class="state" wx:else>
         <view class="li li-inbox state-icon"></view>
         <view class="state-t1">还没有发放记录</view>
@@ -470,7 +478,7 @@
       </view>
       <block wx:if="{{rank.length}}">
         <view class="rk hairline-b" wx:for="{{rank}}" wx:key="rank"
-              data-eu="{{item.eu}}" data-label="{{item.name}}" bindtap="goCustomerLedger">
+              data-eu="{{item.eu}}" data-oid="{{item.openid}}" data-label="{{item.name}}" bindtap="goCustomerLedger">
           <text class="rk-no num {{item.rank<=3?'rk-top':''}}">{{item.rank}}</text>
           <view class="rk-main">
             <view class="rk-name t-dark">
@@ -599,6 +607,38 @@
       <view class="ab-info"></view>
       <button class="btn btn-blue ab-btn" bindtap="confirmReview" loading="{{loading}}" disabled="{{loading}}">{{review.confirmText}} {{review.people}} 人</button>
     </block>
+  </view>
+
+  <!-- 记录详情半屏面板：原生弹窗放不下失败原因、发放人、批次、完整单号、撤回记录和下一步；
+       单号可单独复制，常用动作就在面板里 -->
+  <view class="sheet-mask" wx:if="{{detail}}" bindtap="closeDetail"></view>
+  <view class="sheet" wx:if="{{detail}}" catchtap="noop">
+    <view class="sheet-head">
+      <text class="sheet-title">记录详情</text>
+      <view class="textbtn textbtn-plain" bindtap="closeDetail">关闭</view>
+    </view>
+    <view class="sheet-body">
+      <view class="sh-amt">
+        <text class="num">¥{{detail.yuan}}</text>
+        <text class="badge {{detail.cls==='ok'?'badge-success':detail.cls==='fail'?'badge-danger':detail.cls==='muted'?'badge-muted':'badge-warning'}}">{{detail.statusText}}</text>
+      </view>
+      <view class="sh-next" wx:if="{{detail.nextStep}}">{{detail.nextStep}}</view>
+      <view class="sh-kv"><text class="sh-k">客户</text><text class="sh-v">{{detail.who || '不记名（链接领取）'}}</text></view>
+      <view class="sh-kv"><text class="sh-k">事由</text><text class="sh-v">{{detail.remark || '客户奖励'}}</text></view>
+      <view class="sh-kv"><text class="sh-k">发放人</text><text class="sh-v">{{detail.issuer || '—'}}</text></view>
+      <view class="sh-kv"><text class="sh-k">创建时间</text><text class="sh-v num">{{detail.createdFull}}</text></view>
+      <view class="sh-kv" wx:if="{{detail.updatedFull && detail.updatedFull !== detail.createdFull}}"><text class="sh-k">状态更新</text><text class="sh-v num">{{detail.updatedFull}}</text></view>
+      <view class="sh-kv" wx:if="{{detail.failReason}}"><text class="sh-k">失败原因</text><text class="sh-v t-danger">{{detail.failReason}}</text></view>
+      <view class="sh-kv" wx:if="{{detail.revokedAt}}"><text class="sh-k">撤回</text><text class="sh-v">{{detail.revokedAt}}{{detail.revokedBy ? ' · ' + detail.revokedBy : ''}}</text></view>
+      <view class="sh-kv" wx:if="{{detail.batchId}}"><text class="sh-k">批次</text><text class="sh-v num">{{detail.batchId}}</text></view>
+      <view class="sh-kv"><text class="sh-k">商户单号</text><text class="sh-v num">{{detail.rid}}</text><text class="sh-copy" data-v="{{detail.rid}}" bindtap="copyText">复制</text></view>
+      <view class="sh-kv"><text class="sh-k">微信单号</text><text class="sh-v num">{{detail.billNo || '转账发起后生成'}}</text><text class="sh-copy" wx:if="{{detail.billNo}}" data-v="{{detail.billNo}}" bindtap="copyText">复制</text></view>
+    </view>
+    <view class="sheet-acts" wx:if="{{detail.eu || detail.oid || (detail.batchId && !recFilter.batch) || detail.canRevoke}}">
+      <button class="btn btn-fill sh-btn" wx:if="{{detail.eu || detail.oid}}" bindtap="detailCustomer">只看此客户</button>
+      <button class="btn btn-fill sh-btn" wx:if="{{detail.batchId && !recFilter.batch}}" bindtap="detailBatch">查看本批</button>
+      <button class="btn btn-red sh-btn" wx:if="{{detail.canRevoke}}" bindtap="detailRevoke">撤回</button>
+    </view>
   </view>
 
 </view>

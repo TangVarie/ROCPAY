@@ -596,7 +596,10 @@ function rewardFilterSql({ status = 'all', days = 0, target = '', targetOpenid =
     params.target = String(target);
   }
   if (targetOpenid) {
-    conds.push(`r.target_openid = :target_openid`);
+    // 直连客户的资金往来 = 定向给他的 + 他领走的（链接快发领取的单 target_openid 为空，
+    // 只按定向列筛会漏掉；客户榜按领取人聚合，点进来要对得上）
+    conds.push(`(r.target_openid = :target_openid
+      OR EXISTS (SELECT 1 FROM transfers tx WHERE tx.out_bill_no = r.rid AND tx.claimer_openid = :target_openid))`);
     params.target_openid = String(targetOpenid);
   }
   if (batch) {
