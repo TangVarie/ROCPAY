@@ -16,18 +16,8 @@ App({
       return;
     }
     this.globalData.splashPending = true;
-    const { CLOUD_ENV, NUM_FONT_URL } = require('./config.js');
+    const { CLOUD_ENV } = require('./config.js');
     wx.cloud.init({ env: CLOUD_ENV, traceUser: true });
-    // 数字字体（可选）：配置了 NUM_FONT_URL 才加载，失败静默回退系统字体栈（--font-num 兜底）
-    if (NUM_FONT_URL) {
-      wx.loadFontFace({
-        global: true,
-        family: 'ROC Num',
-        source: `url("${NUM_FONT_URL}")`,
-        scopes: ['webview', 'native'],
-        fail: (e) => console.warn('数字字体加载失败，回退系统字体栈：', e && e.status),
-      });
-    }
   },
   /** 取走本次冷启动的开屏（只给第一个问的页面） */
   consumeSplash() {

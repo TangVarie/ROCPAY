@@ -39,9 +39,8 @@ page {
   --color-wm-primary: rgba(30, 87, 84, 0.08);
   --color-wm-accent: rgba(184, 80, 47, 0.08);
 
-  /* 数字字体：'ROC Num' 由 app.js loadFontFace 按 config.NUM_FONT_URL 注册（未配置即跳过），
-     其后是零加载成本的系统栈兜底：DIN(iOS)/Bahnschrift(Win) + 主流安卓厂商字体 */
-  --font-num: 'ROC Num', 'DIN Alternate', 'Bahnschrift', 'MiSans', 'HarmonyOS Sans SC', 'OPPO Sans', 'vivo Sans', 'Roboto Condensed', 'Helvetica Neue', sans-serif;
+  /* 数字字体：只用系统栈（v5.8 规则：小程序不加载网络字体）——DIN(iOS)/Bahnschrift(Win) + 主流安卓厂商字体 */
+  --font-num: 'DIN Alternate', 'Bahnschrift', 'MiSans', 'HarmonyOS Sans SC', 'OPPO Sans', 'vivo Sans', 'Roboto Condensed', 'Helvetica Neue', sans-serif;
 
   line-height: 1.6; /* 背景/文字色/字体/字号由 kit 的 page 规则给 */
 }
