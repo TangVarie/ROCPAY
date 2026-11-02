@@ -31,59 +31,78 @@
       <view class="state-t2">{{tokenGone}}</view>
     </view>
 
-    <view wx:else class="reward-block {{status==='ok' ? 'field-brand' : 'block-red'}} block">
-      <!-- 到账 = 结算通知/里程碑：角落落一枚轮印（v5.5 闲章，内容固定不计数；青面上墨色），一屏一枚 -->
-      <view class="round-seal rb-seal" wx:if="{{status==='ok'}}" aria-hidden="true">
-        <view class="mark"><view class="b b1"></view><view class="b b2"></view><view class="b b3"></view><view class="b b4"></view></view>
-        <text class="n">扶摇</text><text class="r">ROC</text><text class="u">结构性复利</text>
-      </view>
-      <view class="rb-checkwrap" wx:if="{{status==='ok'}}"><view class="rb-check"></view></view>
-      <!-- 状态以查单为准：点了确认 ≠ 到账。confirming/arriving 是"已确认、等入账"，只有 ok 才是到账；
-           dead 是转账失败/被撤回的终态（块保持赭石，不翻青面、不庆祝） -->
-      <view class="rb-label">{{ status==='ok' ? '已到账微信零钱' : (status==='confirming' || status==='arriving') ? '已确认收款，等待到账' : status==='dead' ? '这笔奖励没有到账' : (mode==='mine' ? '属于你的奖励' : '你收到一笔奖励') }}</view>
-      <!-- 链接金额没经后端核验（校验接口不可达）：不上屏任何金额 -->
-      <view class="rb-amount" wx:if="{{mode==='token' && amtUnverified}}"><text class="rb-unverified">金额待核验</text></view>
-      <view class="rb-amount" wx:else><text class="rb-sign num">¥</text><text class="rb-num num">{{ mode==='mine' ? mineAmt : amtText }}</text></view>
-      <view class="rb-remark" wx:if="{{mode==='mine' ? mineRemark : remark}}">{{ mode==='mine' ? mineRemark : remark }}</view>
-      <!-- 大额拆单：一人多笔串行领，先让客户看到全貌 -->
-      <view class="rb-multi" wx:if="{{mode==='mine' && minePendCount > 1 && (status==='idle' || status==='loading' || status==='fail')}}">共 {{minePendCount}} 笔 · 合计 ¥{{minePendYuan}}，领完本笔自动出下一笔</view>
-
-      <!-- 按钮只在领取前/可重试时出现：金额未核验给"重新连接"；入账查询超时给"刷新到账结果"；
-           到账/失败终态不渲染按钮（青面上只许墨字/主色字，一颗禁用按钮既无动作也无合法配色） -->
-      <button wx:if="{{mode==='token' && amtUnverified}}" class="rb-btn" bindtap="retryToken" loading="{{verifying}}" disabled="{{verifying}}">重新连接</button>
-      <button
-        wx:elif="{{status==='idle' || status==='loading' || status==='fail'}}"
-        class="rb-btn"
-        bindtap="{{ mode==='mine' ? 'onClaimMine' : 'onClaimToken' }}"
-        loading="{{status==='loading'}}"
-        disabled="{{status==='loading'}}"
-      >领取到微信零钱</button>
-      <button wx:elif="{{status==='arriving'}}" class="rb-btn" bindtap="refreshArrival">刷新到账结果</button>
-      <view class="rb-wait" wx:elif="{{status==='confirming'}}" aria-label="正在查询到账结果">
-        <view class="band-spinner"><view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view></view>
+    <!-- 可信收款单：发放方 → 金额与事由 → 当前状态 → 主按钮 → 官方确认说明 → 帮助。
+         外部链接最怕"这是谁发的、为什么、钱到哪"，这三件事先讲清 -->
+    <block wx:else>
+      <!-- ① 发放方：品牌 + 发放员工 -->
+      <view class="issuer">
+        <text class="issuer-brand">梨响ROC</text>
+        <text class="issuer-who">{{issuer ? issuer + ' 发给你' : '发给你的奖励'}}</text>
       </view>
 
-      <view class="rb-tip" wx:if="{{mode==='token' && amtUnverified}}">{{verifying ? '正在重新连接，核验金额…' : '暂时连不上服务，金额还没核验，点上方按钮再试'}}</view>
-      <view class="rb-tip" wx:elif="{{message}}">{{message}}</view>
-      <!-- 怎么领的说明只在领取前有用；确认之后还挂着就成了过时提示 -->
-      <view class="rb-fine" wx:if="{{!amtUnverified && (status==='idle' || status==='loading' || status==='fail')}}">点领取后弹出微信官方「确认收款」，确认后转入微信零钱</view>
-    </view>
+      <!-- 领取前赭石块（白字）/ 到账后品牌面色（标志青底 + 墨字，v5.1 里程碑用法）。
+           状态以查单为准：点了确认 ≠ 到账，只有 ok 才翻青面；dead 是失败/撤回终态，保持赭石不庆祝 -->
+      <view class="reward-block {{status==='ok' ? 'field-brand' : 'block-accent'}} block">
+        <!-- 到账 = 结算通知/里程碑：角落落一枚轮印（v5.5 闲章，内容固定不计数；青面上墨色），一屏一枚 -->
+        <view class="round-seal rb-seal" wx:if="{{status==='ok'}}" aria-hidden="true">
+          <view class="mark"><view class="b b1"></view><view class="b b2"></view><view class="b b3"></view><view class="b b4"></view></view>
+          <text class="n">扶摇</text><text class="r">ROC</text><text class="u">结构性复利</text>
+        </view>
+        <view class="rb-checkwrap" wx:if="{{status==='ok'}}"><view class="rb-check"></view></view>
+        <!-- ② 当前状态：标题就是状态 -->
+        <view class="rb-label">{{ status==='ok' ? (claimedCount > 1 ? '全部到账' : '已到账微信零钱') : (status==='between' || status==='nextfail') ? '本笔已到账' : (status==='confirming' || status==='arriving') ? '已确认收款 · 到账中' : status==='dead' ? deadTitle : resume ? '待确认收款' : '待领取' }}</view>
+        <!-- 金额：链接金额没经后端核验（校验接口不可达）时不上屏任何数字 -->
+        <view class="rb-amount" wx:if="{{mode==='token' && amtUnverified}}"><text class="rb-unverified">金额待核验</text></view>
+        <view class="rb-amount" wx:else><text class="rb-sign num">¥</text><text class="rb-num num">{{ mode==='mine' ? mineAmt : amtText }}</text></view>
+        <!-- 事由与去向：收款单的两行 -->
+        <view class="rb-meta">
+          <view class="rb-row" wx:if="{{mode==='mine' ? mineRemark : remark}}"><text class="rb-k">事由</text><text class="rb-v">{{ mode==='mine' ? mineRemark : remark }}</text></view>
+          <view class="rb-row"><text class="rb-k">到账</text><text class="rb-v">微信零钱</text></view>
+        </view>
+        <!-- 大额拆单：一人多笔逐笔领，进度与已到账累计一直可见 -->
+        <view class="rb-multi" wx:if="{{mode==='mine' && claimedCount + minePendCount > 1 && status!=='ok'}}">第 {{claimedCount + 1}}/{{claimedCount + minePendCount}} 笔{{claimedCount > 0 ? ' · 已到账 ¥' + claimedYuan : ''}}</view>
 
-    <view class="after-note" wx:if="{{mode==='mine' && claimedCount > 0 && status!=='ok'}}">
-      本次已领取 {{claimedCount}} 笔，上面是新的一笔{{minePendCount > 1 ? '（还剩 ' + minePendCount + ' 笔）' : ''}}
-    </view>
+        <!-- ③ 进度：设计系统的「轮尺」三步——领取 → 微信确认 → 到账（颜色随块内文字） -->
+        <view class="rb-steps" wx:if="{{status!=='dead' && !(mode==='token' && amtUnverified)}}" aria-hidden="true">
+          <view class="round-ruler">
+            <view class="r {{ (status==='idle' || status==='loading' || status==='fail') && !resume ? 'r-now' : 'r-done' }}"></view>
+            <view class="r {{ (status==='idle' || status==='loading' || status==='fail') ? (resume ? 'r-now' : '') : 'r-done' }}"></view>
+            <view class="r {{ (status==='ok' || status==='between' || status==='nextfail') ? 'r-done' : (status==='confirming' || status==='arriving') ? 'r-now' : '' }}"></view>
+          </view>
+          <view class="rb-steps-t"><text>领取</text><text>微信确认</text><text>到账</text></view>
+        </view>
 
-    <!-- 合作档案 · 等级（领取界面也能看到） -->
-    <view class="panel lvcard" wx:if="{{profile}}">
-      <view class="lv-line1">
-        <text class="badge badge-blue">LV{{profile.lv}} · {{profile.name}}</text>
-        <text class="lv-nums t-light num">合作 {{profile.count}} 次 · 累计 ¥{{profile.totalYuan}}</text>
+        <!-- ④ 主按钮：只在领取前/可重试时出现。金额未核验给"重新连接"；入账查询超时给"刷新到账结果"；
+             到账/失败终态不渲染按钮（青面上只许墨字/主色字，一颗禁用按钮既无动作也无合法配色） -->
+        <button wx:if="{{mode==='token' && amtUnverified}}" class="rb-btn" bindtap="retryToken" loading="{{verifying}}" disabled="{{verifying}}">重新连接</button>
+        <button
+          wx:elif="{{status==='idle' || status==='loading' || status==='fail'}}"
+          class="rb-btn"
+          bindtap="{{ mode==='mine' ? 'onClaimMine' : 'onClaimToken' }}"
+          loading="{{status==='loading'}}"
+          disabled="{{status==='loading'}}"
+        >{{resume ? '继续确认收款' : '领取到微信零钱'}}</button>
+        <button wx:elif="{{status==='arriving'}}" class="rb-btn" bindtap="refreshArrival">刷新到账结果</button>
+        <button wx:elif="{{status==='nextfail'}}" class="rb-btn" bindtap="retryNext">继续领下一笔</button>
+        <view class="rb-wait" wx:elif="{{status==='confirming' || status==='between'}}" aria-label="正在处理">
+          <view class="band-spinner"><view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view></view>
+        </view>
+
+        <view class="rb-tip" wx:if="{{mode==='token' && amtUnverified}}">{{verifying ? '正在重新连接，核验金额…' : '暂时连不上服务，金额还没核验，点上方按钮再试'}}</view>
+        <view class="rb-tip" wx:elif="{{message}}">{{message}}</view>
+        <!-- ⑤ 官方确认说明：只在领取前有用；确认之后还挂着就成了过时提示 -->
+        <view class="rb-fine" wx:if="{{!amtUnverified && (status==='idle' || status==='loading' || status==='fail')}}">点领取后弹出微信官方「确认收款」，确认后转入微信零钱</view>
       </view>
-      <view class="lv-next t-hint" wx:if="{{profile.nextText}}">{{profile.nextText}}</view>
-    </view>
 
-    <!-- 管理员自己领奖励或打开链接时也要能回工作台（原先只有"无奖励"的首页才有入口） -->
-    <button class="btn btn-fill btn-block admin-entry" wx:if="{{isAdmin}}" bindtap="goAdmin">进入工作台</button>
+      <!-- ⑥ 帮助：按状态给一句下一步 -->
+      <view class="help">{{ status==='ok' ? '可在微信「我 › 服务 › 钱包 › 零钱」查看这笔入账' : (status==='confirming' || status==='arriving' || status==='between') ? '微信入账通常几秒到几分钟，可稍后重新打开本页查看' : '对这笔奖励有疑问，请联系' + (issuer || '给你发奖励的员工') }}</view>
+
+      <!-- 合作记录：降为一行次要信息；首次领取不提升级进度 -->
+      <view class="coop" wx:if="{{profile && profile.count > 0}}">合作 {{profile.count}} 次 · 累计到账 ¥{{profile.totalYuan}} · LV{{profile.lv}} {{profile.name}}{{profile.count >= 2 && profile.nextText ? ' · ' + profile.nextText : ''}}</view>
+
+      <!-- 管理员自己领奖励或打开链接时也要能回工作台（原先只有"无奖励"的首页才有入口） -->
+      <button class="btn btn-fill btn-block admin-entry" wx:if="{{isAdmin}}" bindtap="goAdmin">进入工作台</button>
+    </block>
 
     <!-- 下半版面：品牌大字报（到账后用赭石呼应奖励色） -->
     <view class="wm-zone">
@@ -100,7 +119,7 @@
         <view class="lede">你好，<text class="em">{{roleLabel || '管理员'}}</text>。今天把奖励<text class="em">发给对的人</text>。</view>
       </view>
 
-      <view class="block block-blue ah-hero" wx:if="{{adminHome && adminHome.hasQuota}}">
+      <view class="block block-primary ah-hero" wx:if="{{adminHome && adminHome.hasQuota}}">
         <view class="ah-label">可发额度 · 剩余</view>
         <view class="ah-num num">{{adminHome.neg ? '-' : ''}}¥{{adminHome.remainingYuan}}</view>
         <view class="ah-sub" wx:if="{{adminHome.low}}">额度已用尽，进工作台充值</view>
@@ -113,11 +132,11 @@
       </view>
 
       <view class="ah-minis" wx:if="{{adminHome}}">
-        <view class="block tint-sky ah-mini">
+        <view class="block tint-primary ah-mini">
           <view class="ahm-label">近24小时发放</view>
           <view class="ahm-num num t-dark">{{adminHome.todayCount || 0}} 笔</view>
         </view>
-        <view class="block tint-blush ah-mini">
+        <view class="block tint-accent ah-mini">
           <view class="ahm-label">近24小时动账</view>
           <view class="ahm-num num t-dark">¥{{adminHome.todayYuan || '0.00'}}</view>
         </view>
@@ -142,23 +161,12 @@
         <button class="btn btn-fill state-btn" wx:if="{{subOn}}" bindtap="askSubscribe">有新奖励时提醒我</button>
       </view>
 
-      <!-- 合作档案 · 等级（没有奖励时开屏也能看到自己的记录池） -->
-      <view class="panel lvcard" wx:if="{{profile}}">
-        <view class="lv-line1">
-          <text class="badge badge-blue">LV{{profile.lv}} · {{profile.name}}</text>
-          <text class="lv-nums t-light num">合作 {{profile.count}} 次 · 累计 ¥{{profile.totalYuan}}</text>
-        </view>
-        <view class="lv-next t-hint" wx:if="{{profile.nextText}}">{{profile.nextText}}</view>
-      </view>
+      <!-- 合作记录：降为一行次要信息 -->
+      <view class="coop" wx:if="{{profile && profile.count > 0}}">合作 {{profile.count}} 次 · 累计到账 ¥{{profile.totalYuan}} · LV{{profile.lv}} {{profile.name}}{{profile.count >= 2 && profile.nextText ? ' · ' + profile.nextText : ''}}</view>
 
-      <view class="panel join">
-        <view class="join-t t-dark">是本公司员工？</view>
-        <view class="join-s t-light">把下面的编号发给管理员，开通发放权限</view>
-        <view class="openid-row">
-          <text class="openid-text num">{{ openid || '请在微信小程序内打开' }}</text>
-          <text class="openid-copy" wx:if="{{openid}}" bindtap="copyOpenid">复制</text>
-        </view>
-      </view>
+      <!-- 员工开通入口：外部客户不需要看到内部开通流程，收成一行文字入口，
+           编号与复制在工作台的"你还不是发放员"页里 -->
+      <view class="staff-entry" bindtap="goAdmin">我是员工，申请发放权限</view>
 
       <!-- 下半版面：品牌大字报（编辑部式填充） -->
       <view class="wm-zone">

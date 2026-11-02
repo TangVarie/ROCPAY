@@ -596,7 +596,10 @@ function rewardFilterSql({ status = 'all', days = 0, target = '', targetOpenid =
     params.target = String(target);
   }
   if (targetOpenid) {
-    conds.push(`r.target_openid = :target_openid`);
+    // 直连客户的资金往来 = 定向给他的 + 他领走的（链接快发领取的单 target_openid 为空，
+    // 只按定向列筛会漏掉；客户榜按领取人聚合，点进来要对得上）
+    conds.push(`(r.target_openid = :target_openid
+      OR EXISTS (SELECT 1 FROM transfers tx WHERE tx.out_bill_no = r.rid AND tx.claimer_openid = :target_openid))`);
     params.target_openid = String(targetOpenid);
   }
   if (batch) {
@@ -1509,6 +1512,16 @@ export async function getReward(rid) {
   return rows.length ? rows[0] : null;
 }
 
+/** 这笔奖励是谁发的（领取页"谁发的"）：发放员工的备注名；员工已删/没备注返回 '' */
+export async function getIssuerName(rid) {
+  if (!pool || !rid) return '';
+  const [rows] = await pool.execute(
+    `SELECT a.name FROM rewards r JOIN admins a ON a.openid = r.created_by WHERE r.rid = :rid LIMIT 1`,
+    { rid }
+  );
+  return rows.length ? rows[0].name || '' : '';
+}
+
 /** 某一批次的全部奖励，批量撤回与幂等回放（重试命中已建批次时重构响应）共用。按创建顺序返回 */
 export async function listBatchRewards(batchId) {
   if (!pool || !batchId) return [];
@@ -1671,6 +1684,7 @@ export const db = {
   pendingSummaryForOpenidTargets,
   getRewardTarget,
   getReward,
+  getIssuerName,
   revokeReward,
   markRevoked,
   listBatchRewards,

@@ -458,7 +458,8 @@ app.get('/api/leaderboard', async (req, res) => {
       return {
         rank: offset + i + 1,
         name: r.remark || r.name || '客户' + String(r.claimer_openid || '').slice(-4),
-        eu: r.external_userid || '', // 有企微档案才可跳单人台账
+        eu: r.external_userid || '', // 有企微档案：按企微客户看单人台账
+        openid: r.claimer_openid || '', // 没有企微档案（直连客户）：按领取人 openid 看单人台账
         count: Number(r.n),
         totalYuan: Number(r.fen) / 100,
         lv: lv.lv,
@@ -1131,6 +1132,9 @@ app.post('/api/deliver', async (req, res) => {
     const tasks = [];
     const errors = [];
     const failList = [];
+    // 提交结果未知的客户（请求已发出但超时/断网）：任务可能已建、也可能没建。不进 failList（防盲目重发），
+    // 也不能被前端当成"已进任务"——单列出来，让前端标成"结果未知、先去企微核对"
+    const unknownList = [];
     // 总预算：保证本请求必然在有限时间内 settle（防重条目生命周期依赖这一点）。
     // 超预算的组不提交、按"确定失败（未提交，可安全重试）"入重试名单
     const DELIVER_BUDGET_MS = 120_000;
@@ -1174,6 +1178,7 @@ app.post('/api/deliver', async (req, res) => {
         const determinate = !!e.errcode || !!e.preSubmit;
         errors.push({ sender: s, count: list.length, error: e.message, indeterminate: !determinate });
         if (determinate) failList.push(...list);
+        else unknownList.push(...list);
         console.error(`[wecom] 群发任务创建失败 sender=${s} 客户=${list.length} 结果${determinate ? '确定' : '未知'}：`, e.message);
       }
     }
@@ -1191,7 +1196,7 @@ app.post('/api/deliver', async (req, res) => {
         }
         settleErr(new Error(msg));
       }
-      return res.status(500).json({ error: msg, resultUnknown: anyIndet || undefined });
+      return res.status(500).json({ error: msg, resultUnknown: anyIndet || undefined, unknownList: anyIndet ? unknownList : undefined });
     }
     const payload = {
       ok: true,
@@ -1201,6 +1206,7 @@ app.post('/api/deliver', async (req, res) => {
       errors,
       failCount: failList.length,
       failList,
+      unknownList, // 提交结果未知的客户：不在 failList 里，但也不能算已进任务
       msgid: tasks[0].msgid, // 旧版小程序兼容字段
     };
     if (clientKey) {
@@ -1492,6 +1498,11 @@ app.get('/api/claim/mine', async (req, res) => {
   const unionid = getUnionid(req);
   if (!openid) return res.status(401).json({ error: '请在微信小程序内打开' });
   if (!db.dbEnabled) return res.json({ reward: null, reason: 'no_db' });
+  // 有奖励的回包都带上"谁发的"（领取页做可信收款单用）；查不到不影响领取
+  const send = async (body) => {
+    body.reward.issuer = await db.getIssuerName(body.reward.rid).catch(() => '');
+    res.json(body);
+  };
   try {
     // 双模式定向：直连池整体先行、企微池整体在后（评审发现：直连领取名义上不依赖企微，
     // 就不能被企微身份桥的外呼拖住——桥的两次请求各 6s 超时，企微故障时会拖 ~12s，
@@ -1504,7 +1515,7 @@ app.get('/api/claim/mine', async (req, res) => {
     // 续办前以微信实况为准：已终态（刚确认完、回调还没到）就地落库并跳过，直接出下一笔
     if (resumableD && !(await verifyResumableFresh(resumableD))) resumableD = null;
     if (resumableD) {
-      return res.json({
+      return send({
         reward: { rid: resumableD.rid, amountYuan: resumableD.amount_fen / 100, remark: resumableD.remark },
         resume: {
           package_info: resumableD.package_info,
@@ -1518,7 +1529,7 @@ app.get('/api/claim/mine', async (req, res) => {
     }
     const rD = await db.findPendingRewardForOpenid(openid);
     if (rD) {
-      return res.json({
+      return send({
         reward: { rid: rD.rid, amountYuan: rD.amount_fen / 100, remark: rD.remark },
         pending: { count: aggD.n || 1, totalYuan: aggD.fen / 100 || rD.amount_fen / 100 },
       });
@@ -1537,7 +1548,7 @@ app.get('/api/claim/mine', async (req, res) => {
     // 同直连池：续办前先问微信实况，已终态就地落库并跳过
     if (resumableW && !(await verifyResumableFresh(resumableW))) resumableW = null;
     if (resumableW) {
-      return res.json({
+      return send({
         reward: { rid: resumableW.rid, amountYuan: resumableW.amount_fen / 100, remark: resumableW.remark },
         resume: {
           package_info: resumableW.package_info,
@@ -1561,7 +1572,7 @@ app.get('/api/claim/mine', async (req, res) => {
       }
       return res.json({ reward: null, reason });
     }
-    res.json({
+    send({
       reward: { rid: r.rid, amountYuan: r.amount_fen / 100, remark: r.remark },
       pending: { count: aggW.n, totalYuan: aggW.fen / 100 },
     });
@@ -1658,7 +1669,8 @@ app.get('/api/claim/status', async (req, res) => {
       /* 查库失败按可领处理：点领取时 POST /api/claim 仍有全量强校验兜底 */
     }
   }
-  res.json({ state, amountYuan: payload.fen / 100, remark: payload.remark || '' });
+  const issuer = db.dbEnabled ? await db.getIssuerName(payload.rid).catch(() => '') : '';
+  res.json({ state, amountYuan: payload.fen / 100, remark: payload.remark || '', issuer });
 });
 
 // 【客户】领取：发起转账，返回 package_info 供小程序拉起确认页

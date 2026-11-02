@@ -5,7 +5,7 @@
    画布比表面深一档（白块无阴影也能"浮起成形"）；黑色阶文字；禁 emoji/渐变/毛玻璃/阴影
    直角制度：一切容器/按钮/输入/chip/徽标圆角一律 0，"圆"只存在于状态圆点与勾选画勾
 
-   token 来源：tokens/miniprogram.wxss = 设计系统包 v5.5.1 原件（未改一字；升级整份覆盖）。
+   token 来源：tokens/miniprogram.wxss = 设计系统包 v5.8.1 原件（未改一字；升级整份覆盖）。
    这里只放 kit 没有的本项目扩展 token 与组件；深色模式：app.json darkmode:true + theme.json 管导航栏，
    token 翻转在 tokens/miniprogram.wxss 与下方扩展块各自的 @media 里。
    交付前跑 npm run design:check（design/tools/check-design.py 同为原件，色板外色值即 FAIL）。
@@ -19,15 +19,11 @@ page {
   --r-badge: 0;
   --r-check: 0;
 
-  /* ---- kit 没有的角色 token（值仍取 palette.json）---- */
-  /* 主色底上的文字：亮色白字 8.25:1；深色主色为亮青，白字只有 2.11:1，按 palette _darkButtonRule 改压墨字 */
-  --color-on-primary: #ffffff;
+  /* ---- kit 没有的角色 token（值仍取 palette.json）----
+     v5.8.1 起 kit 自带 --color-on-primary / --color-on-danger 与语义加深档 --color-*-deep（含深色翻转），
+     本文件不再重复维护 */
   --color-ink: rgba(0, 0, 0, 0.9); /* 青面上的墨字（9.85:1）：青面不翻转，墨字也不翻转 */
-  /* 语义加深档（浅底上的文字）与危险按钮按下态 */
-  --color-success-deep: #006b4a;
-  --color-warning-deep: #995400;
-  --color-danger-deep: #b02330;
-  --color-danger-dark: #b02330;
+  --color-danger-dark: #b02330; /* 危险按钮按下态 */
   /* 语义浅底（语义色 /10）：徽标、横幅、警示块共用 */
   --color-success-tint: rgba(0, 181, 120, 0.1);
   --color-warning-tint: rgba(255, 143, 31, 0.1);
@@ -39,9 +35,8 @@ page {
   --color-wm-primary: rgba(30, 87, 84, 0.08);
   --color-wm-accent: rgba(184, 80, 47, 0.08);
 
-  /* 数字字体：'ROC Num' 由 app.js loadFontFace 按 config.NUM_FONT_URL 注册（未配置即跳过），
-     其后是零加载成本的系统栈兜底：DIN(iOS)/Bahnschrift(Win) + 主流安卓厂商字体 */
-  --font-num: 'ROC Num', 'DIN Alternate', 'Bahnschrift', 'MiSans', 'HarmonyOS Sans SC', 'OPPO Sans', 'vivo Sans', 'Roboto Condensed', 'Helvetica Neue', sans-serif;
+  /* 数字字体：只用系统栈（v5.8 规则：小程序不加载网络字体）——DIN(iOS)/Bahnschrift(Win) + 主流安卓厂商字体 */
+  --font-num: 'DIN Alternate', 'Bahnschrift', 'MiSans', 'HarmonyOS Sans SC', 'OPPO Sans', 'vivo Sans', 'Roboto Condensed', 'Helvetica Neue', sans-serif;
 
   line-height: 1.6; /* 背景/文字色/字体/字号由 kit 的 page 规则给 */
 }
@@ -52,7 +47,8 @@ page {
   box-sizing: border-box;
 }
 
-/* ---- 色块：kit 提供 .block-blue/.block-red/.tint-sky/.tint-blush；这里补 .block 的直角与盒模型、品牌面色块 ---- */
+/* ---- 色块：kit 提供 .block-primary/.block-accent/.tint-primary/.tint-accent（v5.7 角色名；旧色相名仅为兼容别名）；
+   这里补 .block 的直角与盒模型、品牌面色块 ---- */
 .block {
   border-radius: var(--r-block);
   padding: 32rpx;
@@ -116,7 +112,7 @@ page {
 .btn-blue[disabled] { background: var(--color-fill); color: var(--color-text-light); }
 .btn-fill { background: var(--color-fill); color: var(--color-text-dark); }
 .btn-fill:active { background: rgba(0, 0, 0, 0.08); }
-.btn-red { background: var(--color-danger); color: #ffffff; }
+.btn-red { background: var(--color-danger); color: var(--color-on-danger); } /* 深色模式危险色是浅色填充，压墨字（v5.7.1） */
 .btn-red:active { background: var(--color-danger-dark); }
 /* 整行按钮：系统字体放大时长标签会折行，固定高度会把字裁掉——
    改最小高度+内边距，单行时仍是 96rpx 档，折行时按钮自己撑高 */
@@ -270,11 +266,7 @@ page {
    ============================================================ */
 @media (prefers-color-scheme: dark) {
   page {
-    --color-on-primary: #0f1318;     /* 亮青底压墨字 8.85:1 */
-    --color-success-deep: #7fe0bd;
-    --color-warning-deep: #ffc38a;
-    --color-danger-deep: #ff9a9e;
-    --color-danger-dark: #c64449;
+    --color-danger-dark: #c64449; /* 深色危险按下态：压墨字 3.84:1，只持续 120ms，按状态件 3:1 线放行（v5.7.1） */
     --color-success-tint: rgba(33, 177, 131, 0.12);
     --color-warning-tint: rgba(255, 162, 77, 0.12);
     --color-danger-tint: rgba(232, 87, 92, 0.12);

@@ -36,7 +36,6 @@
 .rb-sign { font-size: 42rpx; margin-right: 8rpx; font-weight: 600; }
 /* 40px 大数字档（v5.0.1 的 120rpx 在阶梯之外，DESIGN.md §3：梯外字号 = bug） */
 .rb-num { font-size: 80rpx; line-height: 1.15; font-weight: 700; }
-.rb-remark { font-size: 26rpx; margin-top: 8rpx; }
 /* 大额拆单：共 N 笔 · 合计 提示（赭底上白字不降透明度：纯白对赭石 4.97:1
    刚过小字 4.5:1，降透明度即不达标；层级差交给字号/字重，不牺牲对比度） */
 .rb-multi { margin-top: 16rpx; font-size: 24rpx; line-height: 1.5; }
@@ -68,12 +67,6 @@
 /* 管理员入口：奖励块与档案之后，次按钮 */
 .admin-entry { margin-top: 24rpx; }
 .rb-fine { margin-top: 16rpx; font-size: 24rpx; line-height: 1.5; }
-.after-note {
-  margin-top: 24rpx;
-  text-align: center;
-  font-size: 26rpx;
-  color: var(--color-text-light);
-}
 
 /* ===== 状态页（空/错/加载）：裸线性图标 + 两行文案 + 次按钮 ===== */
 .state {
@@ -105,21 +98,6 @@
   box-sizing: border-box;
 }
 
-/* ===== 员工入口（白底描边块） ===== */
-.join { margin-top: 8rpx; }
-.join-t { font-size: 30rpx; font-weight: 600; }
-.join-s { font-size: 26rpx; margin-top: 8rpx; }
-.openid-row {
-  margin-top: 24rpx;
-  display: flex;
-  align-items: center;
-  gap: 24rpx;
-  background: var(--color-fill);
-  border-radius: var(--r-control);
-  padding: 24rpx;
-}
-.openid-text { flex: 1; word-break: break-all; font-size: 24rpx; color: var(--color-text-light); }
-.openid-copy { flex: none; font-size: 26rpx; font-weight: 600; color: var(--color-primary); padding: 8rpx 16rpx; }
 
 /* ===== 操作端主页（管理员进门即仪表盘） ===== */
 .ahome-lede { padding: 24rpx 8rpx 32rpx; }
@@ -130,7 +108,7 @@
 /* 额度告罄：深色块内禁第三种彩色文字（DESIGN.md #13），告警全由 ah-sub 文案承担
    （原先数字再从 700 加到 800，肉眼分不出，已去掉） */
 /* 异常警示块：语义 danger 浅底 + 加深档标题，进门可见、点击直达失败筛选。
-   状态语义不借品牌赭浅调（tint-blush 归"价值/金额"类数据块用） */
+   状态语义不借品牌赭浅调（tint-accent 归"价值/金额"类数据块用） */
 .ah-alert { margin-bottom: 24rpx; padding: 24rpx 32rpx; background: var(--color-danger-tint); }
 .ah-alert:active { opacity: 0.85; }
 .ah-alert-t { font-size: 30rpx; font-weight: 700; color: var(--color-danger-deep); }
@@ -162,8 +140,26 @@
   .rb-check { animation: none; }
 }
 
-/* ===== 合作档案 · 等级卡（开屏与领取页都展示） ===== */
-.lvcard { margin-top: 24rpx; }
-.lv-line1 { display: flex; align-items: center; gap: 16rpx; flex-wrap: wrap; }
-.lv-nums { font-size: 26rpx; }
-.lv-next { font-size: 24rpx; margin-top: 8rpx; }
+/* ===== 可信收款单 ===== */
+/* ① 发放方：品牌 + 发放员工，放在奖励块上方（链接领取最先回答"这是谁发的"） */
+.issuer { display: flex; align-items: baseline; gap: 16rpx; padding: 16rpx 8rpx 0; }
+.issuer-brand { font-size: 30rpx; font-weight: 600; color: var(--color-text-dark); }
+.issuer-who { font-size: 26rpx; color: var(--color-text-light); }
+/* 事由 / 到账：收款单两行，左键右值；分隔线跟随块内文字色（赭块白 / 青面墨），不降文字透明度
+   （赭底白字 4.97:1 刚过小字底线，层级只靠字重） */
+.rb-meta { margin-top: 32rpx; text-align: left; }
+.rb-meta::before { content: ''; display: block; height: 1px; background: currentColor; opacity: 0.3; transform: scaleY(0.5); }
+.rb-row { display: flex; justify-content: space-between; gap: 24rpx; padding-top: 16rpx; font-size: 26rpx; line-height: 1.5; }
+.rb-k { flex: none; }
+.rb-v { font-weight: 600; text-align: right; word-break: break-all; }
+/* ③ 进度轮尺：kit 的 .round-ruler 默认主色，块内改跟随文字色；当前步内圈挖空用块底色 */
+.rb-steps { margin-top: 40rpx; }
+.rb-steps .round-ruler { color: inherit; }
+.block-accent .rb-steps .r-now::after { border-color: var(--color-block-accent); }
+.field-brand .rb-steps .r-now::after { border-color: var(--color-field-brand); }
+.rb-steps-t { display: flex; justify-content: space-between; margin-top: 12rpx; font-size: 24rpx; }
+/* ⑥ 帮助 + 合作记录 + 员工入口：奖励块之下的次要信息，统一一档小字 */
+.help { margin-top: 24rpx; padding: 0 8rpx; font-size: 24rpx; line-height: 1.6; color: var(--color-text-light); text-align: center; }
+.coop { margin-top: 16rpx; padding: 0 8rpx; font-size: 24rpx; line-height: 1.6; color: var(--color-text-light); text-align: center; }
+.staff-entry { margin-top: 32rpx; padding: 24rpx; text-align: center; font-size: 26rpx; font-weight: 600; color: var(--color-primary); }
+.staff-entry:active { opacity: 0.6; }
