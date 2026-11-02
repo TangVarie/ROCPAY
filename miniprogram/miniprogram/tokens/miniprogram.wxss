@@ -7,6 +7,7 @@
 page {
   --color-primary: #1e5754;
   --color-primary-dark: #16413f;
+  --color-on-primary: #ffffff; /* 主色按钮上的字（v5.7.1），深色模式翻成墨字 */
   --color-accent: #b8502f;
   --color-block-primary: #1e5754;
   --color-block-accent: #b8502f;
@@ -16,6 +17,10 @@ page {
   --color-success: #00b578;
   --color-warning: #ff8f1f;
   --color-danger: #d92b3c;
+  --color-on-danger: #ffffff;
+  --color-success-deep: #006b4a; /* 徽标文字加深档（v5.7.1 起随深色模式翻转） */
+  --color-warning-deep: #995400;
+  --color-danger-deep: #b02330;
   --color-bg: #f3f4f6;
   --color-bg-secondary: #eaecef;
   --color-surface: #ffffff;
@@ -39,6 +44,7 @@ page {
   page {
     --color-primary: #6ac1bd;
     --color-primary-dark: #48a8a3;
+    --color-on-primary: #0f1318;
     --color-accent: #d97e55;
     --color-block-primary: #1e5754; /* 深色块底照旧主色深档，白字 */
     --color-block-accent: #a84528;
@@ -48,6 +54,10 @@ page {
     --color-success: #21b183;
     --color-warning: #ffa24d;
     --color-danger: #e8575c;
+    --color-on-danger: #0f1318;
+    --color-success-deep: #7fe0bd;
+    --color-warning-deep: #ffc38a;
+    --color-danger-deep: #ff9a9e;
     --color-bg: #0f1318;
     --color-bg-secondary: #151a20;
     --color-surface: #1b222b;
@@ -77,17 +87,19 @@ page {
 /* ---- 按钮（覆盖原生 button 样式）---- */
 .btn { border-radius: 0; border: none; font-weight: 600; }
 .btn::after { border: none; }
-.btn-primary { background: var(--color-primary); color: #fff; height: 96rpx; line-height: 96rpx; font-size: 32rpx; }
+.btn-primary { background: var(--color-primary); color: var(--color-on-primary); height: 96rpx; line-height: 96rpx; font-size: 32rpx; }
 .btn-primary.btn-hover { background: var(--color-primary-dark); transform: scale(0.98); }
 .btn-secondary { background: var(--color-fill); color: var(--color-text-dark); height: 80rpx; line-height: 80rpx; font-size: 28rpx; }
 
-/* ---- 色块 ---- */
+/* ---- 色块 ----
+ * v5.7：类名改角色名（block-primary / block-accent / tint-primary / tint-accent）。色相旧名保留为兼容别名，
+ * 已接入的小程序不必改代码；新写一律用角色名，下次大版本移除别名。 */
 .block { padding: 32rpx; }
-.block-blue { background: var(--color-block-primary); color: #fff; }
-.block-blue .label { color: rgba(255, 255, 255, 0.85); }
-.block-red { background: var(--color-block-accent); color: #fff; }
-.tint-sky { background: var(--color-tint-primary); }
-.tint-blush { background: var(--color-tint-accent); }
+.block-primary, .block-blue { background: var(--color-block-primary); color: #fff; }
+.block-primary .label, .block-blue .label { color: rgba(255, 255, 255, 0.85); }
+.block-accent, .block-red { background: var(--color-block-accent); color: #fff; }
+.tint-primary, .tint-sky { background: var(--color-tint-primary); }
+.tint-accent, .tint-blush { background: var(--color-tint-accent); }
 
 /* ---- 发丝线（1rpx 物理像素）---- */
 .hairline-b { position: relative; }
@@ -103,9 +115,9 @@ page {
 
 /* ---- 徽标：语义浅底 + 加深档文字 ---- */
 .badge { display: inline-block; height: 40rpx; line-height: 40rpx; padding: 0 12rpx; font-size: 24rpx; }
-.badge-success { background: rgba(0, 181, 120, 0.1); color: #006b4a; }
-.badge-warning { background: rgba(255, 143, 31, 0.1); color: #995400; }
-.badge-danger  { background: rgba(217, 43, 60, 0.1); color: #b02330; }
+.badge-success { background: rgba(0, 181, 120, 0.1); color: var(--color-success-deep); }
+.badge-warning { background: rgba(255, 143, 31, 0.1); color: var(--color-warning-deep); }
+.badge-danger  { background: rgba(217, 43, 60, 0.1); color: var(--color-danger-deep); }
 
 /* ---- 「轮」的装置（2026-09-02 拍板；与 globals.css 的 round-seal / round-ruler 同规格）----
  * 轮尺（B，界面轨主用）：<view class="round-ruler"><view class="r r-done"/><view class="r r-now"/><view class="r"/></view>

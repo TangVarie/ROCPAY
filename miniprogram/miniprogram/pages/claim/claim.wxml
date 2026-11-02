@@ -42,7 +42,7 @@
 
       <!-- 领取前赭石块（白字）/ 到账后品牌面色（标志青底 + 墨字，v5.1 里程碑用法）。
            状态以查单为准：点了确认 ≠ 到账，只有 ok 才翻青面；dead 是失败/撤回终态，保持赭石不庆祝 -->
-      <view class="reward-block {{status==='ok' ? 'field-brand' : 'block-red'}} block">
+      <view class="reward-block {{status==='ok' ? 'field-brand' : 'block-accent'}} block">
         <!-- 到账 = 结算通知/里程碑：角落落一枚轮印（v5.5 闲章，内容固定不计数；青面上墨色），一屏一枚 -->
         <view class="round-seal rb-seal" wx:if="{{status==='ok'}}" aria-hidden="true">
           <view class="mark"><view class="b b1"></view><view class="b b2"></view><view class="b b3"></view><view class="b b4"></view></view>
@@ -119,7 +119,7 @@
         <view class="lede">你好，<text class="em">{{roleLabel || '管理员'}}</text>。今天把奖励<text class="em">发给对的人</text>。</view>
       </view>
 
-      <view class="block block-blue ah-hero" wx:if="{{adminHome && adminHome.hasQuota}}">
+      <view class="block block-primary ah-hero" wx:if="{{adminHome && adminHome.hasQuota}}">
         <view class="ah-label">可发额度 · 剩余</view>
         <view class="ah-num num">{{adminHome.neg ? '-' : ''}}¥{{adminHome.remainingYuan}}</view>
         <view class="ah-sub" wx:if="{{adminHome.low}}">额度已用尽，进工作台充值</view>
@@ -132,11 +132,11 @@
       </view>
 
       <view class="ah-minis" wx:if="{{adminHome}}">
-        <view class="block tint-sky ah-mini">
+        <view class="block tint-primary ah-mini">
           <view class="ahm-label">近24小时发放</view>
           <view class="ahm-num num t-dark">{{adminHome.todayCount || 0}} 笔</view>
         </view>
-        <view class="block tint-blush ah-mini">
+        <view class="block tint-accent ah-mini">
           <view class="ahm-label">近24小时动账</view>
           <view class="ahm-num num t-dark">¥{{adminHome.todayYuan || '0.00'}}</view>
         </view>

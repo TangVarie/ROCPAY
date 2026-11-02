@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""BYWOOD 设计系统机器闸 · v3.0
+"""BYWOOD 设计系统机器闸 · v3.4
 
 一条命令扫全轨。品牌跑偏从此是构建错误，不是审美分歧。
 
@@ -21,13 +21,34 @@
                来源行是构件的一部分；缺 = 手写版式绕过了模板，负面清单「无来源行的图」）。
                默认 FAIL，--lenient 降为提示（已交付旧版带图文档探查用）。
                模板 v5.3 内嵌的标志图形（docPr name 以 bywood- 开头）不是图，不计
-    [ROUND]    对客 docx 是否有轮页栏目「这一轮」（模板 v5.4 ROUND()）。提示级，不判 FAIL
+    [ROUND]    对客 docx 在讲轮（第 N 轮 / 上一轮 / 下一轮 / 轮次表）却没有轮页栏目「这一轮」时提示（v5.8 起按条件，
+               没有轮次语言的文件不查）。提示级，不判 FAIL
+    [MODE]     生成层（v5.8）：声明了 data-bw-role 的网页逐块核对角色的必需槽位、上限、证据的文字替代（无图降级）、
+               data-bw-plain 纯文本版是否完整、页序是否与 data-bw-contract 指向的契约一致；*.contract.json 核对
+               任务 / 角色 / 槽位取值、P0 是否扛过每种降级、媒介约束是否都给了降级方案、样张是否存在；自检时
+               另跑 tools/compose.py 比对黄金样张有没有被手改（漂移即 FAIL）。词表只认 composition/roles.json。
+               只验结构，不评审美
+    [CASE]     案史派生记录（v5.8.1）：composition/cases/case-records.json 的每个数字都要在 bywood-proposal 案例索引里
+               写有该案名的行中逐字出现（正本在索引，记录不先于索引写事实）；不许出现金额；索引写了对外匿名的
+               不许标 public；prev 链要接得上。找不到 skill 目录时只查结构
     [SYNTAX]   css / wxss 花括号配平（v5.4.1：多一个 } 会让小程序 @import 整份失败）
     [RADIUS]   border-radius 非 0（例外：50% 圆形本体、系统件）；整值匹配，0.5rem / 08px / "0 0 4px 0" 都不放行（v5.5.1）
     [BLUR]     backdrop-filter（毛玻璃，零豁免）
     [GRADIENT] UI 渐变（例外：骨架屏微光）
     [SHADOW]   box-shadow（例外：抽屉 --shadow-sheet）
     [CONTRAST] palette.json 自身的关键配色对比度是否达标
+    [PROSE]    规范文本漂移（v5.7）：*.md 与 tokens/ templates/ 下 .py / .js 里出现已退役的色名
+               （藏蓝 / 品牌红 / 红杠 / 双箭 …），或 *.md 里出现色板外色值。叙述历史的分句（带「退役 /
+               曾 / 旧 / 当时 / 此前 / 原来 / 沿革 …」）与带 ok: 标记的行豁免；版本号不算历史标记——
+               「v4 起…红＝信号系统」就是带着版本号漏过去的。CHANGELOG.md / reference/ / demo-v5/
+               是存档，不扫。机器闸此前只认色值不认文字，换届后散文里的旧口径没有任何东西拦
+    [GLYPH]    网页文件里出现 » / &raquo;（v5.7）：双箭的衍生用法（区块前标、链接尾标、步骤连接符）
+               已随旧标志退役（BRAND.md §4），注释里的说明不算
+    [TPLVAR]   模板与规范里的内联 token 漂移（v5.7.1）：界面轨模板（:root 里有 --block-primary）的亮 / 暗两块
+               短名变量逐值比对 palette.json screen；任何 --X-rgb 三元组必须与同名 --X 的 hex 一致。
+               此前派生文件之外的内联 token 没有任何比对——深色 --danger 写成赭石、deck 覆盖变量的 rgb 停在 v5.0 主色
+    [ONFILL]   有深色模式的网页文件里，主色 / 危险色填充上写死白字（v5.7.1）：深色模式下亮青上白字仅 2.11:1、
+               危险色上 3.53:1，一律写 --on-primary / --on-danger（--color-on-primary / --color-on-danger）
     [LOGO]     标志原件走独立白名单；标志青在 logo/ 之外只许做品牌面色（background），
                当前景（color / border / stroke / fill）即 FAIL（v5.1 起）。围栏对显式扫描目标也跑，
                认 hex / rgb() / hsl() 任何写法（v5.5.1）
@@ -68,6 +89,24 @@ LOGO_ALLOWED = {
 V4_RETIRED_TINTS = {
     'E3EFEF': '原表头底', 'F0F6F6': '原 callout 底', 'CFE3E4': '原强调行底', 'F6F7F9': '原斑马纹',
 }
+
+# v5.7 · 规范文本漂移闸（[PROSE]）与退役字形闸（[GLYPH]）
+RETIRED_NAMES = ['深藏蓝', '藏蓝', '品牌红', '标志红', '钢蓝', '红杠', '蓝杠', '深蓝', '深藏青', '藏青', '双箭',
+                 '红＝信号', '红=信号', '红色增量', '红=增长', '红柱', '蓝块', '蓝字', '蓝底白字', '深蓝底', '蓝描边', '主蓝',
+                 '红/蓝', '红 / 蓝', '红 ↔ 蓝', '红↔蓝', '蓝前红后', '红色只', '红色大块', '红色数字', '蓝色数据', '蓝+雾蓝']
+# 语义色的「红」（危险按钮红底、danger）是状态色不是品牌色，不在清单里
+# 叙述历史的标记。版本号与箭头不算：「v4 起…红＝信号系统」带着版本号却是现行口径
+RE_HISTORY = re.compile(r'退役|已退|曾|旧|沿革|历史|对照|废止|作废|当时|此前|以前|原为|原来|（原|继承|换届|取代|替代|弃用')
+# 豁免按分句判，不按整行：「主按钮用深蓝，不再加描边」里的历史词不能替同一行的另一句开脱（v5.7 复核指出）
+RE_CLAUSE = re.compile(r'[，。；;！？|]')   # 顿号不切：枚举项与其历史词同属一句
+PROSE_SKIP_FILES = {'CHANGELOG.md'}
+# 带日期的版本记录（「**v4.0（2026-08-17）·…」「> **模板 v5.3（2026-09-02 …」）本身就是历史，整行豁免
+RE_RELEASE_NOTE = re.compile(r'^\s*(?:>\s*)?\*\*.{0,72}?20\d\d-\d\d-\d\d')
+PROSE_SKIP_DIRS = {'reference', 'demo-v5', 'tools', 'logo'}
+HUE_SEGS = {'blue', 'red', 'sky', 'blush', 'teal', 'ochre', 'green', 'gold', 'cyan', 'purple', 'orange', 'navy', 'pink'}
+RE_VAR_DEF = re.compile(r'(--[A-Za-z0-9_-]+)\s*:')
+RE_GLYPH = re.compile(r'»|&raquo;|&#187;|&#x0*bb;|\\u00bb', re.I)
+RE_GLYPH_CSS = re.compile(r'content\s*:\s*([\'"])[^\'"]*\\0{0,4}bb(?![0-9a-f])', re.I)   # CSS 转义 \bb / \00bb
 
 # 行内豁免标记：在同一行写 /* ok: 理由 */、// ok: 理由、<!-- ok: 理由 --> 即跳过该行检查。
 # 理由必须写，空标记不算。加豁免须在 CHANGELOG 留痕。
@@ -210,7 +249,81 @@ CSS_VAR = {
     'dangerDeep': '--color-danger-deep',
     'bg': '--color-bg', 'bgSecondary': '--color-bg-secondary',
     'surface': '--color-surface', 'borderStrong': '--color-border-strong',
+    'onPrimary': '--color-on-primary', 'onDanger': '--color-on-danger',   # v5.7.1
 }
+
+# v5.7.1 · [TPLVAR] 界面轨模板内联 token 的短名 → palette.json screen 键
+TPL_VAR = {
+    '--primary': 'primary', '--primary-dark': 'primaryDark', '--on-primary': 'onPrimary',
+    '--accent': 'accent', '--block-primary': 'blockPrimary', '--block-accent': 'blockAccent',
+    '--tint-primary': 'tintPrimary', '--tint-accent': 'tintAccent',
+    '--success': 'success', '--warning': 'warning', '--danger': 'danger', '--on-danger': 'onDanger',
+    '--success-deep': 'successDeep', '--warning-deep': 'warningDeep', '--danger-deep': 'dangerDeep',
+    '--bg': 'bg', '--bg2': 'bgSecondary', '--surface': 'surface', '--border-strong': 'borderStrong',
+}
+RE_RGB_TRIPLE = re.compile(r'(--[A-Za-z0-9_-]+)-rgb\s*:\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})')
+RE_HEX_DEF = re.compile(r'(--[A-Za-z0-9_-]+)\s*:\s*(#[0-9A-Fa-f]{6}|#[0-9A-Fa-f]{3})\b')
+RE_DARK_SEL = re.compile(r"\[data-theme=['\"]?dark['\"]?\]\s*\{|:root:not\(\[data-theme=['\"]?light['\"]?\]\)\s*\{")
+RE_HAS_DARK = re.compile(r"data-theme=['\"]?dark|prefers-color-scheme\s*:\s*dark", re.I)
+RE_FILL_BG = re.compile(r'background(?:-color)?\s*:\s*var\(--(?:color-)?(primary|danger)\)')
+RE_WHITE_FG = re.compile(r'(?<![-\w])color\s*:\s*(?:#fff(?:fff)?|white)\b', re.I)
+
+
+def _hex6(v):
+    v = v.lstrip('#').upper()
+    return ''.join(c * 2 for c in v) if len(v) == 3 else v[:6]
+
+
+def check_template_tokens(root, p):
+    """[TPLVAR] v5.7.1：派生文件之外的内联 token。SYNC 只比四个派生文件，模板与规范里抄的那份没人比——
+    v5.7 包里深色 --danger 写成了赭石 #D97E55（两份模板），场景 06 的 --accent-rgb 停在 v5.0 主色 28,79,98。"""
+    tdir = os.path.join(root, 'templates')
+    n = 0
+    for fn in sorted(os.listdir(tdir)) if os.path.isdir(tdir) else []:
+        if not fn.endswith('.html'):
+            continue
+        src = open(os.path.join(tdir, fn), encoding='utf-8', errors='replace').read()
+        m = re.search(r':root\s*\{(.*?)\}', src, re.S)
+        if not m or '--block-primary' not in m.group(1):
+            continue   # 只认界面轨模板；deck / 物料 / 图表模板的 --accent 等是另一套语义
+        n += 1
+        blocks = [('light', m.group(1))]
+        for md in RE_DARK_SEL.finditer(src):
+            blocks.append(('dark', src[md.end():src.find('}', md.end())]))
+        for mode, body in blocks:
+            for var, val in RE_HEX_DEF.findall(body):
+                key = TPL_VAR.get(var)
+                want = p['screen'][mode].get(key, '') if key else ''
+                if want.startswith('#') and _hex6(val) != _hex6(want):
+                    fail('TPLVAR', f'templates/{fn}',
+                         f'{"亮色" if mode == "light" else "深色"} {var} = {val}，palette.json screen.{mode}.{key} 是 {want}')
+    t = 0
+    for dirpath, dirs, files in os.walk(root):
+        top = os.path.relpath(dirpath, root).split(os.sep)[0]
+        if top in SKIP_DIRS or top in PROSE_SKIP_DIRS:
+            dirs[:] = []
+            continue
+        for fn in files:
+            if fn in PROSE_SKIP_FILES or os.path.splitext(fn)[1].lower() not in ('.md', '.html', '.css', '.wxss'):
+                continue
+            fp = os.path.join(dirpath, fn)
+            src = open(fp, encoding='utf-8', errors='replace').read()
+            defs = [(mm.start(), mm.group(1), mm.group(2)) for mm in RE_HEX_DEF.finditer(src)]
+            for mt in RE_RGB_TRIPLE.finditer(src):
+                prior = [d for d in defs if d[1] == mt.group(1)]
+                if not prior:
+                    continue
+                before = [d for d in prior if d[0] < mt.start()]
+                h = (before[-1] if before else prior[0])[2]
+                got = tuple(int(x) for x in mt.group(2, 3, 4))
+                want = tuple(int(_hex6(h)[i:i + 2], 16) for i in (0, 2, 4))
+                t += 1
+                if got != want:
+                    line = src[:mt.start()].count('\n') + 1
+                    fail('TPLVAR', f'{os.path.relpath(fp, root)}:{line}',
+                         f'{mt.group(1)}-rgb = {",".join(map(str, got))}，与 {mt.group(1)} {h} 不符（应为 {",".join(map(str, want))}）')
+    print(f'  · 比对 {n} 份界面轨模板的内联 token，{t} 组 rgb 三元组')
+
 
 
 def check_sync(p):
@@ -379,6 +492,7 @@ RE_SOURCE_LINE = re.compile(r'来源[｜|]')
 BRAND_DRAWING_PREFIX = 'bywood-'
 # v5.5.1 起查的是轮页栏目「这一轮」（模板 v5.4：印不计数，页眉不报轮次，轮页左格固定写「这一轮」）
 RE_ROUND_MARK = re.compile(r'这一轮')
+RE_ROUND_TALK = re.compile(r'第\s*[一二三四五六七八九十\d]+\s*轮|上一轮|下一轮|轮次表|分轮')
 
 
 def check_fig_sources(path, xml, strict):
@@ -456,14 +570,19 @@ def scan_docx(path, allowed, strict=True):
 
 
 def check_round_mark(path, xml):
-    """轮页（BRAND-LANGUAGE 不变量 4，模板 v5.4 的 ROUND()）：对客 docx 该有固定栏目「这一轮」。
-    提示级（WARN 不 FAIL）：旧件与内部件不追溯。只查正文 document.xml——印与页眉自 v5.4 起不计数、不报轮次。"""
+    """轮页（模板 v5.4 的 ROUND()；v5.8 起按条件查）。
+    「轮」是方法核心，轮页是场景构件：只有文件自己在讲轮（第 N 轮 / 上一轮 / 下一轮 / 轮次表）却没有「这一轮」栏目时才提示。
+    单次交付、短期项目、没有轮次语言的文件不查——v5.7 以前这条对每份 docx 都提示，单轮项目收到的全是噪音。"""
     plain = re.sub(r'<[^>]+>', '', xml)
-    if not RE_ROUND_MARK.search(plain):
-        warn('ROUND', path, '没有「这一轮」栏目——对客件在刊头之下放 ROUND({ span, goal, prev, now, next })；'
-                            '首轮 / 单轮短期项目传 first: true；旧件与内部件忽略本提示')
-    else:
+    talks = RE_ROUND_TALK.search(plain)
+    has = RE_ROUND_MARK.search(plain)
+    if has:
         print('    轮页「这一轮」在')
+    elif talks:
+        warn('ROUND', path, f'正文在讲轮（「{talks.group(0)}」）却没有「这一轮」栏目——提案写了轮次表且甲方认可分轮关系时，'
+                            '在刊头之下放 ROUND({ span, goal, prev, now, next })，数字取自案史记录；只是顺口一提就忽略本提示')
+    else:
+        print('    无轮次语言，不查轮页')
 
 
 # ---------------------------------------------------------------- web
@@ -544,6 +663,9 @@ def scan_web(path, allowed, strict):
         return
     rel = os.path.relpath(path, os.getcwd())
     lines = src.splitlines()
+    # 注释块（含跨行的 /* */ 与 <!-- -->）换成等量换行，[GLYPH] 只看注释之外——注释里写「» 已退役」是说明不是使用
+    _blank = lambda m: '\n' * m.group(0).count('\n')
+    code_lines = re.sub(r'/\*.*?\*/|<!--.*?-->', _blank, src, flags=re.S).splitlines()
 
     # 样式表括号配平（v5.4.1）：多一个或少一个花括号，wxss 的 @import 会整份失败，css 会静默丢掉后面的规则
     if os.path.splitext(path)[1].lower() in ('.css', '.wxss'):
@@ -553,11 +675,30 @@ def scan_web(path, allowed, strict):
         if o != c:
             fail('SYNTAX', rel, f'花括号不配平：{{ ×{o}，}} ×{c}——多余或缺失的括号会让整份样式表失效')
 
+    # [ONFILL] v5.7.1：有深色模式的文件里，主色 / 危险色填充上写死白字
+    if RE_HAS_DARK.search(src):
+        for mr in re.finditer(r'\{([^{}]*)\}', src):
+            body = mr.group(1)
+            if RE_FILL_BG.search(body) and RE_WHITE_FG.search(body):
+                ln = src[:mr.start()].count('\n') + 1
+                if RE_OK.search(lines[ln - 1] if ln - 1 < len(lines) else ''):
+                    continue
+                which = RE_FILL_BG.search(body).group(1)
+                fail('ONFILL', f'{rel}:{ln}',
+                     f'{which} 填充上写死白字——深色模式下压在亮色填充上不够读（亮青 2.11:1 / 危险色 3.53:1），改 var(--on-{which}) / var(--color-on-{which})')
+
     for i, line in enumerate(lines, 1):
         if line.lstrip().startswith(('*', '//', '<!--')):
             continue
         if RE_OK.search(line):
             continue
+        code = code_lines[i - 1] if i - 1 < len(code_lines) else ''
+        if RE_GLYPH.search(code) or RE_GLYPH_CSS.search(code):
+            fail('GLYPH', f'{rel}:{i}', '» 已随双箭退役（区块前标 / 链接尾标 / 步骤连接符，BRAND.md §4）——层级交给字重与主色，步骤交给编号')
+        for mv in RE_VAR_DEF.finditer(code):
+            segs = mv.group(1)[2:].lower().split('-')
+            if HUE_SEGS & set(segs):
+                fail('NAMING', f'{rel}:{i}', f'CSS 变量 {mv.group(1)} 带色相名，改角色名（--primary / --accent / --tint-primary …，palette.json meta.namingRule）')
         # 骨架屏微光是渐变禁令的唯一豁免——标记可能写在上一两行的注释里
         ctx = '\n'.join(lines[max(0, i - 3):i]).lower()
 
@@ -589,6 +730,320 @@ def scan_web(path, allowed, strict):
             val = ms.group(1).strip()
             if 'shadow-sheet' not in val and val not in ('none', 'inherit'):
                 fail('SHADOW', f'{rel}:{i}', f'box-shadow: {val[:44]}（阴影仅抽屉 --shadow-sheet 一档）')
+
+    if os.path.splitext(path)[1].lower() in ('.html', '.htm'):
+        check_mode_html(path, src)
+
+
+# ---------------------------------------------------------------- MODE（v5.8 生成层）
+# 只验必需槽位、角色、无图 / 纯文本降级与页序，不评审美（COMPOSITION.md §四）。角色与槽位词表只认 composition/roles.json。
+from html.parser import HTMLParser
+
+ROLES_PATH = os.path.join(ROOT, 'composition', 'roles.json')
+_ROLES = None
+VOID = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr',
+        'path', 'rect', 'circle', 'line', 'use', 'polyline', 'polygon', 'ellipse', 'stop'}
+DEGRADE_FLAGS = [('narrow', 'narrow'), ('images_may_be_blocked', 'no-image'), ('static_frame_seen', 'static'),
+                 ('scripted', 'no-js'), ('plain_text', 'plain-text'), ('print', 'print')]
+
+
+def roles_vocab():
+    global _ROLES
+    if _ROLES is None:
+        try:
+            _ROLES = json.load(open(ROLES_PATH, encoding='utf-8'))
+        except Exception as e:
+            _ROLES = {}
+            fail('MODE', os.path.relpath(ROLES_PATH, ROOT), f'读不出角色词表：{e}')
+    return _ROLES
+
+
+class _N:
+    __slots__ = ('tag', 'attrs', 'kids', 'text', 'parent')
+
+    def __init__(self, tag, attrs, parent):
+        self.tag, self.attrs, self.kids, self.text, self.parent = tag, dict(attrs), [], [], parent
+
+
+class _Tree(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.root = _N('#root', [], None)
+        self.cur = self.root
+
+    def handle_starttag(self, tag, attrs):
+        n = _N(tag, attrs, self.cur)
+        self.cur.kids.append(n)
+        if tag not in VOID:
+            self.cur = n
+
+    def handle_startendtag(self, tag, attrs):
+        self.cur.kids.append(_N(tag, attrs, self.cur))
+
+    def handle_endtag(self, tag):
+        n = self.cur
+        while n is not self.root and n.tag != tag:
+            n = n.parent
+        if n is not self.root:
+            self.cur = n.parent
+
+    def handle_data(self, data):
+        if self.cur.tag not in ('style', 'script'):
+            self.cur.kids.append(data)
+
+
+def _walk(n):
+    for k in n.kids:
+        if isinstance(k, _N):
+            yield k
+            yield from _walk(k)
+
+
+def _text(n):
+    out = []
+    for k in n.kids:
+        if isinstance(k, str):
+            out.append(k)
+        elif k.tag not in ('svg', 'style', 'script'):
+            out.append(_text(k))
+    return re.sub(r'\s+', ' ', ''.join(out).replace('\xa0', ' ')).strip()
+
+
+def _slots_of(region):
+    """region 自己的槽位：不往下钻进嵌套的 data-bw-role。"""
+    out = []
+
+    def rec(n):
+        for k in n.kids:
+            if not isinstance(k, _N):
+                continue
+            if 'data-bw-slot' in k.attrs:
+                out.append(k)
+            if 'data-bw-role' not in k.attrs:
+                rec(k)
+    rec(region)
+    return out
+
+
+def _resolve(content, ref):
+    node = content
+    for part in (ref or '').split('.'):
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node
+
+
+def _expected_roles(contract_path):
+    try:
+        c = json.load(open(contract_path, encoding='utf-8'))
+        content = {}
+        if c.get('content'):
+            content = json.load(open(os.path.join(os.path.dirname(contract_path), c['content']), encoding='utf-8'))
+        return [pg['role'] for pg in c['narrative'] if not pg.get('when') or _resolve(content, pg['when'])]
+    except Exception:
+        return None
+
+
+def check_mode_html(path, src):
+    if 'data-bw-role' not in src:
+        return
+    V = roles_vocab()
+    if not V:
+        return
+    rel = os.path.relpath(path, os.getcwd())
+    t = _Tree()
+    t.feed(src)
+    regions = [n for n in _walk(t.root) if 'data-bw-role' in n.attrs]
+    tally = {}
+    for r in regions:
+        role = r.attrs['data-bw-role']
+        where = f'{rel} #{r.attrs.get("id") or role}'
+        spec = V['roles'].get(role)
+        if not spec:
+            fail('MODE', where, f'未知角色 {role}（composition/roles.json 只有 {"/".join(V["roles"])}）')
+            continue
+        tally[role] = tally.get(role, 0) + 1
+        slots = _slots_of(r)
+        names = [s.attrs['data-bw-slot'] for s in slots]
+        for s, nm in zip(slots, names):
+            if nm not in V['slots']:
+                fail('MODE', where, f'未知槽位 {nm}')
+                continue
+            has_graphic = any(k.tag in ('svg', 'img') for k in _walk(s)) or s.tag in ('svg', 'img')
+            if not _text(s) and not has_graphic and not s.attrs.get('aria-label', '').strip():
+                fail('MODE', where, f'槽位 {nm} 是空的（运行时由脚本填的标志，在槽位上写 aria-label）')
+            if nm == 'evidence' and has_graphic:
+                alt = (any(k.tag in ('figcaption', 'table') and _text(k) for k in _walk(s))
+                       or s.attrs.get('data-bw-alt', '').strip()
+                       or any(k.tag == 'img' and k.attrs.get('alt', '').strip() for k in _walk(s)))
+                if not alt:
+                    fail('MODE', where, '证据是图但没有文字替代（figcaption / table / data-bw-alt）——无图降级后证据整个消失')
+        for need in spec.get('required', []):
+            if need not in names:
+                fail('MODE', where, f'{spec["zh"]}页缺必需槽位 {need}——{spec["rule"]}')
+        if spec.get('required_any') and not set(spec['required_any']) & set(names):
+            fail('MODE', where, f'{spec["zh"]}页至少要有 {" / ".join(spec["required_any"])} 之一')
+        for nm, mx in spec.get('max', {}).items():
+            if names.count(nm) > mx:
+                fail('MODE', where, f'{spec["zh"]}页 {nm} ×{names.count(nm)}，上限 {mx}——{spec["rule"]}')
+        for nm in spec.get('discouraged', []):
+            if nm in names:
+                warn('MODE', where, f'{spec["zh"]}页里放了 {nm}——它其实是另一种角色？按那种角色标注和验收')
+
+    # 纯文本降级：声明了 data-bw-plain 的块，每个槽位的每个词都要在纯文本版里找得到
+    for n in _walk(t.root):
+        plain = n.attrs.get('data-bw-plain')
+        if not plain:
+            continue
+        pp = os.path.join(os.path.dirname(path), plain)
+        if not os.path.exists(pp):
+            fail('MODE', rel, f'声明了纯文本版 {plain}，文件不存在')
+            continue
+        ptxt = re.sub(r'\s+', ' ', open(pp, encoding='utf-8').read())
+        for s in _slots_of(n):
+            miss = [w for w in re.split(r'[\s·→｜|]+', _text(s)) if w and w not in ptxt]
+            if miss:
+                fail('MODE', rel, f'纯文本版缺 {s.attrs["data-bw-slot"]} 的「{" ".join(miss)}」——纯文本降级必须完整')
+
+    # 页序：成品与生成契约一致（契约里 when 不成立的页不计）
+    cpath = next((n.attrs.get('data-bw-contract') for n in _walk(t.root) if n.tag == 'html'), None)
+    if cpath:
+        cands = [os.path.join(os.path.dirname(path), cpath)]
+        cands += [os.path.join(dp, cpath) for dp, _, fn in os.walk(os.path.join(ROOT, 'composition')) if cpath in fn]
+        cp = next((c for c in cands if os.path.exists(c)), None)
+        if not cp:
+            fail('MODE', rel, f'声明的生成契约 {cpath} 找不到')
+        else:
+            want = _expected_roles(cp)
+            top = [r.attrs['data-bw-role'] for r in regions if not any('data-bw-role' in a.attrs for a in _ancestors(r))]
+            if want is not None and want != top:
+                fail('MODE', rel, f'页序与契约不一致：契约 {"→".join(want)}，成品 {"→".join(top)}')
+    summary = ' '.join(f'{V["roles"][k]["zh"]}×{v}' for k, v in tally.items())
+    print(f'  · {os.path.basename(path)}: 角色 {summary}')
+
+
+def _ancestors(n):
+    p = n.parent
+    while p is not None:
+        yield p
+        p = p.parent
+
+
+def check_contract(path):
+    """生成契约（*.contract.json）：字段形状 + 跨字段规则。"""
+    V = roles_vocab()
+    if not V:
+        return
+    rel = os.path.relpath(path, os.getcwd())
+    try:
+        c = json.load(open(path, encoding='utf-8'))
+    except Exception as e:
+        fail('MODE', rel, f'契约读不出：{e}')
+        return
+    for k in ('id', 'status', 'tier', 'task', 'reading', 'media', 'narrative', 'priority', 'degrade', 'adapt'):
+        if k not in c:
+            fail('MODE', rel, f'契约缺字段 {k}（composition/mode.schema.json）')
+    if c.get('task') not in V['tasks']:
+        fail('MODE', rel, f'task {c.get("task")} 不在 {"/".join(V["tasks"])} 里')
+    if c.get('reading', {}).get('mode') not in V['reading']:
+        fail('MODE', rel, f'reading.mode {c.get("reading", {}).get("mode")} 不在 {"/".join(V["reading"])} 里')
+    base = os.path.dirname(path)
+    content = None
+    if c.get('content'):
+        cp = os.path.join(base, c['content'])
+        if os.path.exists(cp):
+            content = json.load(open(cp, encoding='utf-8'))
+        else:
+            fail('MODE', rel, f'内容文件 {c["content"]} 不存在')
+    used = set()
+    for i, pg in enumerate(c.get('narrative', []), 1):
+        role, slots = pg.get('role'), pg.get('slots', [])
+        where = f'{rel} narrative[{pg.get("id", i)}]'
+        spec = V['roles'].get(role)
+        if not spec:
+            fail('MODE', where, f'未知角色 {role}')
+            continue
+        bad = [s for s in slots if s not in V['slots']]
+        if bad:
+            fail('MODE', where, '未知槽位 ' + ' '.join(bad))
+        for need in spec.get('required', []):
+            if need not in slots:
+                fail('MODE', where, f'{spec["zh"]}页缺必需槽位 {need}——契约阶段就该补上，不要等成品')
+        if spec.get('required_any') and not set(spec['required_any']) & set(slots):
+            fail('MODE', where, f'{spec["zh"]}页至少要有 {" / ".join(spec["required_any"])} 之一')
+        if content is not None and pg.get('use') and not (pg.get('when') and not _resolve(content, pg['when'])):
+            if _resolve(content, pg['use']) is None:
+                fail('MODE', where, f'use: {pg["use"]} 在内容文件里找不到')
+        used |= set(slots)
+    pri = c.get('priority', {})
+    p0 = pri.get('P0', [])
+    if not p0:
+        fail('MODE', rel, 'priority.P0 为空——总得有东西在任何降级下都留下')
+    lost = [s for s in p0 if s not in used]
+    if lost:
+        fail('MODE', rel, 'P0 槽位没有出现在任何一页：' + ' '.join(lost))
+    media, deg = c.get('media', {}), c.get('degrade', {})
+    for flag, key in DEGRADE_FLAGS:
+        if media.get(flag) and key not in deg:
+            fail('MODE', rel, f'media.{flag} 为真但没有 degrade["{key}"]——{V["degrade"][key]["test"]}')
+    for key, d in deg.items():
+        if key not in V['degrade']:
+            fail('MODE', rel, f'未知降级 {key}')
+            continue
+        gone = [s for s in p0 if s not in d.get('keeps', [])]
+        if gone:
+            fail('MODE', rel, f'降级 {key} 丢了 P0 槽位 {" ".join(gone)}——P0 的意思就是任何降级下都在')
+    st = c.get('status')
+    if st in ('golden', 'delivered'):
+        g = c.get('golden')
+        if not g or not os.path.exists(os.path.join(base, g)):
+            fail('MODE', rel, f'status={st} 但黄金样张 {g} 不存在')
+        if media.get('plain_text'):
+            pl = c.get('plain')
+            if not pl or not os.path.exists(os.path.join(base, pl)):
+                fail('MODE', rel, f'media.plain_text 为真但纯文本版 {pl} 不存在')
+    elif st == 'draft' and c.get('golden'):
+        warn('MODE', rel, 'status=draft 却写了 golden——有样张就改成 golden')
+    print(f'  · {os.path.basename(path)}: {V["tasks"].get(c.get("task"), {}).get("zh", "?")} · '
+          f'{len(c.get("narrative", []))} 页 · 降级 {"/".join(deg) or "无"} · {st}')
+
+
+def check_prose(root, allowed):
+    """[PROSE] v5.7：规范文本漂移。v5 换届时机器闸只认色值，散文里的旧口径（墨青写成旧深藏蓝的值、
+    「红＝信号系统」、「深蓝主块」、图表色序表停在 v4）没有任何东西拦，一直漏到 v5.6.1。"""
+    ok_hex = set(allowed) | LOGO_ALLOWED | NEUTRAL | ALLOWED_EXTRA
+    n = 0
+    for dirpath, dirs, files in os.walk(root):
+        rel_dir = os.path.relpath(dirpath, root)
+        top = rel_dir.split(os.sep)[0]
+        if top in PROSE_SKIP_DIRS or top in SKIP_DIRS:
+            dirs[:] = []
+            continue
+        for fn in files:
+            ext = os.path.splitext(fn)[1].lower()
+            is_md = ext == '.md'
+            is_code = (ext in ('.py', '.js') and top in ('tokens', 'templates')) or \
+                      (ext == '.html' and top in ('templates', '.'))   # v5.7：页面里的说明文字也是规范的一部分
+            if fn in PROSE_SKIP_FILES or not (is_md or is_code):
+                continue
+            fp = os.path.join(dirpath, fn)
+            rel = os.path.relpath(fp, root)
+            n += 1
+            for i, line in enumerate(open(fp, encoding='utf-8', errors='replace'), 1):
+                if RE_OK.search(line) or RE_RELEASE_NOTE.match(line):
+                    continue
+                clauses = [c for c in RE_CLAUSE.split(line) if not RE_HISTORY.search(c)]
+                hit = next((n for c in clauses for n in RETIRED_NAMES if n in c), None)
+                if hit:
+                    fail('PROSE', f'{rel}:{i}', f'已退役色名「{hit}」写在现行口径里——改现行色名，或在同一分句写明这是历史（退役 / 当时 / 此前…）')
+                if is_md:
+                    for c in clauses:
+                        for h in re.findall(r'#([0-9A-Fa-f]{6})\b|`([0-9A-Fa-f]{6})`', c):
+                            h = h[0] or h[1]
+                            if h.upper() not in ok_hex:
+                                fail('PROSE', f'{rel}:{i}', f'规范文本里的色板外色值 #{h}——改成 palette.json 的现行值，或写明这是历史 / 反例（ok: 理由）')
+    print(f'  · 扫过 {n} 份规范文本与 token / 模板源码')
 
 
 # ---------------------------------------------------------------- main
@@ -654,6 +1109,97 @@ def check_teal_containment(root, targets):
         print(f'  · 标志青未当前景用（品牌面色写法 {fields} 处）')
 
 
+COMP_DIR = os.path.join(ROOT, 'composition')
+
+
+CASES_PATH = os.path.join(ROOT, 'composition', 'cases', 'case-records.json')
+RE_NUMTOK = re.compile(r'\d+(?:[.,]\d+)*')
+RE_MONEY = re.compile(r'含税|首报|成交价|付款|[¥￥]\s*\d|\d\s*元|万\s*/\s*月|(?:报价|单价|预算|总价)\s*[:：]?\s*\d|\d[\d.,]*\s*万\s*(?:元|档|预算)')
+CASE_TEXT_FIELDS = ('judgement', 'business', 'left_for_next', 'watch_next', 'reuse_note')
+
+
+def check_cases(mirror):
+    """案史派生记录（v5.8.1）：正本是 bywood-proposal 的案例索引。记录里每个数字都要在索引里写有该案名的行中逐字出现；
+    不写金额；索引写了对外匿名的案子不许标 public；prev 链要接得上。找不到 skill 目录时只查结构。"""
+    if not os.path.exists(CASES_PATH):
+        print('  · 没有 composition/cases/，跳过')
+        return
+    rel = os.path.relpath(CASES_PATH, ROOT)
+    try:
+        recs = json.load(open(CASES_PATH, encoding='utf-8'))['records']
+    except Exception as e:
+        fail('CASE', rel, f'读不出：{e}')
+        return
+    ids = {r.get('id') for r in recs}
+    idx_cache = {}
+    for r in recs:
+        rid = r.get('id', '?')
+        where = f'{rel} {rid}'
+        for k in ('id', 'index_ref', 'client', 'project', 'span', 'judgement', 'doc_feedback', 'business', 'execution', 'reuse'):
+            if k not in r:
+                fail('CASE', where, f'缺字段 {k}（composition/case-record.schema.json）')
+        ex = r.get('execution') if isinstance(r.get('execution'), dict) else {}
+        df = r.get('doc_feedback') if isinstance(r.get('doc_feedback'), dict) else {}
+        texts = [r.get(k, '') or '' for k in CASE_TEXT_FIELDS]
+        texts += [ex.get(k, '') or '' for k in ('metric', 'value', 'baseline', 'scope')]
+        texts.append(df.get('text', '') or '')
+        texts = [t for t in texts if isinstance(t, str)]
+        for t in texts:
+            m = RE_MONEY.search(t)
+            if m:
+                fail('CASE', where, f'出现金额字样「{m.group(0)}」——合同价、报价、单价、预算只留在案例索引，设计系统里的记录不写')
+        if r.get('prev') and r['prev'] not in ids:
+            fail('CASE', where, f'prev 指向不存在的记录 {r["prev"]}')
+        ref = r.get('index_ref') or {}
+        if not mirror:
+            continue
+        ip = os.path.join(mirror, ref.get('file', ''))
+        if ip not in idx_cache:
+            idx_cache[ip] = open(ip, encoding='utf-8').read().splitlines() if os.path.exists(ip) else None
+        lines = idx_cache[ip]
+        if lines is None:
+            fail('CASE', where, f'案例索引 {ref.get("file")} 不存在')
+            continue
+        hit = [ln for ln in lines if ref.get('case') and ref['case'] in ln]
+        if not hit:
+            fail('CASE', where, f'案例索引里找不到「{ref.get("case")}」')
+            continue
+        src = '\n'.join(hit)
+        miss = sorted({tok for t in texts for tok in RE_NUMTOK.findall(t) if tok not in src})
+        if miss:
+            fail('CASE', where, '这些数在案例索引里找不到：' + ' '.join(miss) + '——先记进索引，再进记录')
+        if r.get('reuse') == 'public' and '匿名' in src:
+            fail('CASE', where, '案例索引写了对外匿名，记录却标 public')
+    print(f'  · {len(recs)} 条记录' + (f'，数字逐个对过案例索引（{mirror}）' if mirror else '，未找到 skill 目录，只查了结构'))
+
+
+def check_compose(root):
+    """自检：composition/ 下每份契约过 check_contract；status=golden 的再用 compose.py 重生成一遍，与磁盘上的样张逐字比对。"""
+    if not os.path.isdir(COMP_DIR):
+        print('  · 没有 composition/，跳过')
+        return
+    paths = sorted(os.path.join(dp, f) for dp, _, fn in os.walk(COMP_DIR) for f in fn if f.endswith('.contract.json'))
+    for cp in paths:
+        check_contract(cp)
+    comp_py = os.path.join(root, 'tools', 'compose.py')
+    if not os.path.exists(comp_py):
+        return
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('bw_compose', comp_py)
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(mod)
+        for cp in paths:
+            for out, text in mod.build(cp):
+                r = os.path.relpath(out, root)
+                if not os.path.exists(out) or open(out, encoding='utf-8').read() != text:
+                    fail('MODE', r, '黄金样张与契约 / 内容不一致（被手改，或改了内容没重跑）——跑 python3 tools/compose.py')
+                else:
+                    print(f'  · {r} 与契约一致')
+    except Exception as e:
+        fail('MODE', 'tools/compose.py', f'重生成失败：{e}')
+
+
 def walk(target):
     if os.path.isfile(target):
         yield target
@@ -698,6 +1244,16 @@ def main(argv):
         else:
             print('  · 未找到 skill 安装目录，跳过（可用 --mirror=<路径> 指定）')
 
+    if targets == [ROOT]:
+        print('\n[PROSE] 规范文本漂移')
+        check_prose(ROOT, allowed)
+        print('\n[TPLVAR] 模板与规范里的内联 token')
+        check_template_tokens(ROOT, p)
+        print('\n[MODE] 生成契约与黄金样张')
+        check_compose(ROOT)
+        print('\n[CASE] 案史派生记录')
+        check_cases(mirror)
+
     print('\n[LOGO] 标志原件与标志青围栏')
     if targets == [ROOT]:
         check_logo(ROOT)
@@ -714,6 +1270,8 @@ def main(argv):
                 scan_docx(path, doc_allowed, strict); n += 1
             elif ext in WEB_EXT:
                 scan_web(path, allowed, strict); n += 1
+            elif path.endswith('.contract.json') and not (targets == [ROOT] and os.path.abspath(path).startswith(COMP_DIR)):
+                check_contract(path); n += 1
     print(f'  · 扫过 {n} 个文件')
 
     print()

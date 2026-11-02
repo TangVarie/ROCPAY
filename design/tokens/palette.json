@@ -2,13 +2,14 @@
   "$schema": "内部约定，非标准 JSON Schema",
   "meta": {
     "version": "v5.1",
-    "updated": "2026-09-02",
+    "updated": "2026-10-29",
     "authority": "本文件是 BYWOOD 全轨色板的唯一事实源。四个派生文件——tokens/globals.css、tokens/miniprogram.wxss、templates/docx-template.js 的 COLORS 常量、tokens/chart-palette.py——全部从这里取值；任何一处与本文件不一致 = 构建错误，不是审美分歧。",
     "howToChange": "改色板 = 改本文件 → 同步四个派生文件 → 跑 tools/check-design.py（会逐个比对派生文件与本文件，不一致直接 FAIL）→ 更新 CHANGELOG。禁止只改派生文件。",
     "v3Decision": "v3 取消克莱因蓝 #012FA7（IKB，来自第三方 Swiss 模板的默认高亮色，非本品牌识别源），全轨统一到标志藏蓝 #235E8E。同时合并两组近似色：钢蓝 #146292 → 藏蓝 #235E8E（RGB 差 15/4/4）、旧品牌红 #E7141A → 品牌红适配档 #D9232B（差 14/15/17）。注意并入目标不是标志正红 #E5262B——那一档只给标志图形，文字线条色块都不用。回退方法见 CHANGELOG.md §回退。",
     "namingRule": "token 名一律按角色命名，不按色相。v4→v5 的迁移成本九成来自 blue/red/sky/blush 这类色相名——换一次品牌色就要改一遍键名、CSS 变量、模板与散文。v5 起：brand=primary/accent 系，screen=blockPrimary/tintAccent 系，doc=PRIMARY/ACCENT/TINT_* 系。下次换色只改值，不改名。新增 token 若带色相名，机器闸 NAMING 判 FAIL。",
     "v5Decision": "v5 换标升级：标志由「双箭分发」（藏蓝 #235E8E + 正红 #E5262B）换为「山形」（标志青 #7ED1CD）。色板随之换届为青赭双色制：primary 藏青 #1C4F62 接『动作与结构』，accent 赭石 #B8502F 接旧品牌红的『价值与增长』全部角色；标志青隔离为仅标志图形可用（白底 1.77:1）。渐变版 Logo 整体退役。双箭图形语言退役，由山形弧带接替。三项待决已裁：(1) 警示 callout 跟 accent 走，与打法句共用赭杠，「警示｜」由区分手段升为强制前缀；(2) demo-v5 与本文件冲突时以本文件为准，demo 重刷；(3) 负面清单 #4 由「以标志为唯一基准」改写为「取值色/推导色二分 + 来源必须留痕」，本节 brand 各色的 source 字段即该制度的落地物。回退方法：brand/screen/doc/chart 四节改回 v4.0 值（见 CHANGELOG v3.0/v4.0 节）→ 同步四个派生文件 → logo/ 换回双箭原件 → 跑 check-design.py → CHANGELOG 记一笔。 【拿到标志原件后的四处修正】(a) primary 的出身更正为标志渐变冷端 #3CAAD2 的深色档，同色相同饱和，#4 的合规性由此坐实；(b) 深色模式主色由推导色 #4E94A9 换为取值色 #3CAAD2（对比 5.44→6.99），按钮文字随之由白字改墨字——v4 的白字压主色本就只有 3.42:1，是顺带修掉的旧账；(c) 渐变版 Logo 由「整体退役」改为「围栏保留」，见 DESIGN.md 负面清单 #2；(d) teal-on-light 的 ≥24px 下限撤销，改为只约束独立山形，理由见 BRAND.md §3 实测。",
-    "v51Decision": "v5.1 标志青回归（2026-09-02 拍板，按业界通行做法裁决）：(1) 工作主色回到标志本体的色相——标志实心青 #7ED1CD 是 H177°，v5.0 的主色 #1C4F62 取自渐变冷端 #3CAAD2（H196°），比标志偏蓝 19°，整套产物读成「深湖蓝」而认不出标志。新主色 #1E5754 = 标志青同色相同饱和（H177° S49%）的深档（L66%→23%），白底 8.25:1，标志青压其上 4.67:1；换色相不是无障碍逼的——H177° 上同样取得到 8–9:1。(2) 标志青由「仅标志图形」放开为「标志图形 + 品牌面色（field）」：做底不做字。墨字压青 9.85:1、主色字压青 4.67:1 都过，赭石压青 2.81 不许，白字压青 1.77 不许；青面上标志用单色墨版（青山形在青面上会消失）。这正是 Tiffany 这类浅青签名色的通行用法——盒子是青的，字是黑的。docx 轨零底纹不收青面。(3) 深色模式主色由渐变冷端 #3CAAD2 换为渐变暖端 #6AC1BD（H177°，取值色），深底 8.85:1；按钮仍压墨字。(4) 图表四组标尺按新主色重推导（顺序标尺亮度等步；发散两极亮度差 21%→9%；第 3 序中青下调到 2/3 序与 3/4 序灰度可分性各约 1.2，v5.0 的 1.12 继承伤两侧配平）。(5) 命名零变更（只改值不改名，v5 namingRule 的第一次兑现）；新增 screen.*.fieldBrand 一个角色 token。回退：本节四色改回 v5.0 值 → 同步四个派生文件 → check-design.py → CHANGELOG 记一笔。"
+    "v51Decision": "v5.1 标志青回归（2026-09-02 拍板，按业界通行做法裁决）：(1) 工作主色回到标志本体的色相——标志实心青 #7ED1CD 是 H177°，v5.0 的主色 #1C4F62 取自渐变冷端 #3CAAD2（H196°），比标志偏蓝 19°，整套产物读成「深湖蓝」而认不出标志。新主色 #1E5754 = 标志青同色相同饱和（H177° S49%）的深档（L66%→23%），白底 8.25:1，标志青压其上 4.67:1；换色相不是无障碍逼的——H177° 上同样取得到 8–9:1。(2) 标志青由「仅标志图形」放开为「标志图形 + 品牌面色（field）」：做底不做字。墨字压青 9.85:1、主色字压青 4.67:1 都过，赭石压青 2.81 不许，白字压青 1.77 不许；青面上标志用单色墨版（青山形在青面上会消失）。这正是 Tiffany 这类浅青签名色的通行用法——盒子是青的，字是黑的。docx 轨零底纹不收青面。(3) 深色模式主色由渐变冷端 #3CAAD2 换为渐变暖端 #6AC1BD（H177°，取值色），深底 8.85:1；按钮仍压墨字。(4) 图表四组标尺按新主色重推导（顺序标尺亮度等步；发散两极亮度差 21%→9%；第 3 序中青下调到 2/3 序与 3/4 序灰度可分性各约 1.2，v5.0 的 1.12 继承伤两侧配平）。(5) 命名零变更（只改值不改名，v5 namingRule 的第一次兑现）；新增 screen.*.fieldBrand 一个角色 token。回退：本节四色改回 v5.0 值 → 同步四个派生文件 → check-design.py → CHANGELOG 记一笔。",
+    "v571Note": "包 v5.7.1：主色 / 危险按钮上的字收成 token（2026-10-29，Ziao 授权按设计判断定案；色值零变更）：(1) 新增 screen.*.onPrimary：亮色 #FFFFFF、深色 #0F1318——此前只写在 _darkButtonRule 的说明里，没有 token，官网 / 小程序模板与 miniprogram.wxss 的主色按钮在深色模式下都写死白字，压在亮青上只有 2.11:1；(2) 新增 screen.*.onDanger：亮色 #FFFFFF（4.82:1）、深色 #0F1318（5.28:1）——深色危险色 #E8575C 上白字只有 3.53:1，规则与主色按钮同构：深色模式下浅色填充一律压墨字。深色模式危险按钮的按下态 #C64449 压墨字 3.84:1，只持续 120ms，按状态件 3:1 线放行；(3) 不改任何已有色值、不改名；doc / brand / chart 节零变更，所以色板版本戳仍为 v5.1（skill 侧 docx 镜像不必重刷）。回退：删两个键 → 同步 globals.css / miniprogram.wxss / 模板 → check-design.py。"
   },
   "brand": {
     "logoMark": {
@@ -40,7 +41,7 @@
     "accent": {
       "hex": "#B8502F",
       "name": "赭石",
-      "role": "价值与增长（完整继承 v4 品牌红角色）：金额/收益数字、链接、增量 +N、强调数据块、docx 信号系统三位置、警示 callout（靠「警示｜」强制前缀区分）",
+      "role": "价值与增长（完整继承 v4 品牌红角色）：金额/收益数字、链接、增量 +N、强调数据块、docx 信号系统五位置（2026-09-03 在 bywood-proposal 侧由三位补为五位，v5.7 回写进包）、警示 callout（靠「警示｜」强制前缀区分）",
       "source": "推导色 · 「山—土」调性对偶，暖土色系取白底 ≥4.5:1 的最深可用档。注：本色不是标志青的色轮互补色（那是 H357，即已退役的旧品牌红），互补论证不成立，理由以调性对偶为准",
       "hsl": "14, 59%, 45%",
       "contrastOnWhite": 4.97
@@ -69,10 +70,11 @@
     "dualColorMoment": "两色同时高饱和出现只留给品牌时刻：Logo（深底）、启动页、登录页、封面、里程碑"
   },
   "screen": {
-    "_comment": "界面轨专用（App/H5/官网/后台/小程序）。派生文件：tokens/globals.css、tokens/miniprogram.wxss。v5.1 新增 fieldBrand（品牌面色 = 标志青）：只做底，块内墨字或主色字；每屏 ≤1 块，不与主色块相邻",
+    "_comment": "界面轨专用（App/H5/官网/后台/小程序）。派生文件：tokens/globals.css、tokens/miniprogram.wxss。v5.1 新增 fieldBrand（品牌面色 = 标志青）：只做底，块内墨字或主色字；每屏 ≤1 块，不与主色块相邻。包 v5.7.1 新增 onPrimary / onDanger：压在主色 / 危险色填充上的字，深色模式为墨字",
     "light": {
       "primary": "#1E5754",
       "primaryDark": "#16413F",
+      "onPrimary": "#FFFFFF",
       "accent": "#B8502F",
       "money": "#B8502F",
       "blockPrimary": "#1E5754",
@@ -84,6 +86,7 @@
       "warning": "#FF8F1F",
       "danger": "#D92B3C",
       "dangerDark": "#B02330",
+      "onDanger": "#FFFFFF",
       "successDeep": "#006B4A",
       "warningDeep": "#995400",
       "dangerDeep": "#B02330",
@@ -101,6 +104,7 @@
     "dark": {
       "primary": "#6AC1BD",
       "primaryDark": "#48A8A3",
+      "onPrimary": "#0F1318",
       "accent": "#D97E55",
       "money": "#D97E55",
       "blockPrimary": "#1E5754",
@@ -112,6 +116,7 @@
       "warning": "#FFA24D",
       "danger": "#E8575C",
       "dangerDark": "#C64449",
+      "onDanger": "#0F1318",
       "successDeep": "#7FE0BD",
       "warningDeep": "#FFC38A",
       "dangerDeep": "#FF9A9E",
@@ -126,7 +131,7 @@
       "border": "rgba(255,255,255,0.10)",
       "borderStrong": "#2B3440"
     },
-    "_darkButtonRule": "深色模式主色按钮用 bg 墨字（#0F1318）不用白字：亮青上白字仅 2.11:1，墨字 8.85:1"
+    "_darkButtonRule": "深色模式主色按钮与危险按钮压墨字（onPrimary / onDanger = bg #0F1318）不压白字：亮青上白字仅 2.11:1、深色危险色上白字仅 3.53:1；墨字分别为 8.85:1、5.28:1（包 v5.7.1 收成 token）"
   },
   "doc": {
     "_comment": "文档轨专用（对客 docx / pptx）。派生文件：templates/docx-template.js 的 COLORS 常量。docx 色板白名单 = 本节全部值 + FFFFFF/000000/auto，宽度恒为 10 色。v5：BLUE→PRIMARY、RED→ACCENT、SKY_*→TINT_*（键名去色相化，见 meta.namingRule）。不新增赭石浅调位——doc 轨自 v4 起零底纹，没有构件会用它，也没有旧件需要它合法。 v5.1：主色换值不换名；标志青面色不进 docx 白名单（纸面零底纹）。",
@@ -143,7 +148,7 @@
     "_roles": {
       "PRIMARY": "H1 章号 + 粗规则线 + 表顶线与图顶线 + H2 编号 + 图题编号 + 次级引用杠 + 页眉页脚细节（白底 8.25:1）",
       "PRIMARY_DEEP": "深色块底（白字）备用档，v5 无 docx 构件使用，留给演示轨满版底",
-      "ACCENT": "赭＝信号系统（继承 v4 红＝信号系统）：封面信息行底线 + 打法句赭杠 + 每页 ≤1 处关键数字。警示与打法共用赭杠，靠「警示｜」强制前缀区分——赭石的内在警示语义弱于红，前缀是必写项不是可选项",
+      "ACCENT": "赭＝信号系统（继承 v4 红＝信号系统，2026-09-03 由三位扩为五位）：首页信息行底线 + 打法句 / 警示赭杠 + 每页 ≤1 处信号数字 + 截图圈注 + 图内唯一强调项，正文页恰好一处。警示与打法共用赭杠，靠「警示｜」强制前缀区分——赭石的内在警示语义弱于红，前缀是必写项不是可选项",
       "INK": "正文与 H2（不变）",
       "GREY": "NOTE 灰注、页脚（不变）",
       "LINE": "发丝线（不变）",
@@ -306,8 +311,20 @@
     },
     {
       "name": "深色主色按钮压墨字",
-      "fg": "screen.dark.bg",
+      "fg": "screen.dark.onPrimary",
       "bg": "screen.dark.primary",
+      "min": 4.5
+    },
+    {
+      "name": "亮色危险按钮白字",
+      "fg": "screen.light.onDanger",
+      "bg": "screen.light.danger",
+      "min": 4.5
+    },
+    {
+      "name": "深色危险按钮压墨字",
+      "fg": "screen.dark.onDanger",
+      "bg": "screen.dark.danger",
       "min": 4.5
     },
     {

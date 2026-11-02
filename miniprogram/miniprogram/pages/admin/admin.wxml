@@ -306,7 +306,7 @@
     <!-- ================= 记录 ================= -->
     <block wx:if="{{tab==='records'}}">
       <!-- 可发额度（运行式余额）：充值累加携带结余；员工看着剩余往下走（发放员/管理员都可用） -->
-      <view class="block block-blue bal" wx:if="{{period}}">
+      <view class="block block-primary bal" wx:if="{{period}}">
         <view class="bal-top">
           <text class="bal-label">可发额度 · 剩余</text>
           <!-- 台账计算器，发放员/管理员都可记（后端同样只要求 isAdmin） -->
@@ -383,7 +383,7 @@
 
       <!-- 汇总（跟随筛选：范围内合计/动账，即期间或单人资金消耗） -->
       <view class="statrow" wx:if="{{stats}}">
-        <view class="block tint-sky stat-main">
+        <view class="block tint-primary stat-main">
           <view class="sm-label">{{recFilter.target || recFilter.targetOpenid ? recFilter.targetLabel + ' · 往来合计' : '发放合计'}}</view>
           <view class="sm-num num">¥{{statsTotalYuan}}</view>
           <view class="sm-sub">共 {{stats.total}} 笔 · 已到账 {{stats.success_count}} 笔 · 实际动账 ¥{{statsPaidYuan}}{{stats.cancelled_count > 0 ? ' · 撤回 ' + stats.cancelled_count + ' 笔' : ''}}</view>
@@ -391,11 +391,11 @@
         <!-- 两个在途状态分开数：待领取 = 客户还没点领取（未过期）；待确认 = 已发起转账、客户还没在微信里确认。
              原先这里标"待确认"、数的却是两者之和 -->
         <view class="stat-side">
-          <view class="block tint-sky stat-mini">
+          <view class="block tint-primary stat-mini">
             <view class="smm-label">待领取</view>
             <view class="smm-num num t-dark">{{stats.unclaimedText}}</view>
           </view>
-          <view class="block tint-blush stat-mini">
+          <view class="block tint-accent stat-mini">
             <view class="smm-label">待确认</view>
             <view class="smm-num num t-dark">{{stats.claimedText}}</view>
           </view>

@@ -108,7 +108,7 @@
 /* 额度告罄：深色块内禁第三种彩色文字（DESIGN.md #13），告警全由 ah-sub 文案承担
    （原先数字再从 700 加到 800，肉眼分不出，已去掉） */
 /* 异常警示块：语义 danger 浅底 + 加深档标题，进门可见、点击直达失败筛选。
-   状态语义不借品牌赭浅调（tint-blush 归"价值/金额"类数据块用） */
+   状态语义不借品牌赭浅调（tint-accent 归"价值/金额"类数据块用） */
 .ah-alert { margin-bottom: 24rpx; padding: 24rpx 32rpx; background: var(--color-danger-tint); }
 .ah-alert:active { opacity: 0.85; }
 .ah-alert-t { font-size: 30rpx; font-weight: 700; color: var(--color-danger-deep); }
@@ -155,7 +155,7 @@
 /* ③ 进度轮尺：kit 的 .round-ruler 默认主色，块内改跟随文字色；当前步内圈挖空用块底色 */
 .rb-steps { margin-top: 40rpx; }
 .rb-steps .round-ruler { color: inherit; }
-.block-red .rb-steps .r-now::after { border-color: var(--color-block-accent); }
+.block-accent .rb-steps .r-now::after { border-color: var(--color-block-accent); }
 .field-brand .rb-steps .r-now::after { border-color: var(--color-field-brand); }
 .rb-steps-t { display: flex; justify-content: space-between; margin-top: 12rpx; font-size: 24rpx; }
 /* ⑥ 帮助 + 合作记录 + 员工入口：奖励块之下的次要信息，统一一档小字 */
