@@ -27,7 +27,8 @@ Page({
     isAdmin: false,
     openid: '',
     // idle | loading | fail(可重试) | confirming(已确认、查单中) | arriving(查单超时、仍在入账)
-    // | ok(查单 SUCCESS 才到这) | dead(转账失败/被撤回：终态，不再给领取按钮)
+    // | between(多笔：本笔已到账、正在查下一笔) | nextfail(下一笔没查到，可重试)
+    // | ok(查单 SUCCESS 才到这；多笔时是全部领完) | dead(转账失败/被撤回：终态，不再给领取按钮)
     status: 'idle',
     message: '',
     claimedCount: 0, // 本次会话已到账笔数（大额拆单一人多笔：第 N/M 笔）
@@ -492,20 +493,21 @@ Page({
     this._pendingTransfer = null;
     const n = this.data.claimedCount + 1;
     const fen = this.data.claimedFen + Math.round(num(this.data.mineAmt) * 100);
-    this.setData({ claimedCount: n, claimedFen: fen, claimedYuan: yuan(fen / 100), resume: false });
-    if (this.data.minePendCount > 1) {
+    // 这笔已到账：剩余笔数同步减一（「第 N/M 笔」的 M = 已到账 + 剩余，不减会多算一笔）
+    const left = Math.max(0, this.data.minePendCount - 1);
+    this.setData({ claimedCount: n, claimedFen: fen, claimedYuan: yuan(fen / 100), resume: false, minePendCount: left });
+    if (left > 0) {
       this.setData({ status: 'between', message: `第 ${n} 笔已到账，正在准备下一笔` });
       setTimeout(() => this.checkMineQuiet(), 800);
       return;
     }
     this._finishAll();
   },
-  // 整批完成：多笔时大数字换成本次累计，标题写清共几笔
-  _finishAll(extra) {
+  // 整批完成：多笔时大数字换成本次累计，标题写清共几笔。只在后端明确"没有下一笔"时才到这
+  _finishAll() {
     const n = this.data.claimedCount;
     const patch = { status: 'ok', message: n > 1 ? `共 ${n} 笔已全部到账微信零钱` : '' };
     if (n > 1) patch.mineAmt = this.data.claimedYuan;
-    if (extra) patch.message = `已到账 ${n} 笔，${extra}`;
     this.setData(patch);
     this._celebrate('mineAmt');
     // 可能又来了新奖励：安静地查，绝不用 loading/empty 盖掉"已到账"画面；档案也顺带刷新
@@ -513,6 +515,16 @@ Page({
       this.checkMineQuiet();
       this.refreshProfile();
     }, 1500);
+  },
+
+  // 查下一笔失败（接口报错/断网）不能当"领完了"——剩下的钱还挂着。停在"本笔已到账"，给重试
+  _nextFailed() {
+    this.setData({ status: 'nextfail', message: `已到账 ${this.data.claimedCount} 笔，下一笔暂时没查到，点下方按钮再试` });
+  },
+  retryNext() {
+    if (this.data.status !== 'nextfail') return;
+    this.setData({ status: 'between', message: '正在查下一笔' });
+    this.checkMineQuiet();
   },
 
   // 安静查下一笔：只有真的还有奖励才切回领取态，否则保持"已到账"提示不动
@@ -534,14 +546,16 @@ Page({
             status: 'idle',
             message: mine.resume ? '上次确认收款未完成，点击领取继续即可到账' : '',
           });
-        } else {
-          this.setData({ minePendCount: 0, minePendYuan: '' }); // 全部领完
-          if (this.data.status === 'between') this._finishAll(); // 原以为还有下一笔，其实领完了
+        } else if (mine && !mine.error) {
+          // 后端明确说没有待领了（api.js 会把 HTTP 错误体也 resolve 回来，所以要先排除 error）
+          this.setData({ minePendCount: 0, minePendYuan: '' });
+          if (this.data.status === 'between') this._finishAll();
+        } else if (this.data.status === 'between') {
+          this._nextFailed(); // 查询报错 ≠ 领完了
         }
       })
       .catch(() => {
-        // 查不到下一笔（网络）：已到账的照实庆祝，剩下的请客户稍后重开
-        if (this.data.status === 'between') this._finishAll('其余奖励请稍后重新打开本页领取');
+        if (this.data.status === 'between') this._nextFailed();
       });
   },
 });

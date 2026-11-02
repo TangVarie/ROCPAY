@@ -50,7 +50,7 @@
         </view>
         <view class="rb-checkwrap" wx:if="{{status==='ok'}}"><view class="rb-check"></view></view>
         <!-- ② 当前状态：标题就是状态 -->
-        <view class="rb-label">{{ status==='ok' ? (claimedCount > 1 ? '全部到账' : '已到账微信零钱') : status==='between' ? '本笔已到账' : (status==='confirming' || status==='arriving') ? '已确认收款 · 到账中' : status==='dead' ? deadTitle : resume ? '待确认收款' : '待领取' }}</view>
+        <view class="rb-label">{{ status==='ok' ? (claimedCount > 1 ? '全部到账' : '已到账微信零钱') : (status==='between' || status==='nextfail') ? '本笔已到账' : (status==='confirming' || status==='arriving') ? '已确认收款 · 到账中' : status==='dead' ? deadTitle : resume ? '待确认收款' : '待领取' }}</view>
         <!-- 金额：链接金额没经后端核验（校验接口不可达）时不上屏任何数字 -->
         <view class="rb-amount" wx:if="{{mode==='token' && amtUnverified}}"><text class="rb-unverified">金额待核验</text></view>
         <view class="rb-amount" wx:else><text class="rb-sign num">¥</text><text class="rb-num num">{{ mode==='mine' ? mineAmt : amtText }}</text></view>
@@ -67,7 +67,7 @@
           <view class="round-ruler">
             <view class="r {{ (status==='idle' || status==='loading' || status==='fail') && !resume ? 'r-now' : 'r-done' }}"></view>
             <view class="r {{ (status==='idle' || status==='loading' || status==='fail') ? (resume ? 'r-now' : '') : 'r-done' }}"></view>
-            <view class="r {{ (status==='ok' || status==='between') ? 'r-done' : (status==='confirming' || status==='arriving') ? 'r-now' : '' }}"></view>
+            <view class="r {{ (status==='ok' || status==='between' || status==='nextfail') ? 'r-done' : (status==='confirming' || status==='arriving') ? 'r-now' : '' }}"></view>
           </view>
           <view class="rb-steps-t"><text>领取</text><text>微信确认</text><text>到账</text></view>
         </view>
@@ -83,6 +83,7 @@
           disabled="{{status==='loading'}}"
         >{{resume ? '继续确认收款' : '领取到微信零钱'}}</button>
         <button wx:elif="{{status==='arriving'}}" class="rb-btn" bindtap="refreshArrival">刷新到账结果</button>
+        <button wx:elif="{{status==='nextfail'}}" class="rb-btn" bindtap="retryNext">继续领下一笔</button>
         <view class="rb-wait" wx:elif="{{status==='confirming' || status==='between'}}" aria-label="正在处理">
           <view class="band-spinner"><view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view></view>
         </view>
