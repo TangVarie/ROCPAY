@@ -1725,6 +1725,57 @@ app.post('/api/claim', async (req, res) => {
   }
 });
 
+// 转账失败原因 → 客户看得懂的话（只覆盖客户自己能理解/处理的常见几类，其余给通用说法 + 原始代码便于员工查）
+const CUSTOMER_FAIL_TEXT = {
+  ACCOUNT_FROZEN: '你的微信支付账户处于冻结状态',
+  ACCOUNT_NOT_EXIST: '你的微信账户暂时不能收款',
+  OPENID_INVALID: '你的微信账户暂时不能收款',
+  REAL_NAME_CHECK_FAIL: '你的微信还没完成实名认证',
+  NAME_NOT_CORRECT: '收款人姓名与实名信息不一致',
+  ID_CARD_NOT_CORRECT: '收款人身份信息与实名信息不一致',
+  DAY_RECEIVED_QUOTA_EXCEED: '你今天收到的转账已达微信上限',
+  DAY_RECEIVED_COUNT_EXCEED: '你今天收到的转账笔数已达微信上限',
+  MONTH_RECEIVED_QUOTA_EXCEED: '你本月收到的转账已达微信上限',
+  REALNAME_ACCOUNT_RECEIVED_QUOTA_EXCEED: '你的实名账户收款已达微信上限',
+  TRANSFER_RISK: '这笔转账被微信风控拦截',
+  OVERDUE_CLOSE: '超时未确认收款，微信已自动关闭',
+};
+function customerFailText(code) {
+  if (!code) return '微信没有说明具体原因';
+  return CUSTOMER_FAIL_TEXT[code] || `微信返回：${code}`;
+}
+
+// 【客户】查我刚确认的那笔到账了没有。wx.requestMerchantTransfer 的 success 只代表客户点了确认，
+// 不代表付款成功（微信官方说明），前端据此轮询：SUCCESS 才显示到账，FAIL/关闭给失败与下一步。
+// 只回状态与失败说明，不回金额/收款人；微信返回的收款人不是本人一律拒绝（防拿单号探别人的单）
+app.get('/api/claim/result', async (req, res) => {
+  const openid = getOpenid(req);
+  if (!openid) return res.status(401).json({ error: '请在微信小程序内打开' });
+  const rid = String(req.query.rid || '');
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(rid)) return res.status(400).json({ error: '单号格式错误' });
+  try {
+    const data = await queryTransferByOutBillNo(rid);
+    if (data.openid && data.openid !== openid) return res.status(403).json({ error: '无权查询这笔转账' });
+    // 顺手把微信实况落库：不等回调，台账与额度立刻对得上（同 /api/transfers 的对账自愈）
+    persist('updateTransferState(result)', () =>
+      db.updateTransferState({
+        outBillNo: data.out_bill_no || rid,
+        state: data.state,
+        transferBillNo: data.transfer_bill_no,
+        failReason: data.fail_reason,
+        claimerOpenid: data.openid,
+        amountFen: data.transfer_amount,
+      })
+    );
+    const failed = data.state === 'FAIL' || data.state === 'CLOSED';
+    res.json({ state: data.state, failText: failed ? customerFailText(data.fail_reason) : '' });
+  } catch (e) {
+    // 微信侧还查不到这张单（刚发起的极短窗口）：按在途处理，前端继续等
+    if (e.status === 404 || (e.data && e.data.code === 'NOT_FOUND')) return res.json({ state: 'NOT_FOUND' });
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
 // 查询转账单状态（对账/排查）——管理员或对账 ?key=；含收款人 openid/金额，不可匿名访问
 app.get('/api/transfers/:outBillNo', async (req, res) => {
   if (!isAdmin(getOpenid(req)) && !keyMatches(req.query.key)) {

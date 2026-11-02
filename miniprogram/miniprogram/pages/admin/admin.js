@@ -384,6 +384,7 @@ Page({
   goFill() {
     if (!this.data.selected.length) return this.setData({ sendErr: '先勾选要发放的客户' });
     this.setData({ step: 'fill', sendErr: '', errIdx: -1 });
+    this.loadPeriod(); // 额度只在初始化/记录页拉过：填金额时要看的是现在的剩余
   },
   backPick() { this.setData({ step: 'pick', sendErr: '', errIdx: -1 }); },
 
@@ -435,20 +436,53 @@ Page({
       } catch (_) { /* 低版本基础库不支持 selector 定位，只高亮不滚动 */ }
     });
   },
-  submitBatch() {
-    if (this.data.loading) return; // 防连点：重复提交会生成重复奖励（重复打款）
-    const { selected, minAmountYuan, perUserCapYuan, splitCapYuan, period } = this.data;
+  // 逐行校验当前名单；有错就高亮定位并返回 false
+  _validateSelected() {
+    const { selected, minAmountYuan, perUserCapYuan } = this.data;
     // 最多两位小数：后端按 Math.round(元*100) 落分，1.234 会被静默按 1.23 发出去，必须在输入侧拦住
     const AMT_RE = /^\d+(\.\d{1,2})?$/;
     for (let i = 0; i < selected.length; i++) {
       const raw = String(selected[i].amountYuan == null ? '' : selected[i].amountYuan).trim();
       const yuan = Number(raw);
-      if (!(yuan > 0)) return this._rowErr(i, `「${selected[i].label}」还没填金额`);
-      if (!AMT_RE.test(raw)) return this._rowErr(i, `「${selected[i].label}」金额最多两位小数`);
-      if (yuan < minAmountYuan) return this._rowErr(i, `「${selected[i].label}」金额不能小于 ${minAmountYuan} 元`);
-      if (yuan > perUserCapYuan) return this._rowErr(i, `「${selected[i].label}」单人不能超过 ${perUserCapYuan} 元（微信单日向单用户上限，拆单也绕不过）`);
+      let err = '';
+      if (!(yuan > 0)) err = `「${selected[i].label}」还没填金额`;
+      else if (!AMT_RE.test(raw)) err = `「${selected[i].label}」金额最多两位小数`;
+      else if (yuan < minAmountYuan) err = `「${selected[i].label}」金额不能小于 ${minAmountYuan} 元`;
+      else if (yuan > perUserCapYuan) err = `「${selected[i].label}」单人不能超过 ${perUserCapYuan} 元（微信单日向单用户上限，拆单也绕不过）`;
+      if (err) {
+        this._rowErr(i, err);
+        return false;
+      }
     }
-    this.setData({ errIdx: -1, sendErr: '' });
+    return true;
+  },
+  submitBatch() {
+    if (this.data.loading) return; // 防连点：重复提交会生成重复奖励（重复打款）
+    if (!this._validateSelected()) return;
+    this.setData({ errIdx: -1, sendErr: '', loading: true });
+    // 复核用的必须是此刻的额度：内存里的可能是进页面时拉的（别人刚发过一批就不准了）。
+    // 刷新失败不拦发放（额度是自家台账，不是微信余额）：保留上一次的数不清空，复核里写明是几点的
+    call('/api/period', 'GET')
+      .then((res) => {
+        const ok = !!res && !res.error && typeof res.hasQuota === 'boolean';
+        if (ok) this.applyPeriod(res);
+        return ok;
+      }, () => false)
+      .then((fresh) => {
+        this.setData({ loading: false });
+        // 等额度的这段时间输入框仍可改：按此刻的内容重新校验，再冻结成快照——
+        // 复核弹窗展示的和真正提交的是同一份，改出来的 1.234 不会绕过两位小数校验
+        if (!this._validateSelected()) return;
+        const batch = this.data.selected.map((s) => Object.assign({}, s));
+        this._confirmBatch(batch, this.data.period, fresh);
+      });
+  },
+  // 本次提交的完整快照（名单+金额+备注）：幂等键跟它绑定——内容不变才复用旧键
+  _batchSnapOf(selected) {
+    return JSON.stringify(selected.map((s) => [s.kind, s.key, String(s.amountYuan).trim(), s.note || '']));
+  },
+  _confirmBatch(selected, period, fresh) {
+    const { minAmountYuan, splitCapYuan } = this.data;
     // 真金白银出账前必须过目一次汇总：人数、拆单后笔数、合计、最大单人；额度不够再多一句硬提醒
     const capFen = Math.round(splitCapYuan * 100);
     const minFen = Math.round(minAmountYuan * 100);
@@ -471,18 +505,39 @@ Page({
     if (remain != null && remain < totalFen / 100) {
       content += `\n\n注意：可发额度仅剩 ${period.neg ? '-' : ''}¥${period.remainingYuan}，本次将超出，请先确认商户余额充足。`;
     }
+    if (period && period.hasQuota) {
+      content += fresh
+        ? `\n（可发额度 ${period.updatedAt} 刚刷新）`
+        : `\n（可发额度刷新失败，以上按 ${period.updatedAt || '进页面时'} 的数计算）`;
+    } else if (!fresh) {
+      content += '\n（可发额度暂时查不到，请自行确认商户余额充足）';
+    }
+    // 上一次提交没收到结果（超时/断网，服务端可能已经建好了这批）：
+    // 内容没改 → 沿用旧键重试，服务端命中已建批次只回放、不重复建；
+    // 内容改了 → 只能当新的一批（换键），若上次其实已建，客户会收到两批——必须先说清楚
+    const snap = this._batchSnapOf(selected);
+    const changedAfterDoubt = this._batchInDoubt && this._batchKey && this._batchSnap !== snap;
+    if (this._batchInDoubt && !changedAfterDoubt) {
+      content += '\n\n上次提交没有收到结果：本次按原内容重试，已创建的不会重复创建。';
+    } else if (changedAfterDoubt) {
+      content += '\n\n注意：上次提交没有收到结果，可能已经创建成功。内容改过后再提交会作为新的一批发放，若上次已创建，客户会收到两批。建议先到「记录」核对。';
+    }
     wx.showModal({
       title: '确认发放',
       content,
-      confirmText: '确认发放',
+      confirmText: changedAfterDoubt ? '仍然发放' : '确认发放',
       confirmColor: '#1e5754', // v5.1 深青主色 = palette.json brand.primary（系统弹窗吃不到 CSS token，只能写值）
-      success: (r) => { if (r.confirm) this._doSubmitBatch(); },
+      success: (r) => { if (r.confirm) this._doSubmitBatch(selected, snap); },
     });
   },
-  _doSubmitBatch() {
-    const { selected } = this.data;
-    // 幂等键：本次发放意图首次提交时生成，失败重试复用——服务端命中已建批次会回放原结果而不是再建一批
-    if (!this._batchKey) this._batchKey = this._newKey();
+  // selected = 复核时冻结的快照（不是 this.data.selected：提交途中输入框仍可改）
+  _doSubmitBatch(selected, snap) {
+    // 幂等键绑定提交快照：同一内容（含失败后的重试）复用同一键，服务端命中已建批次回放原结果；
+    // 名单/金额/备注任何一处改过就换新键——旧键回放的是旧内容，不能让改过的金额被旧结果"顶替"
+    if (!this._batchKey || this._batchSnap !== snap) {
+      this._batchKey = this._newKey();
+      this._batchSnap = snap;
+    }
     this.setData({ sendErr: '', loading: true });
     // 双身份：企微客户带 externalUserid、直连客户带 openid，后端二选一校验（两个都带会被拒）
     const items = selected.map((s) =>
@@ -493,8 +548,12 @@ Page({
     call('/api/rewards/batch', 'POST', { items, clientKey: this._batchKey })
       .then((res) => {
         this.setData({ loading: false });
+        // 服务端拒绝：只说明"这一次"没建，不代表上一次结果未知的那次也没建（比如迁移中间件直接回 503，
+        // 根本没走到批次逻辑）——"结果未知"要保留到真正拿到这一批的结果为止
         if (res && res.error) return this.setData({ sendErr: res.error });
         this._batchKey = null; // 本批已确认落地，下一批换新键
+        this._batchSnap = null;
+        this._batchInDoubt = false;
         this._notifyKey = null; // 新批结果 = 新的群发意图：绝不复用上一批的群发防重键（会命中旧缓存导致本批不建任务）
         this._notifySeq = (this._notifySeq || 0) + 1; // 群发代际+1：上一批仍在飞行的群发回调作废
         // 拆单后同一客户出现多笔 → 通知名单去重，每人只发一张卡片；企微/直连分列（各走各的通知通道）
@@ -503,6 +562,16 @@ Page({
         const targetOpenids = [...new Set(created.filter((c) => c.openid).map((c) => c.openid))];
         const labelOf = {};
         selected.forEach((s) => (labelOf[s.key] = s.label)); // key 对企微是 eu、对直连是 openid，errors[].target 两种都能对上
+        // 大额拆单存到一半失败：这个人已经建了几笔（同时出现在 created 和 errors 里）。
+        // 必须和"一笔没建"分开说，否则照"补发"去发全额就多发了
+        const got = {};
+        created.forEach((c) => {
+          const t = c.externalUserid || c.openid;
+          if (!t) return;
+          got[t] = got[t] || { n: 0, fen: 0 };
+          got[t].n++;
+          got[t].fen += Math.round(Number(c.amountYuan) * 100);
+        });
         this.setData({
           step: 'result',
           batchResult: {
@@ -510,7 +579,14 @@ Page({
             peopleCount: res.peopleCount || targets.length + targetOpenids.length,
             batchId: res.batchId || '', // 批次号：结果页可直达"本批台账"
             duplicate: !!res.duplicate, // 重试命中已建批次：展示原结果，未重复创建
-            errors: (res.errors || []).map((er) => ({ ...er, label: labelOf[er.target] || er.target || '' })),
+            errors: (res.errors || []).map((er) => {
+              const g = got[er.target];
+              return {
+                ...er,
+                label: labelOf[er.target] || er.target || '',
+                state: g ? `已创建 ${g.n} 笔共 ¥${fmtYuan(g.fen / 100)}，其余未创建，只补差额` : '未创建',
+              };
+            }),
             targets,
             targetOpenids,
           },
@@ -519,12 +595,18 @@ Page({
         });
         this.loadRecords();
       })
-      .catch((e) =>
+      .catch((e) => {
+        this._batchInDoubt = true; // 没收到结果：服务端可能已建好，下次提交按快照决定重试还是新批
         this.setData({
           loading: false,
-          sendErr: '网络错误：' + (e.errMsg || e.message || '') + '（可放心重试，同一批不会重复创建）',
-        })
-      );
+          sendErr: '网络错误：' + (e.errMsg || e.message || '') + '（内容不改直接重试，同一批不会重复创建）',
+        });
+      });
+  },
+  // 全部未创建时回到填金额（名单与金额都保留，改完再提交）
+  backToFill() {
+    this.setData({ step: 'fill', batchResult: null, sendErr: '', errIdx: -1 });
+    this.loadPeriod();
   },
 
   // 小程序直达通知：后端直接给客户微信推「服务通知」（订阅消息），点开直达领取页，
@@ -653,6 +735,8 @@ Page({
 
   newBatch() {
     this._batchKey = null; // 新一批 = 新意图，换新幂等键
+    this._batchSnap = null;
+    this._batchInDoubt = false;
     this._notifyKey = null; // 弃掉未完成的群发重试意图，防止新批复用旧键命中旧缓存
     this._notifySeq = (this._notifySeq || 0) + 1; // 群发代际+1：飞行中的旧群发回调对新批作废
     // notifying/miniNotify 一并复位：被弃批次的请求即使还在飞行，也不该锁住新批的按钮
@@ -698,7 +782,8 @@ Page({
     if (this.data.sendMode === 'quick' && r && r.token) {
       return {
         title: `请领取 ¥${r.amountText || r.amountYuan} 奖励`,
-        path: `/pages/claim/claim?token=${encodeURIComponent(r.token)}&amt=${r.amountYuan}&remark=${encodeURIComponent(r.remark || '')}`,
+        // 只带令牌：金额/备注由领取页向后端核验后展示，URL 上带了也不认（可被改）
+        path: `/pages/claim/claim?token=${encodeURIComponent(r.token)}`,
       };
     }
     // 定向发放：分享领取入口即可（客户按身份识别，无需令牌）。标题带品牌名增强信任
@@ -724,8 +809,13 @@ Page({
         neg: rem < 0,
         paidSinceYuan: fmtYuan(res.paidSinceYuan),
         low: rem <= 0, // 剩余告罄/超支
+        updatedAt: this._hhmm(new Date()), // 发放复核里标注"几点的额度"
       },
     });
+  },
+  _hhmm(d) {
+    const p = (n) => (n < 10 ? '0' + n : '' + n);
+    return p(d.getHours()) + ':' + p(d.getMinutes());
   },
   // 充值（累加，携带上期结余）/ 校准（把剩余设为账户实际余额）。
   // 用页面内自绘输入面板而不是 wx.showModal editable：桌面端（Windows/Mac）小程序
@@ -899,7 +989,7 @@ Page({
           recHasMore: Number.isFinite(total) ? all.length < total : records.length === LIMIT,
           recLoaded: true,
           recLoading: false,
-          stats: res.stats || null,
+          stats: res.stats ? this._normStats(res.stats) : null,
           statsTotalYuan: fmtYuan(res.stats ? res.stats.total_fen / 100 : 0),
           statsPaidYuan: fmtYuan(res.stats ? (res.stats.paid_fen || 0) / 100 : 0),
         });
@@ -993,6 +1083,16 @@ Page({
     this._resetRecords();
     this.loadRecords();
   },
+  // 统计口径：待领取（未领未过期）/ 待确认（已发起待客户确认）分开显示；可撤回 = 未领取 + 待确认。
+  // 后端还没升级时没有新字段：可撤回退回旧 pending_count（口径相同），两个分项显示「—」而不是瞎猜
+  _normStats(st) {
+    const has = typeof st.unclaimed_count === 'number';
+    return Object.assign({}, st, {
+      revocable_count: typeof st.revocable_count === 'number' ? st.revocable_count : st.pending_count,
+      unclaimedText: has ? String(st.unclaimed_count) : '—',
+      claimedText: has ? String(st.claimed_count) : '—',
+    });
+  },
   // 整批撤回未到账：发错一批不用 30 次逐条点。已到账的不动，未领取作废、待确认向微信撤销
   revokeBatch() {
     const batch = this.data.recFilter.batch;
@@ -1001,7 +1101,7 @@ Page({
     // 只有"全部"筛选下 stats 才是整批口径，其他筛选下不引用具体数字，避免说错
     const exact = this.data.recFilter.status === 'all' && s;
     const content = exact
-      ? `将撤回本批 ${s.pending_count} 笔未到账：未领取直接作废；已领待确认向微信撤销，资金退回商户余额。` +
+      ? `将撤回本批 ${s.revocable_count} 笔未到账：未领取直接作废；已领待确认向微信撤销，资金退回商户余额。` +
         (s.success_count ? `\n已到账 ${s.success_count} 笔不受影响。` : '')
       : '将撤回本批所有未到账：未领取直接作废；已领待确认向微信撤销，资金退回商户余额。已到账的不受影响。';
     wx.showModal({

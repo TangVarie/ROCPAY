@@ -185,6 +185,7 @@
 }
 .banner-success { background: var(--color-success-tint); }
 .banner-danger { background: var(--color-danger-tint); }
+.banner-warning { background: var(--color-warning-tint); } /* 部分成功：有人发出、有人没发出 */
 .banner-line { font-size: 26rpx; margin-top: 8rpx; }
 .reward-ok { margin: 24rpx 0 24rpx; }
 

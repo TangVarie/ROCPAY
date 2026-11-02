@@ -97,6 +97,7 @@ DDL 见 [`db/schema.sql`](./db/schema.sql)（与 `src/db.js` 中的建表语句�
 | `GET/POST /api/admins` · `POST /api/admins/remove` | 员工列表 / 加员工 / 移除 | 超管 |
 | `GET/POST /api/claim/mine` | 客户按身份查/领定向奖励（防领错） | callContainer |
 | `POST /api/claim` | 令牌领取（快发卡片） | 令牌 HMAC |
+| `GET /api/claim/result?rid=` | 客户确认收款后查到账（向微信查单，SUCCESS 才算到账；只许收款人本人查） | callContainer |
 | `GET /api/transfers/:outBillNo` | 查单并回写状态（对账） | 管理员 或 `?key=` |
 | `POST /api/notify` | 微信支付回调（验签 + 落库，失败回 FAIL 让微信重试） | 签名 |
 | `GET/POST /api/wecom/callback` | 企微接收消息回调（验签解密，用于解锁企业可信IP） | 企微签名 |

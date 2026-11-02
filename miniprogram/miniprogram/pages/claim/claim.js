@@ -8,6 +8,8 @@ Page({
     // 链接领取（token）
     token: '',
     amtText: '--',
+    amtUnverified: false, // 校验接口不可达：金额还没经后端核验，不上屏、不给领取，只给"重新连接"
+    verifying: false, // 重新连接中：金额仍未核验，按钮转圈不可点
     remark: '',
     tokenGone: '', // 非空 = 令牌已终结（过期/已领/已撤回），显示终态而不是可点的领取块
     // 入口数据已到齐（开屏据此淡出）：令牌流程要等 /api/claim/status 回来（成功、终态或兜底都算），
@@ -21,7 +23,9 @@ Page({
     // 通用
     isAdmin: false,
     openid: '',
-    status: 'idle', // idle | loading | ok | fail
+    // idle | loading | fail(可重试) | confirming(已确认、查单中) | arriving(查单超时、仍在入账)
+    // | ok(查单 SUCCESS 才到这) | dead(转账失败/被撤回：终态，不再给领取按钮)
+    status: 'idle',
     message: '',
     claimedCount: 0, // 本次会话已领取笔数（定向可能有多笔）
     profile: null, // 合作档案 { lv, name, count, totalYuan, nextText }
@@ -32,15 +36,9 @@ Page({
   onLoad(options) {
     const token = options.token ? decodeURIComponent(options.token) : '';
     if (token) {
-      // 链接进入：令牌流程。金额/备注以后端校验接口返回为准——URL 的 amt 任何人都能改，
-      // 只当作校验接口不可达时的兜底展示，防"改链接把 ¥1 显示成 ¥10000"的伪造
-      this._urlAmt = options.amt || '';
-      this.setData({
-        mode: 'token',
-        token,
-        amtText: '--',
-        remark: options.remark ? decodeURIComponent(options.remark) : '',
-      });
+      // 链接进入：令牌流程。金额/备注只认后端校验接口返回的——URL 上的 amt/remark 任何人都能改，
+      // 连兜底展示都不用（旧链接还带着这两个参数，一律忽略），防"改链接把 ¥1 显示成 ¥10000"
+      this.setData({ mode: 'token', token, amtText: '--', amtUnverified: false, remark: '' });
       this.checkToken();
       this.refreshProfile(); // 顺带拉合作档案（等级卡）
       return;
@@ -58,7 +56,9 @@ Page({
         if (res.state === 'VALID') {
           this.setData({
             amtText: Number(res.amountYuan) > 0 ? yuan(res.amountYuan) : '--',
-            remark: res.remark || this.data.remark,
+            amtUnverified: false,
+            verifying: false,
+            remark: res.remark || '',
           });
           return;
         }
@@ -69,15 +69,22 @@ Page({
           TARGETED: '这是定向奖励，请从员工发来的小程序卡片打开领取',
           INVALID: '领取链接无效，请联系发放员重新发送',
         };
-        this.setData({ tokenGone: map[res.state] || '该奖励当前不可领取' });
+        this.setData({ tokenGone: map[res.state] || '该奖励当前不可领取', verifying: false });
       })
       .catch(() => this._tokenFallback())
       .then(() => this.setData({ entryReady: true })); // 成功 / 终态 / 兜底三条路都算"到了"
   },
-  // 校验接口不可达（冷启动/网络抖动）：退回 URL 金额兜底展示；点领取仍有后端强校验把关
+  // 校验接口不可达（冷启动/网络抖动）：金额没核验就不上屏，也不给领取按钮——
+  // 只给"重新连接"。旧版这里拿 URL 的 amt 兜底，改过的链接能把任意金额显示出来
   _tokenFallback() {
-    const n = Number(this._urlAmt);
-    this.setData({ amtText: n > 0 ? yuan(n) : '--' });
+    this.setData({ amtText: '--', amtUnverified: true, verifying: false });
+  },
+  // 重新连接：核验结果回来之前 amtUnverified 一直保持 true（领取按钮不出现），
+  // 只有拿到 VALID 才放开——否则请求途中就能点领取、看不到核验过的金额
+  retryToken() {
+    if (this.data.verifying) return;
+    this.setData({ verifying: true });
+    this.checkToken();
   },
 
   // 合作档案（等级）：/api/me 里带回，静默失败不打扰主流程
@@ -145,7 +152,7 @@ Page({
         // 在途单续办：上次转账已发起但确认页没走完，后端带回 package_info——
         // 预置成 _pendingTransfer，点领取直接重开微信确认页（不再 POST，POST 也会 404）
         this._pendingTransfer = mine.resume
-          ? { mchId: mine.resume.mchId, appId: mine.resume.appId, package_info: mine.resume.package_info }
+          ? { mchId: mine.resume.mchId, appId: mine.resume.appId, package_info: mine.resume.package_info, out_bill_no: mine.reward.rid }
           : null;
         this.setData({
           ...base,
@@ -250,7 +257,8 @@ Page({
     });
   },
 
-  // 拉起微信官方确认收款
+  // 拉起微信官方确认收款。success 只代表客户点了确认，不代表付款成功（微信官方说明）——
+  // 先进"等待到账"，查单 SUCCESS 才回调 onOk（到账、庆祝）
   _confirmTransfer(res, onOk) {
     // 旧版微信没有 requestMerchantTransfer：不检测会直接 JS 报错，点领取毫无反应且无任何提示
     if (typeof wx.requestMerchantTransfer !== 'function') {
@@ -264,7 +272,10 @@ Page({
       mchId: res.mchId,
       appId: res.appId,
       package: res.package_info,
-      success: onOk,
+      success: () => {
+        this._pendingTransfer = null; // 已确认过：这张凭证不能再开第二次
+        this._waitArrival(res.out_bill_no, onOk);
+      },
       fail: (e) => {
         const msg = e.errMsg || '';
         // 手滑取消（errMsg 带 cancel）：保留在途凭证，再点直接重开确认页（原设计）
@@ -287,6 +298,54 @@ Page({
         this.setData({ status: 'fail', message: '未完成确认收款：' + msg + '，请再点一次领取' });
       },
     });
+  },
+
+  // 等到账：按退避间隔查单（共约 22 秒）。SUCCESS → onArrived；失败/关闭/撤回 → dead 终态 + 下一步；
+  // 一直在途 → arriving，给"刷新到账结果"，绝不提前说到账。seq 防离开页面后旧轮询还在改界面
+  _waitArrival(rid, onArrived) {
+    const seq = (this._arrSeq = (this._arrSeq || 0) + 1);
+    this._arrRid = rid;
+    this._arrOnArrived = onArrived;
+    if (!rid) return this._stillArriving(); // 拿不到单号查不了：如实说在入账，不装作到账
+    this.setData({ status: 'confirming', message: '已确认收款，正在等待到账' });
+    const delays = [800, 1500, 2000, 3000, 4000, 5000, 6000];
+    let i = 0;
+    const next = () => {
+      if (seq !== this._arrSeq) return;
+      if (i >= delays.length) return this._stillArriving();
+      setTimeout(tick, delays[i++]);
+    };
+    const tick = () => {
+      if (seq !== this._arrSeq) return;
+      call(`/api/claim/result?rid=${encodeURIComponent(rid)}`, 'GET')
+        .then((r) => {
+          if (seq !== this._arrSeq) return;
+          const st = r && r.state;
+          if (st === 'SUCCESS') return onArrived();
+          if (st === 'FAIL' || st === 'CLOSED') {
+            return this.setData({
+              status: 'dead',
+              message: `没有到账：${r.failText || '微信没有说明具体原因'}。钱没有转出，请联系给你发奖励的员工重新发放`,
+            });
+          }
+          if (st === 'CANCELLED' || st === 'CANCELING') {
+            return this.setData({ status: 'dead', message: '这笔奖励已被发放方撤回，钱没有转出' });
+          }
+          next(); // 处理中/待确认/查不到（极短窗口）/接口报错：继续等
+        })
+        .catch(() => next());
+    };
+    next();
+  },
+  _stillArriving() {
+    this.setData({ status: 'arriving', message: '微信正在入账，通常几秒到几分钟。稍后点下方按钮刷新结果' });
+  },
+  refreshArrival() {
+    if (this.data.status !== 'arriving') return;
+    this._waitArrival(this._arrRid, this._arrOnArrived);
+  },
+  onUnload() {
+    this._arrSeq = (this._arrSeq || 0) + 1; // 离开页面：停掉查单轮询
   },
 
   // 到账仪式：画勾淡入（CSS）+ 金额数字滚动到位（JS 更新展示值）。展示值带千分位，取数要 num() 还原
@@ -386,6 +445,7 @@ Page({
       this.setData({ status: 'loading', message: '' });
       return this._confirmTransfer(this._pendingTransfer, () => this._tokenOk());
     }
+    if (this.data.amtUnverified) return; // 金额没核验不许领（按钮本就不渲染，这里兜底）
     this.setData({ status: 'loading', message: '' });
     this._askSubscribe(() => this._doClaimToken());
   },
@@ -442,7 +502,7 @@ Page({
       .then((mine) => {
         if (mine && mine.reward) {
           this._pendingTransfer = mine.resume
-            ? { mchId: mine.resume.mchId, appId: mine.resume.appId, package_info: mine.resume.package_info }
+            ? { mchId: mine.resume.mchId, appId: mine.resume.appId, package_info: mine.resume.package_info, out_bill_no: mine.reward.rid }
             : null;
           this.setData({
             mode: 'mine',
