@@ -254,6 +254,11 @@
                 <view class="nsum-d" wx:for="{{notifyResult.lines}}" wx:key="*this">{{item}}</view>
                 <view class="nsum-d">跟进员工在企微「消息-客户联系」提醒里点一次【发送】才会送达</view>
               </view>
+              <view class="nsum-row" wx:if="{{notifySum.unknown}}">
+                <view class="nsum-h"><text class="t-dark">企微结果未知</text><text class="num t-dark">{{notifySum.unknown}} 人</text></view>
+                <view class="nsum-d">提交超时，群发任务可能已建、也可能没建：{{notifySum.unknownText}}</view>
+                <view class="nsum-d">请先到企微「客户联系」核对；确认没有任务再转发补发，免得重复打扰</view>
+              </view>
               <view class="nsum-row" wx:if="{{notifySum.failed}}">
                 <view class="nsum-h"><text class="t-danger">发送失败</text><text class="num t-danger">{{notifySum.failed}} 人</text></view>
                 <view class="nsum-d">{{notifySum.failedText}}</view>

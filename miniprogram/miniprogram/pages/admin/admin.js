@@ -740,7 +740,14 @@ Page({
       .then((res) => {
         if ((this._notifySeq || 0) !== seq) return; // 批次已换代：丢弃过期回调
         this.setData({ notifying: false });
-        if (res && res.error) return this.setData({ sendErr: res.error });
+        if (res && res.error) {
+          // 全部没建成但有组提交结果未知：这些客户可能已在群发任务里，归"结果未知"而不是"需转发"
+          if (res.resultUnknown) {
+            this._markWecom(res.unknownList || targets, () => 'unknown');
+            this._syncNotifySum();
+          }
+          return this.setData({ sendErr: res.error });
+        }
         this._notifyKey = null;
         // 任务按客户跟进人分组派发（企微规则：谁跟进谁发）。把"派给了谁"讲清楚，
         // 不然任务落在别的员工那里，发起人以为群发没生效
@@ -756,12 +763,13 @@ Page({
             (er.indeterminate ? '（提交结果未知，可能已创建：请先到企微「客户联系」确认，确认没有再用转发补发）' : '')
           );
         });
-        // 逐人记去向：进了群发任务 = 待员工发送；没进去的（failList）= 需转发
+        // 逐人记去向：没进任务（failList）= 需转发；提交结果未知（unknownList）= 先去企微核对；其余 = 待员工发送。
+        // 不在 failList ≠ 已进任务：结果未知的组后端故意不放进 failList（防盲目重发）。老后端没有 unknownList 时，
+        // 只要有结果未知的组，就把不在 failList 的都当未知——宁可多让人核对一次，也不误报"已排队"
         const failSet = new Set(res.failList || []);
-        this._reach = this._reach || {};
-        targets.forEach((id) => {
-          this._reach[id] = Object.assign({}, this._reach[id], { wecom: failSet.has(id) ? 'wfail' : 'queued' });
-        });
+        const indet = (res.errors || []).some((er) => er.indeterminate);
+        const unknownSet = new Set(res.unknownList || (indet ? targets.filter((id) => !failSet.has(id)) : []));
+        this._markWecom(targets, (id) => (failSet.has(id) ? 'wfail' : unknownSet.has(id) ? 'unknown' : 'queued'));
         this.setData({
           notifyDone: true,
           notifyResult: { lines, failCount: res.failCount || 0, failList: res.failList || [] },
@@ -774,7 +782,13 @@ Page({
       });
   },
 
-  // 通知结果按客户去向分四类（每人只归一类，优先级：已直达 > 企微待员工发送 > 发送失败 > 需转发）；
+  _markWecom(ids, stateOf) {
+    this._reach = this._reach || {};
+    (ids || []).forEach((id) => {
+      this._reach[id] = Object.assign({}, this._reach[id], { wecom: stateOf(id) });
+    });
+  },
+  // 通知结果按客户去向分类（每人只归一类，优先级：已直达 > 企微待员工发送 > 企微结果未知 > 发送失败 > 需转发）；
   // 已领完/已撤回的不再计入。还没用任何渠道通知时不展示
   _syncNotifySum() {
     const r = this.data.batchResult;
@@ -783,12 +797,13 @@ Page({
     const all = (r.targets || []).concat(r.targetOpenids || []);
     if (!all.some((id) => reach[id] && (reach[id].mini || reach[id].wecom))) return this.setData({ notifySum: null });
     const nameOf = (id) => (this._labelOf && this._labelOf[id]) || id;
-    const sum = { direct: [], wecom: [], failed: [], forward: [] };
+    const sum = { direct: [], wecom: [], unknown: [], failed: [], forward: [] };
     all.forEach((id) => {
       const x = reach[id] || {};
       if (x.mini === 'nopending') return;
       if (x.mini === 'sent') sum.direct.push(nameOf(id));
       else if (x.wecom === 'queued') sum.wecom.push(nameOf(id));
+      else if (x.wecom === 'unknown') sum.unknown.push(nameOf(id));
       else if (x.mini === 'failed') sum.failed.push(nameOf(id) + (x.err ? '（' + x.err + '）' : ''));
       else sum.forward.push(nameOf(id)); // 未订阅/没开过小程序/没进群发/还没被任何渠道覆盖
     });

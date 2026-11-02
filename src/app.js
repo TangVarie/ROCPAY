@@ -1132,6 +1132,9 @@ app.post('/api/deliver', async (req, res) => {
     const tasks = [];
     const errors = [];
     const failList = [];
+    // 提交结果未知的客户（请求已发出但超时/断网）：任务可能已建、也可能没建。不进 failList（防盲目重发），
+    // 也不能被前端当成"已进任务"——单列出来，让前端标成"结果未知、先去企微核对"
+    const unknownList = [];
     // 总预算：保证本请求必然在有限时间内 settle（防重条目生命周期依赖这一点）。
     // 超预算的组不提交、按"确定失败（未提交，可安全重试）"入重试名单
     const DELIVER_BUDGET_MS = 120_000;
@@ -1175,6 +1178,7 @@ app.post('/api/deliver', async (req, res) => {
         const determinate = !!e.errcode || !!e.preSubmit;
         errors.push({ sender: s, count: list.length, error: e.message, indeterminate: !determinate });
         if (determinate) failList.push(...list);
+        else unknownList.push(...list);
         console.error(`[wecom] 群发任务创建失败 sender=${s} 客户=${list.length} 结果${determinate ? '确定' : '未知'}：`, e.message);
       }
     }
@@ -1192,7 +1196,7 @@ app.post('/api/deliver', async (req, res) => {
         }
         settleErr(new Error(msg));
       }
-      return res.status(500).json({ error: msg, resultUnknown: anyIndet || undefined });
+      return res.status(500).json({ error: msg, resultUnknown: anyIndet || undefined, unknownList: anyIndet ? unknownList : undefined });
     }
     const payload = {
       ok: true,
@@ -1202,6 +1206,7 @@ app.post('/api/deliver', async (req, res) => {
       errors,
       failCount: failList.length,
       failList,
+      unknownList, // 提交结果未知的客户：不在 failList 里，但也不能算已进任务
       msgid: tasks[0].msgid, // 旧版小程序兼容字段
     };
     if (clientKey) {
