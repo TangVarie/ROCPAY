@@ -143,6 +143,8 @@
             <view class="textbtn" bindtap="backPick">重选客户</view>
           </view>
           <view class="psub t-light">单人 {{minAmountYuan}}–{{perUserCapYuan}} 元；超过 ¥{{splitCapYuan}} 自动拆成多笔，客户逐笔确认收款；备注客户可见</view>
+          <!-- 进入本步即刷新额度（提交复核前还会再刷一次） -->
+          <view class="psub t-light" wx:if="{{period && period.hasQuota}}">可发额度剩余 <text class="num t-dark">{{period.neg ? '-' : ''}}¥{{period.remainingYuan}}</text>（{{period.updatedAt}} 更新）</view>
 
           <view class="fillall">
             <input class="input fa-amt num" type="digit" placeholder="统一金额" placeholder-class="ph" value="{{fillAmount}}" bindinput="onFillAmount" />
@@ -164,14 +166,23 @@
           <view class="psub t-hint center">创建后需客户在小程序内确认收款，未领取不扣款</view>
         </view>
 
-        <!-- 步骤3 · 结果 + 通知 -->
-        <block wx:if="{{step==='result' && batchResult}}">
-          <view class="banner banner-success">
-            <text class="t-dark">已为 <text class="num">{{batchResult.peopleCount}}</text> 人创建 <text class="num">{{batchResult.createdCount}}</text> 笔定向奖励{{batchResult.createdCount > batchResult.peopleCount ? '（大额已自动拆单，客户逐笔确认）' : ''}}，客户打开小程序即可领取</text>
+        <!-- 步骤3 · 结果 + 通知。三态：全部成功 / 部分成功 / 一笔都没建（后端允许 createdCount=0，
+             那时绝不能出绿色"已创建"和"通知客户"——钱一分没发，只给原因和"返回修改"） -->
+        <block wx:if="{{step==='result' && batchResult && !batchResult.createdCount}}">
+          <view class="banner banner-danger">
+            <view class="t-dark">这一批没有创建成功，钱没有发出</view>
+            <view class="t-body banner-line" wx:for="{{batchResult.errors}}" wx:key="i">{{item.label}}：{{item.error}}</view>
+          </view>
+          <button class="btn btn-blue btn-block" bindtap="backToFill">返回修改</button>
+          <view class="textbtn center-self" bindtap="newBatch">放弃，重新选人</view>
+        </block>
+        <block wx:elif="{{step==='result' && batchResult}}">
+          <view class="banner {{batchResult.errors.length ? 'banner-warning' : 'banner-success'}}">
+            <text class="t-dark">{{batchResult.errors.length ? '部分创建成功：' : ''}}已为 <text class="num">{{batchResult.peopleCount}}</text> 人创建 <text class="num">{{batchResult.createdCount}}</text> 笔定向奖励{{batchResult.createdCount > batchResult.peopleCount ? '（大额已自动拆单，客户逐笔确认）' : ''}}，客户打开小程序即可领取</text>
             <view class="banner-line t-body" wx:if="{{batchResult.duplicate}}">检测到该批此前已创建成功——以上为已建结果，未重复创建</view>
           </view>
           <view class="banner banner-danger" wx:if="{{batchResult.errors.length}}">
-            <view class="t-dark">{{batchResult.errors.length}} 笔未创建：</view>
+            <view class="t-dark">{{batchResult.errors.length}} 项未创建（这些人没有发出，需要另行补发）：</view>
             <view class="t-body banner-line" wx:for="{{batchResult.errors}}" wx:key="i">{{item.label}}：{{item.error}}</view>
           </view>
 
@@ -317,23 +328,26 @@
         <view class="block tint-sky stat-main">
           <view class="sm-label">{{recFilter.target || recFilter.targetOpenid ? recFilter.targetLabel + ' · 往来合计' : '发放合计'}}</view>
           <view class="sm-num num">¥{{statsTotalYuan}}</view>
-          <view class="sm-sub">共 {{stats.total}} 笔 · 实际动账 ¥{{statsPaidYuan}}{{stats.cancelled_count > 0 ? ' · 撤回 ' + stats.cancelled_count + ' 笔' : ''}}</view>
+          <view class="sm-sub">共 {{stats.total}} 笔 · 已到账 {{stats.success_count}} 笔 · 实际动账 ¥{{statsPaidYuan}}{{stats.cancelled_count > 0 ? ' · 撤回 ' + stats.cancelled_count + ' 笔' : ''}}</view>
         </view>
+        <!-- 两个在途状态分开数：待领取 = 客户还没点领取（未过期）；待确认 = 已发起转账、客户还没在微信里确认。
+             原先这里标"待确认"、数的却是两者之和 -->
         <view class="stat-side">
           <view class="block tint-sky stat-mini">
-            <view class="smm-label">已到账</view>
-            <view class="smm-num num t-dark">{{stats.success_count}}</view>
+            <view class="smm-label">待领取</view>
+            <view class="smm-num num t-dark">{{stats.unclaimedText}}</view>
           </view>
           <view class="block tint-blush stat-mini">
             <view class="smm-label">待确认</view>
-            <view class="smm-num num t-dark">{{stats.pending_count}}</view>
+            <view class="smm-num num t-dark">{{stats.claimedText}}</view>
           </view>
         </view>
       </view>
 
-      <!-- 批次视图专属：整批撤回未到账（一次确认 + 逐笔回执，不用 30 次逐条点） -->
-      <view class="batch-actions" wx:if="{{recFilter.batch && stats && stats.pending_count > 0}}">
-        <view class="textbtn textbtn-danger" bindtap="revokeBatch">撤回本批未到账（{{stats.pending_count}} 笔）</view>
+      <!-- 批次视图专属：整批撤回未到账（一次确认 + 逐笔回执，不用 30 次逐条点）。
+           可撤回 = 未领取（含已过期）+ 待确认，正是批量撤回接口实际处理的两类 -->
+      <view class="batch-actions" wx:if="{{recFilter.batch && stats && stats.revocable_count > 0}}">
+        <view class="textbtn textbtn-danger" bindtap="revokeBatch">撤回本批未到账（{{stats.revocable_count}} 笔）</view>
       </view>
 
       <!-- 记录：画布直排 + 发丝线（不一条一卡）；点行看详情（rid/微信单号，对账取证用） -->

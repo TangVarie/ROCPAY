@@ -288,6 +288,7 @@ WECHATPAY_SCENE_REPORT_INFOS=[{"info_type":"岗位类型","info_content":"推广
 `POST /api/deliver` 企微群发通知（带**小程序卡片**，客户点开直达领取页，无需搜索小程序名；封面上传失败自动降级为纯文字）·
 `GET /api/balance` 商户实时可用余额（管理员/发放员可见，元）·
 `GET|POST /api/claim/mine` 客户身份领取（防领错）·
+`GET /api/claim/result?rid=` 确认收款后查到账（向微信查单，SUCCESS 才显示到账）·
 `GET /api/rewards?status=&days=&target=` 台账筛选（状态/近N天/单人往来，stats 同口径）·
 `POST /api/rewards/revoke` 撤回（未领取作废；待确认向微信撤销、资金回流）·
 `GET /api/me` 返回 profile（客户合作次数/累计到账/等级，领取页展示）

@@ -699,6 +699,8 @@ export async function getStats(filters = {}) {
             COALESCE(SUM(IF(r.status IN ('CLAIMED','SUCCESS'), r.amount_fen, 0)),0) AS paid_fen,
             COALESCE(SUM(r.status='SUCCESS'),0) AS success_count,
             COALESCE(SUM(r.status IN ('CREATED','CLAIMED')),0) AS pending_count,
+            COALESCE(SUM(r.status='CREATED' AND (r.expires_at IS NULL OR r.expires_at > NOW())),0) AS unclaimed_count,
+            COALESCE(SUM(r.status='CLAIMED'),0) AS claimed_count,
             COALESCE(SUM(r.status IN ('FAIL','CLOSED','CANCELLED')),0) AS fail_count,
             COALESCE(SUM(r.status='CANCELLED'),0) AS cancelled_count
        FROM rewards r
@@ -711,7 +713,12 @@ export async function getStats(filters = {}) {
     paid_count: Number(row.paid_count), // 实际动钱的笔数（已划走/在途）
     paid_fen: Number(row.paid_fen), //     实际动钱的金额——期间资金消耗看这个
     success_count: Number(row.success_count),
+    // 未到账 = 未领取(含已过期)+已领待确认：整批撤回作用的正是这两类（未领取作废、待确认向微信撤销）。
+    // 字段名保留给线上旧版小程序（它把这个数标成"待确认"，是旧版的标签错，口径本身没错）
     pending_count: Number(row.pending_count),
+    revocable_count: Number(row.pending_count), // 新版用这个名字：可撤回笔数
+    unclaimed_count: Number(row.unclaimed_count), // 待领取：未领且未过期（客户还能领）
+    claimed_count: Number(row.claimed_count), //    待确认：已发起转账、客户还没在微信里确认
     fail_count: Number(row.fail_count),
     cancelled_count: Number(row.cancelled_count),
   };

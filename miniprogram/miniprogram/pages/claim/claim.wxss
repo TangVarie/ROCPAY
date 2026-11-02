@@ -60,6 +60,13 @@
 .rb-btn:active { transform: scale(0.98); }
 .rb-btn[disabled] { background: rgba(255, 255, 255, 0.85); color: rgba(184, 80, 47, 0.55); }
 .rb-tip { margin-top: 24rpx; font-size: 26rpx; font-weight: 500; min-height: 34rpx; }
+/* 金额未核验：占住金额的位置但不给数字（21px 导语档，比 40px 金额低两档，读得出"不是金额"） */
+.rb-unverified { font-size: 42rpx; font-weight: 600; line-height: 1.9; }
+/* 已确认、查单中：山形弧带跟随块内文字色（赭块上白、青面上墨），占住按钮的位置不跳版 */
+.rb-wait { margin-top: 48rpx; height: 96rpx; display: flex; align-items: center; justify-content: center; }
+.rb-wait .band-spinner .band { background: currentColor; }
+/* 管理员入口：奖励块与档案之后，次按钮 */
+.admin-entry { margin-top: 24rpx; }
 .rb-fine { margin-top: 16rpx; font-size: 24rpx; line-height: 1.5; }
 .after-note {
   margin-top: 24rpx;
