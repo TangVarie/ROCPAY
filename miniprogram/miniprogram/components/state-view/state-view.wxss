@@ -18,7 +18,8 @@
   overflow: hidden;
 }
 /* 宽度改下限、高度可撑：系统字体放大时文字变宽变高，固定宽高会折行裁字 */
-.state-btn {
+/* 三个类名：组件样式和 app.wxss 的先后不确定，权重要高过 app.wxss 的 .btn:not([size='mini']) */
+.state .btn.state-btn {
   margin-top: 40rpx;
   min-width: 320rpx;
   width: auto;

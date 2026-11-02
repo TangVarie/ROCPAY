@@ -58,6 +58,8 @@
 .prow { display: flex; align-items: center; justify-content: space-between; }
 /* 区块层级交给字重与文字色阶（v5 起无前标） */
 .ptitle { font-size: 34rpx; font-weight: 600; }
+/* 标题下面直接跟整行按钮（通知客户来领 → 小程序直达通知）：原先贴着标题，没有间距 */
+.ptitle + .btn.btn-block { margin-top: 24rpx; }
 .psub { font-size: 26rpx; margin-top: 8rpx; line-height: 1.6; }
 .psub.center { text-align: center; margin-top: 16rpx; }
 
@@ -84,7 +86,7 @@
 /* 搜索 */
 .searchbar { display: flex; gap: 16rpx; margin: 24rpx 0 8rpx; }
 .searchinput { flex: 1; }
-.searchbtn {
+.btn.searchbtn { /* 两个类名：见 app.wxss 按钮段的真机坑 */
   flex: none;
   height: 96rpx;
   padding: 0 32rpx;
@@ -135,7 +137,7 @@
 .pempty-icon { width: 80rpx; height: 80rpx; margin-bottom: 24rpx; }
 .pempty-t1 { font-size: 30rpx; font-weight: 600; }
 .pempty-t2 { font-size: 26rpx; margin-top: 8rpx; text-align: center; }
-.pempty-btn { margin-top: 32rpx; min-width: 300rpx; width: auto; height: auto; min-height: 88rpx; padding: 8rpx 32rpx; box-sizing: border-box; font-size: 28rpx; }
+.btn.pempty-btn { margin-top: 32rpx; min-width: 300rpx; width: auto; height: auto; min-height: 88rpx; padding: 8rpx 32rpx; box-sizing: border-box; font-size: 28rpx; }
 /* 面板内骨架行：与客户行同高，≥3 行 */
 .pskel { padding: 8rpx 0; }
 
@@ -244,7 +246,7 @@
 .quota-panel { margin-bottom: 24rpx; }
 .quota-row { display: flex; gap: 16rpx; margin-top: 24rpx; }
 .quota-input { flex: 1; }
-.quota-btn { flex: none; height: 96rpx; padding: 0 32rpx; font-size: 28rpx; margin: 0; }
+.btn.quota-btn { flex: none; height: 96rpx; padding: 0 32rpx; font-size: 28rpx; margin: 0; }
 
 /* 台账搜索条：与筛选 chips 同区，下边距收紧 */
 .rec-search { margin: 0 0 16rpx; }
@@ -383,7 +385,7 @@
 .pactions { display: flex; gap: 32rpx; }
 .dadd { padding: 8rpx 0; }
 .dadd-input { width: 100%; box-sizing: border-box; margin-bottom: 16rpx; }
-.dadd-btn { margin-bottom: 16rpx; }
+.btn.dadd-btn { margin-bottom: 16rpx; }
 /* 直连行副行是 openid 长串（无空格）：强制可断行，不撑破行布局；企微行副行为名字，不受影响 */
 .cust-sub { word-break: break-all; }
 
@@ -411,7 +413,7 @@
 }
 .ab-info { flex: 1; min-width: 0; font-size: 28rpx; color: var(--color-text); }
 .ab-strong { font-size: 34rpx; font-weight: 600; }
-.ab-btn { flex: none; height: 88rpx; padding: 0 32rpx; font-size: 30rpx; margin: 0; }
+.btn.ab-btn { flex: none; height: 88rpx; padding: 0 32rpx; font-size: 30rpx; margin: 0; }
 .actionbar .textbtn { flex: none; }
 
 /* 复核页：三个关键数在上，拆单/额度/警示居中，逐人明细在下 */
@@ -470,7 +472,7 @@
 .sh-copy { flex: none; padding: 26rpx 0 26rpx 36rpx; margin: -26rpx 0 -26rpx -20rpx; font-weight: 600; color: var(--color-primary); }
 .sh-copy:active { opacity: 0.6; }
 .sheet-acts { display: flex; gap: 16rpx; padding: 16rpx 32rpx 24rpx; border-top: 1px solid var(--color-border); }
-.sh-btn { flex: 1; height: 88rpx; margin: 0; font-size: 28rpx; }
+.btn.sh-btn { flex: 1; height: 88rpx; margin: 0; font-size: 28rpx; }
 @media (prefers-reduced-motion: reduce) {
   .sheet { animation: none; }
 }

@@ -228,7 +228,7 @@
               <textarea class="input notify-ta" value="{{notifyText}}" bindinput="onNotifyText" maxlength="200" auto-height />
               <button class="btn btn-blue btn-block" bindtap="sendNotify" loading="{{notifying}}"
                       disabled="{{notifyDone && !(notifyResult && notifyResult.failCount)}}">{{notifyDone ? (notifyResult && notifyResult.failCount ? '重试 ' + notifyResult.failCount + ' 位未进入群发的客户' : '已创建群发，去企微点发送') : '企微群发通知'}}</button>
-              <view class="psub t-light" wx:if="{{!notifyDone}}">任务按"谁跟进谁发"派给对应员工，在企微「消息-客户联系」提醒里点一次发送即可送达</view>
+              <view class="psub t-light" wx:if="{{!notifyDone}}">任务按「谁跟进谁发」派给对应员工，在企微「消息-客户联系」提醒里点一次发送即可送达</view>
               <view class="psub t-light" wx:if="{{!myWecomUserid}}">提示：让超管在「员工」里给你配置企微账号后，你跟进的客户任务会直接派给你</view>
             </block>
             <view class="psub t-light" wx:else>{{wecomOn ? '本批为直连客户：用上方直达通知，或把领取入口转发到客户聊天' : '未连接企微，可直接把小程序转发到客户聊天'}}</view>
