@@ -31,7 +31,7 @@
       <view class="state-t2">{{tokenGone}}</view>
     </view>
 
-    <view wx:else class="reward-block {{status==='ok' ? 'field-brand' : 'block-red'}} {{celebrate ? 'celebrate' : ''}} block">
+    <view wx:else class="reward-block {{status==='ok' ? 'field-brand' : 'block-red'}} block">
       <!-- 到账 = 结算通知/里程碑：角落落一枚轮印（v5.5 闲章，内容固定不计数；青面上墨色），一屏一枚 -->
       <view class="round-seal rb-seal" wx:if="{{status==='ok'}}" aria-hidden="true">
         <view class="mark"><view class="b b1"></view><view class="b b2"></view><view class="b b3"></view><view class="b b4"></view></view>
@@ -55,7 +55,8 @@
       >领取到微信零钱</button>
 
       <view class="rb-tip" wx:if="{{message}}">{{message}}</view>
-      <view class="rb-fine">点领取后弹出微信官方「确认收款」，确认即到账</view>
+      <!-- 怎么领的说明只在领取前有用；到账后还挂着就成了过时提示 -->
+      <view class="rb-fine" wx:if="{{status!=='ok'}}">点领取后弹出微信官方「确认收款」，确认即到账</view>
     </view>
 
     <view class="after-note" wx:if="{{mode==='mine' && claimedCount > 0 && status!=='ok'}}">
@@ -74,7 +75,7 @@
     <!-- 下半版面：品牌大字报（到账后用赭石呼应奖励色） -->
     <view class="wm-zone">
       <view class="wm {{status==='ok' ? 'wm-red' : ''}} num">ROC</view>
-      <view class="wm-line">梨响 ROC · 奖励，说到做到</view>
+      <view class="wm-line">梨响ROC · 奖励，说到做到</view>
     </view>
   </block>
 
@@ -88,7 +89,7 @@
 
       <view class="block block-blue ah-hero" wx:if="{{adminHome && adminHome.hasQuota}}">
         <view class="ah-label">可发额度 · 剩余</view>
-        <view class="ah-num num {{adminHome.low ? 'ah-low' : ''}}">¥{{adminHome.remainingYuan}}</view>
+        <view class="ah-num num">{{adminHome.neg ? '-' : ''}}¥{{adminHome.remainingYuan}}</view>
         <view class="ah-sub" wx:if="{{adminHome.low}}">额度已用尽，进工作台充值</view>
       </view>
 
@@ -116,7 +117,7 @@
       <view class="wm-zone" wx:if="{{adminHome && adminHome.totalAllYuan}}">
         <view class="wm-label">累计发放</view>
         <view class="wm wm-num num">¥{{adminHome.totalAllYuan}}</view>
-        <view class="wm-line">梨响 ROC · 奖励，说到做到</view>
+        <view class="wm-line">梨响ROC · 奖励，说到做到</view>
       </view>
     </block>
     <block wx:else>
@@ -149,7 +150,7 @@
       <!-- 下半版面：品牌大字报（编辑部式填充） -->
       <view class="wm-zone">
         <view class="wm num">ROC</view>
-        <view class="wm-line">梨响 ROC · 奖励，说到做到</view>
+        <view class="wm-line">梨响ROC · 奖励，说到做到</view>
       </view>
     </block>
   </block>

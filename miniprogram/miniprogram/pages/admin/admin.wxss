@@ -225,7 +225,7 @@
 /* 失败筛选下的"标记已处理"操作行 */
 .alert-actions { display: flex; justify-content: flex-end; margin: -8rpx 0 16rpx; }
 .sm-label { font-size: 26rpx; color: var(--color-text-light); }
-.sm-num { font-size: 80rpx; font-weight: 700; color: var(--color-text-dark); line-height: 1.15; margin-top: 8rpx; }
+.sm-num { font-size: 56rpx; font-weight: 700; color: var(--color-text-dark); line-height: 1.2; margin-top: 8rpx; } /* 28px 档：比上方可发额度（40px）低一档，额度是这页的主角 */
 .sm-sub { font-size: 24rpx; color: var(--color-text-light); margin-top: 8rpx; }
 .stat-side { flex: 1; display: flex; flex-direction: column; gap: 24rpx; }
 .stat-mini { padding: 24rpx; }
@@ -242,9 +242,8 @@
 .bal-actions .bal-refresh { padding: 8rpx 0 8rpx 32rpx; } /* 充值/校准两个动作并排 */
 .bal-num { font-size: 80rpx; font-weight: 700; color: #ffffff; line-height: 1.15; margin-top: 8rpx; }
 .bal-sub { font-size: 24rpx; color: rgba(255, 255, 255, 0.8); margin-top: 8rpx; }
-/* 剩余告罄/超支：深色块内禁第三种彩色文字（DESIGN.md #13），告警由 bal-sub 的文案承担，
-   数字只加重不变色（色彩永不作为唯一信息通道） */
-.bal-low { font-weight: 800; }
+/* 剩余告罄/超支：深色块内禁第三种彩色文字（DESIGN.md #13），告警全由 bal-sub 的文案承担
+   （原先数字再从 700 加到 800，肉眼分不出，已去掉；色彩/字重都不作为唯一信息通道） */
 
 /* 充值/校准输入面板（自绘，替代桌面端不支持的 showModal editable） */
 .quota-panel { margin-bottom: 24rpx; }
@@ -268,34 +267,52 @@
 }
 .fchip.on { background: var(--color-primary); color: var(--color-on-primary); font-weight: 600; }
 .fchip:active { opacity: 0.8; }
-/* 单人/批次/关键词筛选中（点一下清除）：赭石块 + 白字。走 block-accent 而不是 accent——
-   深色模式 accent 是亮赭，白字只有 2.97:1；block-accent 的深赭 5.92:1 */
-.fchip-target { background: var(--color-block-accent); color: #ffffff; }
+/* 状态筛选：一行横滑，出血到屏幕边（抵消页边距 32rpx），末尾垫一块补回右侧留白
+   （横向 scroll-view 的右 padding 在部分机型不生效，用占位块最稳） */
+.fscroll { display: flex; flex-direction: row; white-space: nowrap; margin: 0 -32rpx 16rpx; padding-left: 32rpx; box-sizing: border-box; }
+.fscroll .fchip { flex: none; margin-right: 16rpx; }
+.fscroll-end { flex: none; width: 16rpx; height: 2rpx; }
+/* 单人/批次/关键词/月份筛选中（点一下清除）：赭石块 + 白字。走 block-accent 而不是 accent——
+   深色模式 accent 是亮赭，白字只有 2.97:1；block-accent 的深赭 5.92:1。
+   用复合选择器：单类会被 .fchip.on 的主色压掉（原先标记为 on，赭石从没显示出来） */
+.fchip.fchip-target { display: flex; align-items: center; gap: 8rpx; background: var(--color-block-accent); color: #ffffff; font-weight: 600; }
+/* 清除图标：lucide x，白描边（赭石块两模式都是深底白字） */
+.ic-x {
+  width: 24rpx;
+  height: 24rpx;
+  flex: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") center / contain no-repeat;
+}
 
-/* 记录行撤回 + 批次入口 + 加载更多。撤回是危险操作：热区拉到 ≥64rpx 高，误触成本高于视觉紧凑 */
-.rec-revoke { font-size: 26rpx; font-weight: 600; color: var(--color-danger); padding: 16rpx 8rpx; margin: -8rpx -8rpx; }
+/* 记录行撤回 + 批次入口 + 加载更多。撤回是危险操作：热区靠 padding 拉到 ≥70rpx 高，
+   等量负 margin 抵掉、不占版面高度——两个操作并在一行后，行高与没有操作的行一致 */
+.rec-revoke { font-size: 24rpx; font-weight: 600; color: var(--color-danger); padding: 16rpx 8rpx; margin: -16rpx -8rpx; }
 .rec-revoke:active { opacity: 0.6; }
-.rec-batch { font-size: 24rpx; font-weight: 500; color: var(--color-primary); padding: 16rpx 8rpx; margin: -8rpx -8rpx; }
+.rec-batch { font-size: 24rpx; font-weight: 500; color: var(--color-primary); padding: 16rpx 8rpx; margin: -16rpx -8rpx; }
 .rec-batch:active { opacity: 0.6; }
 .loadmore { text-align: center; padding: 32rpx 0 8rpx; }
 .loadmore-hint { text-align: center; padding: 16rpx 24rpx 8rpx; font-size: 26rpx; line-height: 1.5; }
 
-/* 记录行：画布直排 + 发丝线 */
+/* 记录行：画布直排 + 发丝线。每行固定两层（左：金额客户 / 备注；右：时间状态 / 操作），
+   顶端对齐，所有行同高；备注过长单行省略，全文在点行弹出的详情里 */
 .rec {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 24rpx;
   padding: 24rpx 8rpx;
 }
 .rec-l { flex: 1; min-width: 0; }
-.rec-line1 { display: flex; align-items: baseline; gap: 16rpx; }
-.rec-amt { font-size: 34rpx; font-weight: 600; }
+.rec-line1 { display: flex; align-items: baseline; gap: 16rpx; min-width: 0; }
+.rec-amt { flex: none; font-size: 34rpx; font-weight: 600; }
 /* 客户名 = 单人往来入口：主色示意可点，点击后台账只看这个人 */
-.rec-who { font-size: 26rpx; color: var(--color-primary); font-weight: 500; }
+.rec-who { min-width: 0; font-size: 26rpx; color: var(--color-primary); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rec-who:active { opacity: 0.6; }
-.rec-remark { font-size: 24rpx; margin-top: 8rpx; }
+.rec-remark { font-size: 24rpx; margin-top: 8rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rec-r { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 8rpx; }
+/* 第一层与左侧金额行同高（34rpx × 行高 1.6 ≈ 54rpx），时间和状态徽标并排垂直居中 */
+.rec-meta { display: flex; align-items: center; gap: 16rpx; height: 54rpx; }
+.rec-acts { display: flex; align-items: center; gap: 24rpx; }
 .rec-time { font-size: 24rpx; }
 
 /* 员工行 */

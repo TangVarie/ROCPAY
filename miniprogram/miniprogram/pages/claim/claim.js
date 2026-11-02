@@ -1,4 +1,5 @@
 const { call } = require('../../api.js');
+const { yuan, num } = require('../../money.js');
 
 Page({
   data: {
@@ -23,7 +24,6 @@ Page({
     status: 'idle', // idle | loading | ok | fail
     message: '',
     claimedCount: 0, // 本次会话已领取笔数（定向可能有多笔）
-    celebrate: false, // 到账仪式（画勾 + 呼吸 + 数字滚动）
     profile: null, // 合作档案 { lv, name, count, totalYuan, nextText }
     roleLabel: '', // 管理员角色名（操作端主页用）
     adminHome: null, // 操作端主页仪表 { hasQuota, remainingYuan, low, todayCount, todayYuan }
@@ -57,7 +57,7 @@ Page({
         if (!res || !res.state) return this._tokenFallback();
         if (res.state === 'VALID') {
           this.setData({
-            amtText: Number(res.amountYuan) > 0 ? Number(res.amountYuan).toFixed(2) : '--',
+            amtText: Number(res.amountYuan) > 0 ? yuan(res.amountYuan) : '--',
             remark: res.remark || this.data.remark,
           });
           return;
@@ -77,7 +77,7 @@ Page({
   // 校验接口不可达（冷启动/网络抖动）：退回 URL 金额兜底展示；点领取仍有后端强校验把关
   _tokenFallback() {
     const n = Number(this._urlAmt);
-    this.setData({ amtText: n > 0 ? n.toFixed(2) : '--' });
+    this.setData({ amtText: n > 0 ? yuan(n) : '--' });
   },
 
   // 合作档案（等级）：/api/me 里带回，静默失败不打扰主流程
@@ -87,13 +87,13 @@ Page({
     const lv = p.level || { lv: 0, name: '初识', next: null };
     let nextText = '';
     if (lv.next && lv.next.needYuan > 0) {
-      nextText = `再领 ¥${Number(lv.next.needYuan).toFixed(2)} 升级${lv.next.name}`;
+      nextText = `再领 ¥${yuan(lv.next.needYuan)} 升级${lv.next.name}`;
     }
     return {
       lv: lv.lv,
       name: lv.name,
       count: p.count || 0,
-      totalYuan: Number(p.totalYuan || 0).toFixed(2),
+      totalYuan: yuan(p.totalYuan),
       nextText,
     };
   },
@@ -150,10 +150,10 @@ Page({
         this.setData({
           ...base,
           mode: 'mine',
-          mineAmt: Number(mine.reward.amountYuan).toFixed(2),
+          mineAmt: yuan(mine.reward.amountYuan),
           mineRemark: mine.reward.remark || '',
           minePendCount: (mine.pending && mine.pending.count) || 1,
-          minePendYuan: mine.pending ? Number(mine.pending.totalYuan).toFixed(2) : '',
+          minePendYuan: mine.pending ? yuan(mine.pending.totalYuan) : '',
           status: 'idle',
           message: mine.resume ? '上次确认收款未完成，点击领取继续即可到账' : '',
         });
@@ -195,7 +195,8 @@ Page({
         this.setData({
           adminHome: Object.assign({}, this.data.adminHome, {
             hasQuota: !!p.hasQuota,
-            remainingYuan: rem.toFixed(2),
+            remainingYuan: yuan(Math.abs(rem)), // 符号单放（-¥12.00，不显示成 ¥-12.00）
+            neg: rem < 0,
             low: p.hasQuota && rem <= 0,
           }),
         });
@@ -207,7 +208,7 @@ Page({
         this.setData({
           adminHome: Object.assign({ hasQuota: false }, this.data.adminHome, {
             todayCount: r.stats.total || 0,
-            todayYuan: ((r.stats.paid_fen || 0) / 100).toFixed(2),
+            todayYuan: yuan((r.stats.paid_fen || 0) / 100),
           }),
         });
       })
@@ -288,10 +289,9 @@ Page({
     });
   },
 
-  // 到账仪式：画勾+色块呼吸（CSS）+ 金额数字滚动到位（JS 更新展示值）
+  // 到账仪式：画勾淡入（CSS）+ 金额数字滚动到位（JS 更新展示值）。展示值带千分位，取数要 num() 还原
   _celebrate(amtKey) {
-    const target = Number(this.data[amtKey]) || 0;
-    this.setData({ celebrate: true });
+    const target = num(this.data[amtKey]);
     if (!(target > 0)) return;
     if (this._countTimer) clearInterval(this._countTimer);
     const t0 = Date.now();
@@ -299,7 +299,7 @@ Page({
     this._countTimer = setInterval(() => {
       const p = Math.min(1, (Date.now() - t0) / DUR);
       const eased = 1 - Math.pow(1 - p, 3); // ease-out
-      this.setData({ [amtKey]: (target * eased).toFixed(2) });
+      this.setData({ [amtKey]: yuan(target * eased) });
       if (p >= 1) clearInterval(this._countTimer);
     }, 33);
   },
@@ -446,13 +446,12 @@ Page({
             : null;
           this.setData({
             mode: 'mine',
-            mineAmt: Number(mine.reward.amountYuan).toFixed(2),
+            mineAmt: yuan(mine.reward.amountYuan),
             mineRemark: mine.reward.remark || '',
             minePendCount: (mine.pending && mine.pending.count) || 1,
-            minePendYuan: mine.pending ? Number(mine.pending.totalYuan).toFixed(2) : '',
+            minePendYuan: mine.pending ? yuan(mine.pending.totalYuan) : '',
             status: 'idle',
             message: mine.resume ? '上次确认收款未完成，点击领取继续即可到账' : '',
-            celebrate: false, // 新的一笔回到领取态
           });
         } else {
           this.setData({ minePendCount: 0, minePendYuan: '' }); // 全部领完
