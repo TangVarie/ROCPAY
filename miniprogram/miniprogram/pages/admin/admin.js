@@ -1,6 +1,8 @@
 const { call } = require('../../api.js');
 // 本文件不少地方有叫 yuan 的局部变量（输入的金额），格式化函数改名引入，免得被遮住
 const { yuan: fmtYuan, num } = require('../../money.js');
+// 转发卡封面（5:4，青面「你有一笔奖励」）。不给 imageUrl 微信会截当前页面——工作台上是客户名单和金额，不能外发
+const SHARE_COVER = '/images/share-cover.png';
 
 Page({
   data: {
@@ -868,10 +870,11 @@ Page({
         title: `请领取 ¥${r.amountText || r.amountYuan} 奖励`,
         // 只带令牌：金额/备注由领取页向后端核验后展示，URL 上带了也不认（可被改）
         path: `/pages/claim/claim?token=${encodeURIComponent(r.token)}`,
+        imageUrl: SHARE_COVER,
       };
     }
     // 定向发放：分享领取入口即可（客户按身份识别，无需令牌）。标题带品牌名增强信任
-    return { title: '梨响ROC · 你的奖励到啦，点开领取', path: '/pages/claim/claim' };
+    return { title: '梨响ROC · 你的奖励到啦，点开领取', path: '/pages/claim/claim', imageUrl: SHARE_COVER };
   },
 
   // ============ 记录 ============

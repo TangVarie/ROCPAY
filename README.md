@@ -125,7 +125,7 @@ DDL 见 [`db/schema.sql`](./db/schema.sql)（与 `src/db.js` 中的建表语句�
 仓库根目录/                 ← 后端，云托管构建（Dockerfile 在此，监听 3000）
 ├── Dockerfile · package.json · .env.example
 ├── public/                # 静态：安全医生 verify 文件（根目录直达）
-├── assets/reward-cover.png# 企微群发卡片封面（BYWOOD 深青，scripts/make-cover.mjs 生成）
+├── assets/reward-cover.png# 分享卡封面（企微群发卡片与小程序转发共用，scripts/make-cover.mjs 生成）
 ├── db/schema.sql          # 建表参考（启动自动建，通常不用手跑）
 ├── src/
 │   ├── config.js          # 配置加载 + 启动校验
@@ -140,6 +140,10 @@ DDL 见 [`db/schema.sql`](./db/schema.sql)（与 `src/db.js` 中的建表语句�
     └── miniprogram/
         ├── app.wxss       # BYWOOD 设计系统 v5.1 token（青赭双色 / 直角 / 黑色阶 / 语义色 / 深色模式翻转）
         ├── api.js         # 统一调用封装（串行队列 + 超时 + 重试）
+        ├── components/
+        │   ├── splash/     # 开屏（第一次打开 1.8 秒 + 跳过，之后 0.6 秒）
+        │   └── state-view/ # 状态页（加载 / 出错 / 空 / 无权限），两个页面共用
+        ├── images/share-cover.png  # 转发卡封面（assets/reward-cover.png 的副本）
         └── pages/{claim,admin}/  # 领取页 / 工作台
 ```
 

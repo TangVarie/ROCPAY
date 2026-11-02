@@ -1,0 +1,10 @@
+<view class="state">
+  <view wx:if="{{icon==='spinner'}}" class="band-spinner state-icon" aria-label="加载中">
+    <view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view>
+  </view>
+  <view wx:else class="li li-{{icon}} state-icon" aria-hidden="true"></view>
+  <view class="state-t1">{{title}}</view>
+  <view class="state-t2" wx:if="{{desc}}">{{desc}}</view>
+  <view class="state-detail" wx:if="{{detail}}">{{detail}}</view>
+  <button class="btn btn-fill state-btn" wx:if="{{btnText}}" bindtap="onAction">{{btnText}}</button>
+</view>
