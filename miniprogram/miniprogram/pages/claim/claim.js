@@ -496,12 +496,13 @@ Page({
     // 这笔已到账：剩余笔数同步减一（「第 N/M 笔」的 M = 已到账 + 剩余，不减会多算一笔）
     const left = Math.max(0, this.data.minePendCount - 1);
     this.setData({ claimedCount: n, claimedFen: fen, claimedYuan: yuan(fen / 100), resume: false, minePendCount: left });
-    if (left > 0) {
-      this.setData({ status: 'between', message: `第 ${n} 笔已到账，正在准备下一笔` });
-      setTimeout(() => this.checkMineQuiet(), 800);
-      return;
-    }
-    this._finishAll();
+    // 不管本地剩余计数是不是 0，都先向后端查一次下一笔再决定是否"全部到账"：
+    // 后端的待领笔数只算当前池子（直连池服务期间不含企微池），本地数到 0 不代表真领完了
+    this.setData({
+      status: 'between',
+      message: left > 0 ? `第 ${n} 笔已到账，正在准备下一笔` : '已到账，正在核对是否还有待领奖励',
+    });
+    setTimeout(() => this.checkMineQuiet(), 300);
   },
   // 整批完成：多笔时大数字换成本次累计，标题写清共几笔。只在后端明确"没有下一笔"时才到这
   _finishAll() {
