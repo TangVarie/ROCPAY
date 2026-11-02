@@ -61,6 +61,23 @@
   opacity: 0.65;
 }
 
+/* 跳过：右下角，墨字墨框（青面上一律墨），热区 88rpx。与底部居中的「正在加载…」不同列，不会叠 */
+.splash-skip {
+  position: absolute;
+  right: 32rpx;
+  bottom: calc(32rpx + env(safe-area-inset-bottom));
+  min-width: 88rpx;
+  height: 88rpx;
+  line-height: 86rpx;
+  padding: 0 32rpx;
+  box-sizing: border-box;
+  border: 1px solid currentColor;
+  font-size: 28rpx;
+  letter-spacing: 4rpx;
+  text-align: center;
+}
+.splash-skip:active { background: rgba(0, 0, 0, 0.08); }
+
 @media (prefers-reduced-motion: reduce) {
   .splash, .splash-leave, .splash-wait { animation: none; }
 }

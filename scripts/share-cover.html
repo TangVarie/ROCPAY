@@ -1,0 +1,44 @@
+<!doctype html>
+<!-- 分享卡封面源文件（BYWOOD 场景 08 §四「闭合面」：青面 + 一句话 + 墨版标识 + 轮印，不预览金额）。
+     1000×800（5:4）。小程序转发卡和企微群发卡片共用这一张，由 scripts/make-cover.mjs 截图生成。
+     为什么用闭合面不用数据钩：金额每笔不同，静态图放不了；收到卡的是合作客户，本来就在等这笔奖励。
+     金额由转发标题和领取页向后端核验后展示，封面不写。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<!-- 只在生成封面时用；小程序本身不加载网络字体 -->
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=Noto+Serif+SC:wght@700&display=block" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; border-radius: 0; }
+  html, body { width: 1000px; height: 800px; overflow: hidden; }
+  body {
+    background: #7ED1CD; /* 标志青做品牌面色（palette.json screen.fieldBrand），只做底不做字 */
+    color: #1A1A1A;      /* 墨字：压标志青 9.85:1 */
+    font-family: 'PingFang SC', 'Noto Sans SC', sans-serif;
+    padding: 64px 72px 72px;
+    display: flex;
+    flex-direction: column;
+  }
+  .top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .id { font-size: 44px; font-weight: 700; letter-spacing: 0.04em; line-height: 1; }
+  /* 轮印：闲章，内容固定；青面上一律墨色；边长 ≤ 短边 8%（800 × 8% = 64px） */
+  .seal { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.14em;
+    width: 2.75em; height: 2.75em; font-size: 23px; border: 2px solid currentColor; line-height: 1; }
+  .seal svg { display: block; height: 0.5em; width: auto; fill: currentColor; }
+  .seal b { font-family: 'Songti SC', 'Noto Serif SC', serif; font-size: 0.78em; font-weight: 700; letter-spacing: 0.06em; }
+  .seal i { font-family: Georgia, 'Noto Serif', serif; font-style: normal; font-size: 0.36em; font-weight: 700; letter-spacing: 0.2em; margin-left: 0.2em; }
+  .seal small { font-size: 0.34em; letter-spacing: 0.04em; }
+  /* 一句话是主角（品牌衬线时刻）；聊天里缩到约 1/5 仍要认得出 */
+  h1 { font-family: 'Songti SC', 'Noto Serif SC', serif; font-size: 96px; font-weight: 700; line-height: 1.25; margin-top: auto; }
+  .k { font-size: 36px; color: rgba(0, 0, 0, 0.65); letter-spacing: 0.06em; margin-top: 24px; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <span class="id">梨响ROC</span>
+    <span class="seal" aria-label="扶摇 ROC · 结构性复利"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 292.502 90" aria-hidden="true"><path fill="currentColor" d="M67.727 34.135C32.985 45.255 0 45.001 0 45.001L0 45.001L0 51.75C0 51.75 32.855 52.048 67.502 40.949L67.502 40.949C103.083 29.553 140.552 6.749 146.251 6.749L146.251 6.749C151.956 6.749 189.472 29.567 225.076 40.975L225.076 40.975C259.694 52.066 292.502 51.75 292.502 51.75L292.502 51.75L292.502 45.001C292.502 45.001 259.826 45.36 225.309 34.291L225.309 34.291C189.665 22.865 152.058 0 146.44 0L146.44 0C140.655 0 103.273 22.756 67.727 34.135M67.313 56.789C32.182 59.782 0 58.502 0 58.502L0 58.502L0 65.251C0 65.251 32.178 66.531 67.277 63.538L67.277 63.538C97.807 60.934 130.553 54 146.251 54L146.251 54C161.942 54 194.648 60.931 225.156 63.535L225.156 63.535C260.284 66.528 292.502 65.251 292.502 65.251L292.502 65.251L292.502 58.502C292.502 58.502 260.273 59.779 225.171 56.782L225.171 56.782C194.687 54.182 162.036 47.251 146.44 47.251L146.44 47.251C130.65 47.251 97.869 54.185 67.313 56.789M0 72L0 78.749C0 78.749 135 74.251 146.251 74.251L146.251 74.251C157.502 74.251 292.502 78.749 292.502 78.749L292.502 78.749L292.502 72C292.502 72 157.502 67.502 146.44 67.502L146.44 67.502C135 67.502 0 72 0 72M0 90L292.502 90L292.502 83.251L0 83.251Z"/></svg><b>扶摇</b><i>ROC</i><small>结构性复利</small></span>
+  </div>
+  <h1>你有一笔奖励</h1>
+  <div class="k">在微信内确认领取</div>
+</body>
+</html>

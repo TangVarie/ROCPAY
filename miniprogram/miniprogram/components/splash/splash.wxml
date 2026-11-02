@@ -1,7 +1,8 @@
 <!-- 开屏：接收层定式——青面 + 一句话 + 一个标志（BRAND-LANGUAGE 表二 / BRAND.md §2 青面三件套）。
      标志 = v5.5 的轮印（闲章：山形 + 扶摇 + ROC + 结构性复利，内容固定不计数），落启动页角落，墨色。
-     与加载的关系：至少停 SHOW_MIN；页面数据没到就继续停（底部出山形弧带 + 一句「正在加载…」），
-     到了再淡出——用户永远只看到一屏，不会开屏刚走又来一个加载页；SHOW_MAX 兜底，点任意处跳过。 -->
+     与加载的关系：第一次打开停 1.8 秒，之后只停 0.6 秒；页面数据没到就继续停（底部出山形弧带 + 一句「正在加载…」），
+     到了再淡出——用户永远只看到一屏，不会开屏刚走又来一个加载页；SHOW_MAX 兜底。
+     点任意处都能跳过；第一次打开和等加载时把「跳过」写出来，日常 0.6 秒一闪而过就不放了。 -->
 <view class="splash {{leaving ? 'splash-leave' : ''}}" wx:if="{{visible}}" bindtap="skip" aria-label="梨响ROC 启动页，点击跳过">
   <view class="round-seal splash-seal" aria-hidden="true">
     <view class="mark"><view class="b b1"></view><view class="b b2"></view><view class="b b3"></view><view class="b b4"></view></view>
@@ -15,4 +16,6 @@
     <view class="band-spinner"><view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view></view>
     <text class="splash-wait-t">正在加载…</text>
   </view>
+
+  <view class="splash-skip" wx:if="{{first || waiting}}" catchtap="skip" aria-role="button" aria-label="跳过启动页">跳过</view>
 </view>

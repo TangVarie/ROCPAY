@@ -1,4 +1,4 @@
 {
-  "usingComponents": { "splash": "/components/splash/splash" },
+  "usingComponents": { "splash": "/components/splash/splash", "state-view": "/components/state-view/state-view" },
   "navigationBarTitleText": "领取奖励"
 }

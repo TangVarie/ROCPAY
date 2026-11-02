@@ -68,35 +68,7 @@
 .admin-entry { margin-top: 24rpx; }
 .rb-fine { margin-top: 16rpx; font-size: 24rpx; line-height: 1.5; }
 
-/* ===== 状态页（空/错/加载）：裸线性图标 + 两行文案 + 次按钮 ===== */
-.state {
-  padding: 96rpx 32rpx 40rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.state-icon { margin-bottom: 32rpx; }
-.state-t1 { font-size: 34rpx; font-weight: 600; color: var(--color-text-dark); }
-.state-t2 { margin-top: 8rpx; font-size: 26rpx; color: var(--color-text-light); text-align: center; }
-.state-detail {
-  margin-top: 16rpx;
-  font-size: 24rpx;
-  color: var(--color-text-hint);
-  text-align: center;
-  word-break: break-all;
-  max-height: 200rpx;
-  overflow: hidden;
-}
-/* 宽度改下限、高度可撑：系统字体放大时文字变宽变高，固定宽高会折行裁字 */
-.state-btn {
-  margin-top: 40rpx;
-  min-width: 320rpx;
-  width: auto;
-  height: auto;
-  min-height: 96rpx;
-  padding: 16rpx 40rpx;
-  box-sizing: border-box;
-}
+/* 状态页（空/错/加载）的版式在 components/state-view 里，两个页面共用 */
 
 
 /* ===== 操作端主页（管理员进门即仪表盘） ===== */
@@ -161,5 +133,10 @@
 /* ⑥ 帮助 + 合作记录 + 员工入口：奖励块之下的次要信息，统一一档小字 */
 .help { margin-top: 24rpx; padding: 0 8rpx; font-size: 24rpx; line-height: 1.6; color: var(--color-text-light); text-align: center; }
 .coop { margin-top: 16rpx; padding: 0 8rpx; font-size: 24rpx; line-height: 1.6; color: var(--color-text-light); text-align: center; }
-.staff-entry { margin-top: 32rpx; padding: 24rpx; text-align: center; font-size: 26rpx; font-weight: 600; color: var(--color-primary); }
+.staff-entry { margin-top: 32rpx; padding: 28rpx 24rpx; text-align: center; font-size: 26rpx; font-weight: 600; color: var(--color-primary); }
 .staff-entry:active { opacity: 0.6; }
+
+/* 奖励提醒：一行理由在上，按钮在下；开启/拒绝后只剩一行结果 */
+.sub { margin-top: 40rpx; }
+.sub-t { padding: 0 8rpx; font-size: 24rpx; line-height: 1.6; color: var(--color-text-light); text-align: center; }
+.sub-btn { margin-top: 16rpx; }

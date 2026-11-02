@@ -5,31 +5,15 @@
 <view class="page stagger-in">
 
   <!-- 识别中：品牌山形弧带加载动效（四条弧带由下至上逐层点亮） -->
-  <view class="state" wx:if="{{mode==='loading'}}">
-    <view class="band-spinner state-icon" aria-label="加载中">
-        <view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view>
-      </view>
-    <view class="state-t1">正在为你查看奖励</view>
-    <view class="state-t2">通常只需要一两秒</view>
-  </view>
+  <state-view wx:if="{{mode==='loading'}}" icon="spinner" title="正在为你查看奖励" desc="通常只需要一两秒" />
 
   <!-- 连接失败 -->
-  <view class="state" wx:if="{{mode==='error'}}">
-    <view class="li li-alert state-icon"></view>
-    <view class="state-t1">暂时连不上服务</view>
-    <view class="state-t2">服务可能正在启动，点下方按钮再试一次</view>
-    <view class="state-detail" wx:if="{{message}}">{{message}}</view>
-    <button class="btn btn-fill state-btn" bindtap="retry">再试一次</button>
-  </view>
+  <state-view wx:if="{{mode==='error'}}" icon="alert" title="暂时连不上服务" desc="服务可能正在启动，点下方按钮再试一次" detail="{{message}}" btn-text="再试一次" bind:action="retry" />
 
   <!-- 奖励色块：领取前赭石块（白字）/ 到账后品牌面色（标志青底 + 墨字，v5.1 里程碑用法） -->
   <block wx:if="{{mode==='token' || mode==='mine'}}">
     <!-- 令牌已终结（过期/已领/已撤回）：直接给终态，不再出现可点的领取按钮 -->
-    <view class="state" wx:if="{{tokenGone}}">
-      <view class="li li-alert state-icon"></view>
-      <view class="state-t1">无法领取</view>
-      <view class="state-t2">{{tokenGone}}</view>
-    </view>
+    <state-view wx:if="{{tokenGone}}" icon="alert" title="无法领取" desc="{{tokenGone}}" />
 
     <!-- 可信收款单：发放方 → 金额与事由 → 当前状态 → 主按钮 → 官方确认说明 → 帮助。
          外部链接最怕"这是谁发的、为什么、钱到哪"，这三件事先讲清 -->
@@ -97,6 +81,16 @@
       <!-- ⑥ 帮助：按状态给一句下一步 -->
       <view class="help">{{ status==='ok' ? '可在微信「我 › 服务 › 钱包 › 零钱」查看这笔入账' : (status==='confirming' || status==='arriving' || status==='between') ? '微信入账通常几秒到几分钟，可稍后重新打开本页查看' : '对这笔奖励有疑问，请联系' + (issuer || '给你发奖励的员工') }}</view>
 
+      <!-- 奖励提醒：到账之后再问（领取前不打扰）。先说为什么，客户主动点才弹系统授权 -->
+      <view class="sub" wx:if="{{status==='ok' && subOn}}">
+        <view class="sub-t" wx:if="{{subState==='on'}}">已开启提醒：下一笔奖励发出时，微信会通知你</view>
+        <view class="sub-t" wx:elif="{{subState==='off'}}">没有开启提醒。之后想开，点右上角「···」›「设置」›「通知管理」</view>
+        <block wx:else>
+          <view class="sub-t">下一笔奖励发出时，可以用微信服务通知提醒你（开一次，提醒一次）</view>
+          <button class="btn btn-fill btn-block sub-btn" bindtap="askSubscribe" loading="{{subState==='saving'}}" disabled="{{subState==='saving'}}">有新奖励时提醒我</button>
+        </block>
+      </view>
+
       <!-- 合作记录：降为一行次要信息；首次领取不提升级进度 -->
       <view class="coop" wx:if="{{profile && profile.count > 0}}">合作 {{profile.count}} 次 · 累计到账 ¥{{profile.totalYuan}} · LV{{profile.lv}} {{profile.name}}{{profile.count >= 2 && profile.nextText ? ' · ' + profile.nextText : ''}}</view>
 
@@ -143,7 +137,7 @@
       </view>
 
       <button class="btn btn-blue btn-block" bindtap="goAdmin">进入工作台</button>
-      <view class="ah-tips t-hint">定向发放 · 台账对账 · 客户等级榜</view>
+      <view class="ah-tips t-light">定向发放 · 台账对账 · 客户等级榜</view>
 
       <!-- 下半版面：累计发放大字报（有内容的填充） -->
       <view class="wm-zone" wx:if="{{adminHome && adminHome.totalAllYuan}}">
@@ -153,12 +147,16 @@
       </view>
     </block>
     <block wx:else>
-      <view class="state">
-        <view class="li li-gift state-icon"></view>
-        <view class="state-t1">暂时没有你的奖励</view>
-        <view class="state-t2">{{emptyReason || '收到奖励后，打开这里即可领取'}}</view>
-        <!-- 订阅"奖励提醒"：一次允许=之后有新奖励直达微信服务通知一条（后端未配置时不显示） -->
-        <button class="btn btn-fill state-btn" wx:if="{{subOn}}" bindtap="askSubscribe">有新奖励时提醒我</button>
+      <state-view icon="gift" title="暂时没有你的奖励" desc="{{emptyReason || '收到奖励后，打开这里即可领取'}}" />
+
+      <!-- 奖励提醒：客户主动点才弹系统授权（后端未配置模板时不显示）。和到账后的入口同一套状态 -->
+      <view class="sub" wx:if="{{subOn}}">
+        <view class="sub-t" wx:if="{{subState==='on'}}">已开启提醒：有新奖励时，微信会通知你</view>
+        <view class="sub-t" wx:elif="{{subState==='off'}}">没有开启提醒。之后想开，点右上角「···」›「设置」›「通知管理」</view>
+        <block wx:else>
+          <view class="sub-t">有新奖励时，可以用微信服务通知提醒你（开一次，提醒一次）</view>
+          <button class="btn btn-fill btn-block sub-btn" bindtap="askSubscribe" loading="{{subState==='saving'}}" disabled="{{subState==='saving'}}">有新奖励时提醒我</button>
+        </block>
       </view>
 
       <!-- 合作记录：降为一行次要信息 -->

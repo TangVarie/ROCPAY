@@ -36,6 +36,9 @@ Page({
     claimedYuan: '', // 同上，展示串
     profile: null, // 合作档案 { lv, name, count, totalYuan, nextText }
     roleLabel: '', // 管理员角色名（操作端主页用）
+    // 「有新奖励时提醒我」：后端配了订阅模板才显示；只在到账后和空态由用户主动点，领取前不弹
+    subOn: false,
+    subState: '', // '' 未开 | saving 落库中 | on 已开启 | off 拒绝了（给去设置打开的说明，不再出按钮）
     adminHome: null, // 操作端主页仪表 { hasQuota, remainingYuan, low, todayCount, todayYuan }
   },
 
@@ -112,13 +115,16 @@ Page({
     };
   },
   refreshProfile() {
-    // 把请求存成 promise：链接冷启动时领取按钮先于 /api/me 返回可点，
-    // _askSubscribe 会等这个 promise（最多 2 秒）再决定要不要弹订阅授权
-    this._meLoading = call('/api/me', 'GET')
+    call('/api/me', 'GET')
       .then((me) => {
         if (me && me.openid) {
           this._subTmplId = me.subscribeTmplId || ''; // 订阅消息模板（''=后端未配置，静默关闭）
-          this.setData({ openid: me.openid, isAdmin: !!me.isAdmin, profile: this._profileOf(me) });
+          this.setData({
+            openid: me.openid,
+            isAdmin: !!me.isAdmin,
+            profile: this._profileOf(me),
+            subOn: !!this._subTmplId && !this._subBanned, // 到账后刷新档案也走这里，被封禁的模板别再冒出来
+          });
         }
       })
       .catch(() => {});
@@ -152,7 +158,7 @@ Page({
         openid: me.openid || '',
         profile: this._profileOf(me),
         roleLabel: me.role === 'super' ? '超级管理员' : me.role === 'operator' ? '发放员' : '',
-        subOn: !!this._subTmplId, // 空态"有新奖励时提醒我"按钮的开关
+        subOn: !!this._subTmplId && !this._subBanned, // "有新奖励时提醒我"的开关（空态、到账后）
       };
       if (me.isAdmin) this.loadAdminHome(); // 管理员进门：拉仪表数据（额度剩余 + 近24h发放）
       if (mine && mine.reward) {
@@ -372,72 +378,50 @@ Page({
     setTimeout(() => this.refreshProfile(), 1200); // 到账后档案(合作次数/累计)自动 +1
   },
 
-  // 领取动作顺带请求「奖励提醒」订阅授权：一次授权 = 之后新奖励可直达微信服务通知一条。
-  // 必须在点击手势里同步调起（微信平台约束）；拒绝/失败都不影响领取；每次会话只弹一次
-  // （客户勾了"总是保持以上选择"后微信不再弹窗、静默累计授权）。串行执行：授权弹窗
-  // 处理完（complete）再走领取，避免与"确认收款"半屏叠在一起。
-  // 链接冷启动时模板 ID 可能还在 /api/me 途中：最多等 2 秒再决定，拿不到就放行领取——
-  // 订阅采集不许卡死领钱，但也不白白错过首笔（往往是唯一一笔）的授权机会
-  _askSubscribe(next) {
-    if (this._subAsked || typeof wx.requestSubscribeMessage !== 'function') return next();
-    const go = () => {
-      const id = this._subTmplId;
-      if (!id || this._subAsked) return next();
-      this._subAsked = true;
-      wx.requestSubscribeMessage({
-        tmplIds: [id],
-        success: (r) => {
-          if (r && r[id] === 'accept') this._saveGrant();
-        },
-        complete: () => next(),
-      });
-    };
-    if (this._subTmplId === undefined && this._meLoading) {
-      let done = false;
-      const once = () => {
-        if (done) return;
-        done = true;
-        go();
-      };
-      this._meLoading.then(once, once);
-      setTimeout(once, 2000);
-    } else {
-      go();
-    }
-  },
-  // 授权落库：微信侧已实际消耗一次授权，落库失败=白丢。失败自动重试一次；
-  // 仍失败则放开 _subAsked，本会话下次领取再问（勾过"总是保持"的用户重问不弹窗，
-  // 等于纯重试落库）。万一造成本地多记：发送时微信回 43101 会把本地配额对齐清零，能自愈
-  _saveGrant(retried) {
-    call('/api/subscribe/grant', 'POST', {})
-      .then((res) => {
-        if (res && res.error) throw new Error(res.error);
-      })
-      .catch(() => {
-        if (!retried) return setTimeout(() => this._saveGrant(true), 1000);
-        this._subAsked = false;
-      });
-  },
-  // 空态"有新奖励时提醒我"：显式订阅入口（首次没有奖励也能先把提醒开起来）。
-  // 只有后端确认落库成功才提示"已开启"，失败让用户再点一次（授权不静默丢）
+  // 「有新奖励时提醒我」：只在用户主动点时弹系统授权——领取前不打扰（那一刻客户只想领钱，
+  // 授权窗还会和微信「确认收款」半屏抢位置），到账后和空态各给一个入口。
+  // 按钮上方先说清为什么要（场景 04：先说为什么，再弹授权）；拒绝了就给去设置里打开的说明，
+  // 本次不再出按钮，不反复弹。一次授权 = 之后一条服务通知，所以文案写「开一次提醒一次」
   askSubscribe() {
     const id = this._subTmplId;
-    if (!id) return;
+    if (!id || this.data.subState === 'saving') return;
     if (typeof wx.requestSubscribeMessage !== 'function') {
       return wx.showToast({ title: '当前微信版本过低', icon: 'none' });
     }
     wx.requestSubscribeMessage({
       tmplIds: [id],
       success: (r) => {
-        if (!r || r[id] !== 'accept') return;
-        call('/api/subscribe/grant', 'POST', {})
-          .then((res) => {
-            if (res && res.error) return wx.showToast({ title: res.error, icon: 'none' });
-            wx.showToast({ title: '已开启提醒', icon: 'success' });
-          })
-          .catch(() => wx.showToast({ title: '网络错误，请再点一次', icon: 'none' }));
+        const v = r && r[id];
+        if (v === 'accept') return this._saveGrant();
+        // ban / filter：模板被封禁或被过滤，是后台的问题，客户怎么点都没用——收起入口
+        if (v === 'ban' || v === 'filter') {
+          this._subBanned = true;
+          return this.setData({ subOn: false });
+        }
+        this.setData({ subState: 'off' }); // reject：这次拒绝，或勾过「总是保持以上选择」
+      },
+      fail: (e) => {
+        // 20004：客户在设置里关了「接收通知」总开关，和拒绝一样引导去设置
+        if (e && e.errCode === 20004) return this.setData({ subState: 'off' });
+        wx.showToast({ title: '没能打开提醒，请再点一次', icon: 'none' });
       },
     });
+  },
+  // 授权落库：微信侧已实际消耗一次授权，落库失败 = 白丢。失败自动重试一次；仍失败退回未开启，
+  // 让客户再点（勾过「总是保持」的客户再点不弹窗，等于纯重试落库）。万一本地多记：
+  // 发送时微信回 43101 会把本地配额对齐清零，能自愈。只有后端确认成功才显示「已开启」
+  _saveGrant(retried) {
+    this.setData({ subState: 'saving' });
+    call('/api/subscribe/grant', 'POST', {})
+      .then((res) => {
+        if (res && res.error) throw new Error(res.error);
+        this.setData({ subState: 'on' });
+      })
+      .catch(() => {
+        if (!retried) return setTimeout(() => this._saveGrant(true), 1000);
+        this.setData({ subState: '' });
+        wx.showToast({ title: '网络错误，提醒没开成，请再点一次', icon: 'none' });
+      });
   },
 
   // 链接领取（令牌）
@@ -450,7 +434,7 @@ Page({
     }
     if (this.data.amtUnverified) return; // 金额没核验不许领（按钮本就不渲染，这里兜底）
     this.setData({ status: 'loading', message: '' });
-    this._askSubscribe(() => this._doClaimToken());
+    this._doClaimToken();
   },
   _doClaimToken() {
     call('/api/claim', 'POST', { token: this.data.token })
@@ -473,7 +457,7 @@ Page({
       return this._confirmTransfer(this._pendingTransfer, () => this._afterMineOk());
     }
     this.setData({ status: 'loading', message: '' });
-    this._askSubscribe(() => this._doClaimMine());
+    this._doClaimMine();
   },
   _doClaimMine() {
     call('/api/claim/mine', 'POST', {})

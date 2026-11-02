@@ -116,7 +116,7 @@
 > 企微（P2，接企微时才填，见 §12）：`WECOM_CORPID`、`WECOM_CONTACT_SECRET`、`WECOM_CALLBACK_TOKEN`、`WECOM_CALLBACK_AES_KEY`（后两个用于解锁「企业可信IP」，见 §12.4）、可选 `WECOM_AGENT_ID`。
 > **安全（强烈建议）**：`WX_PUBLIC_HOSTS`=你的公网自定义域名（如 `roc.bywood.com.cn`，多个逗号分隔）。设了它，公网域名只放行回调/健康/验证路径、且不信任伪造的 x-wx-openid，防止有人从公网冒充管理员调 `/api/rewards` 等接口。小程序走内网 callContainer 不受影响（设完用体验版验一下发放正常即可）。`ALLOW_DEV_AUTH` 只在本地调试用 `DEV_OPENID` 时置 `1`，**生产环境绝不要设**。
 > 可选：`MYSQL_POOL_SIZE`（默认 5）、`DB_AUTO_MIGRATE`（默认 true）、`REWARD_TTL_HOURS`（默认 72）、`MAX_AMOUNT_YUAN`（默认 5000）、`MIN_AMOUNT_YUAN`（默认 0.1，见 §11）。
-> **小程序直达通知（订阅消息，可选）**：配好后定向发放结果页出现「小程序直达通知」——后端直接给客户微信推服务通知、点开直达领取页，不再依赖企微群发。三步：① 公众平台「功能→订阅消息」从模板库选一个"奖励/资金到账提醒"类模板，拿到模板 ID 填 `WECHAT_SUBSCRIBE_TEMPLATE_ID`；② 按该模板的字段 key 填映射 `WECHAT_SUBSCRIBE_DATA`（JSON，值可用占位符 `{remark}`/`{amount}`/`{count}`/`{time}`，例：`{"thing1":"{remark}","amount2":"¥{amount}","time3":"{time}"}`）；③ 鉴权二选一：填小程序密钥 `WECHAT_APPSECRET`，或在云托管开通「开放接口服务」后设 `WECHAT_CLOUDBASE_OPENAPI=true`（免密钥，推荐）。可选 `WECHAT_SUBSCRIBE_PAGE`（默认 `pages/claim/claim`）。微信规则：客户须先在小程序点过一次「允许」（领取时会自动请求、空态页也有「有新奖励时提醒我」入口），一次授权=可发一条；没授权/没打开过小程序的客户，结果页会列出来，走企微群发或转发兜底。
+> **小程序直达通知（订阅消息，可选）**：配好后定向发放结果页出现「小程序直达通知」——后端直接给客户微信推服务通知、点开直达领取页，不再依赖企微群发。三步：① 公众平台「功能→订阅消息」从模板库选一个"奖励/资金到账提醒"类模板，拿到模板 ID 填 `WECHAT_SUBSCRIBE_TEMPLATE_ID`；② 按该模板的字段 key 填映射 `WECHAT_SUBSCRIBE_DATA`（JSON，值可用占位符 `{remark}`/`{amount}`/`{count}`/`{time}`，例：`{"thing1":"{remark}","amount2":"¥{amount}","time3":"{time}"}`）；③ 鉴权二选一：填小程序密钥 `WECHAT_APPSECRET`，或在云托管开通「开放接口服务」后设 `WECHAT_CLOUDBASE_OPENAPI=true`（免密钥，推荐）。可选 `WECHAT_SUBSCRIBE_PAGE`（默认 `pages/claim/claim`）。微信规则：客户须先在小程序点过一次「允许」（领取前不弹；到账后和空态页各有一个「有新奖励时提醒我」，客户主动点才弹授权），一次授权=可发一条。注意：以前是领取时自动弹，改成主动点之后授权会变少，没授权的客户照旧走企微群发或转发兜底；没授权/没打开过小程序的客户，结果页会列出来，走企微群发或转发兜底。
 > 可发额度台账：**不依赖微信余额接口，无需开通任何权限**。工作台「记录」页顶部：「充值」累加（自动携带上期结余）、「校准」直接设为账户实际余额（对不上时一键对齐）；充值/校准是数据库事务，多管理员并发不丢笔。后台每 10 分钟自动对账在途转账（没配回调/回调丢失也能追平到账状态）。旧变量 `WECHATPAY_BALANCE_ACCOUNT_TYPE` 已废弃，云托管里配过的可删除。
 > 安全医生域名验证：商户平台「账户中心→安全中心→安全医生」下载 `verify_xxx.html` 后，把**文件名**填 `WECHATPAY_VERIFY_FILE`、**文件内容**填 `WECHATPAY_VERIFY_CONTENT`，重部署 → 访问 `https://<你的域名>/verify_xxx.html` 能返回内容即可点"开始验证"。诊断链接按 `https://<域名>/api/notify` 格式绑定；对接 API 的服务器 IP = 云托管出口IP（与打款白名单同一个）。
 > 私钥推荐用 `WECHATPAY_PRIVATE_KEY_BASE64`（`base64 -w0 apiclient_key.pem`），比多行 PEM 稳。
@@ -293,7 +293,7 @@ WECHATPAY_SCENE_REPORT_INFOS=[{"info_type":"岗位类型","info_content":"推广
 `POST /api/rewards/revoke` 撤回（未领取作废；待确认向微信撤销、资金回流）·
 `GET /api/me` 返回 profile（客户合作次数/累计到账/等级，领取页展示）
 
-> **群发卡片**：`/api/deliver` 会自动上传封面（`assets/reward-cover.png`，由 `scripts/make-cover.mjs` 生成）拿 `pic_media_id`，附一张跳 `pages/claim/claim.html` 的小程序卡片。要求小程序 AppID 已关联企微。
+> **群发卡片**：`/api/deliver` 会自动上传封面（`assets/reward-cover.png`，由 `scripts/make-cover.mjs` 从 `scripts/share-cover.html` 生成；小程序转发卡用同一张的副本 `miniprogram/miniprogram/images/share-cover.png`）拿 `pic_media_id`，附一张跳 `pages/claim/claim.html` 的小程序卡片。要求小程序 AppID 已关联企微。
 > **群发派发规则（重要）**：企微规定不传 `sender` 时任务派给客户跟进人里「最后聊过天」的成员，与谁点按钮无关——客户加了多个员工时任务会漂移（A 发起、任务落到 B 的群发助手）。`/api/deliver` 现按跟进关系分组、逐组指定 `sender`：发起人跟进的客户派给发起人，其余客户派给各自跟进人，创建结果（派给谁、几人失败）回显到小程序。要用满这套机制需两步：① 超管在小程序「员工」页给每个员工配置**企微账号（userid）**（企微后台「通讯录-成员-账号」可查）；② 点一次「从企微同步」重建跟进关系表（`customer_follows`，多对多；老数据退回单跟进人字段兜底）。
 > **接收上限**：每位客户每月最多接收「当月天数」条群发（企业群发与员工个人群发共享额度，可在企微「群发助手-设置群发规则」调整），超限客户会进 `fail_list`，小程序会显示未进入群发的人数——用「转发领取入口」补发即可。
 > **实时余额**：`/api/balance` 走微信支付 V3 直连商户端点 `/v3/merchant/fund/balance/BASIC`，金额分转元；工作台「记录」页顶部展示，配合「累计发放」看清发了多少/还剩多少。

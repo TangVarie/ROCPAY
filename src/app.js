@@ -26,7 +26,7 @@ const app = express();
 // 部署校验标记：每次改动会 bump，/api/health 会回显它，用来确认线上跑的是哪版代码
 const BUILD = 'p23-quota-ledger';
 
-// 企微群发「小程序卡片」封面图（BYWOOD 藏蓝礼盒，scripts/make-cover.mjs 生成）
+// 企微群发「小程序卡片」封面图（青面「你有一笔奖励」，scripts/make-cover.mjs 由 share-cover.html 生成；小程序转发卡同一张）
 const CARD_COVER = fileURLToPath(new URL('../assets/reward-cover.png', import.meta.url));
 // 封面图只读一次（懒加载缓存），避免每次群发都同步读盘阻塞事件循环
 let cardCoverBuf = null;

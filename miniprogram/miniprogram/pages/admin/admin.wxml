@@ -5,23 +5,12 @@
 
   <!-- 身份未知：先给加载态（品牌山形弧带动效），避免管理员打开先闪出"你还不是发放员" -->
   <block wx:if="{{!ready}}">
-    <view class="state">
-      <view class="band-spinner state-icon" aria-label="加载中">
-        <view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view>
-      </view>
-      <view class="state-t1">正在进入工作台</view>
-      <view class="state-t2">正在确认你的身份</view>
-    </view>
+    <state-view icon="spinner" title="正在进入工作台" desc="正在确认你的身份" />
   </block>
 
   <!-- 身份接口失败：专门的错误态 + 重试。不能落到"你还不是发放员"——那是对真管理员的误判 -->
   <block wx:elif="{{loadFailed}}">
-    <view class="state">
-      <view class="li li-alert state-icon"></view>
-      <view class="state-t1">暂时连不上服务</view>
-      <view class="state-t2">{{error || '请检查网络后再试一次'}}</view>
-      <button class="btn btn-fill state-btn" bindtap="retryInit">再试一次</button>
-    </view>
+    <state-view icon="alert" title="暂时连不上服务" desc="{{error || '请检查网络后再试一次'}}" btn-text="再试一次" bind:action="retryInit" />
   </block>
 
   <block wx:elif="{{isAdmin}}">
@@ -79,7 +68,7 @@
               <view class="textbtn" bindtap="toggleDirectAdd">{{dAddOpen?'收起':'添加客户'}}</view>
             </view>
           </view>
-          <view class="psub t-hint" wx:if="{{wecomOn && lastSyncText}}">企微档案上次同步 {{lastSyncText}}</view>
+          <view class="psub t-light" wx:if="{{wecomOn && lastSyncText}}">企微档案上次同步 {{lastSyncText}}</view>
 
           <!-- 手动添加直连客户（同 openid 再保存 = 改备注），保存后立即出现在名单里 -->
           <view class="dadd" wx:if="{{dAddOpen}}">
@@ -102,7 +91,7 @@
               <view class="cb {{selectedMap[item.key]?'on':''}}"></view>
               <view class="cust-main">
                 <view class="cust-name t-dark">{{item.label}}</view>
-                <view class="cust-sub t-hint" wx:if="{{item.sub}}">{{item.sub}}</view>
+                <view class="cust-sub t-light" wx:if="{{item.sub}}">{{item.sub}}</view>
               </view>
               <text class="badge {{item.active?'badge-blue':''}}">{{item.kind==='eu' ? (item.active?'开过小程序':'未开过') : !item.removable ? '开过小程序' : (item.active?'领过奖励':'手动添加')}}</text>
               <view class="frow-del" wx:if="{{item.removable}}" data-oid="{{item.key}}" data-label="{{item.label}}" catchtap="removeDirect">移除</view>
@@ -422,7 +411,7 @@
                原先四样竖排，带操作的行比普通行高出一倍 -->
           <view class="rec-r">
             <view class="rec-meta">
-              <text class="rec-time t-hint num">{{item.createdAt}}</text>
+              <text class="rec-time t-light num">{{item.createdAt}}</text>
               <text class="badge {{item.cls==='ok'?'badge-success':item.cls==='fail'?'badge-danger':item.cls==='muted'?'badge-muted':'badge-warning'}}">{{item.statusText}}</text>
             </view>
             <view class="rec-acts" wx:if="{{(item.batchId && !recFilter.batch) || item.canRevoke}}">
@@ -434,12 +423,7 @@
         <view class="loadmore textbtn" wx:if="{{recHasMore}}" bindtap="loadMoreRecords">{{recLoading ? '加载中…' : '加载更多'}}</view>
       </block>
       <!-- 三态：加载失败（可重试）/ 加载中 / 真空，绝不用空态冒充前两者 -->
-      <view class="state" wx:elif="{{recError}}">
-        <view class="li li-alert state-icon"></view>
-        <view class="state-t1">记录加载失败</view>
-        <view class="state-t2">网络开小差了，点下方按钮重试</view>
-        <button class="btn btn-fill state-btn" bindtap="reloadRecords">重新加载</button>
-      </view>
+      <state-view wx:elif="{{recError}}" icon="alert" title="记录加载失败" desc="网络开小差了，点下方按钮重试" btn-text="重新加载" bind:action="reloadRecords" />
       <!-- 加载中：骨架行 ×3 对齐记录行（金额行 + 备注行 + 右侧徽标位） -->
       <view class="list-skel" wx:elif="{{!recLoaded}}" aria-label="正在加载记录">
         <view class="sk-row hairline-b" wx:for="{{[1, 2, 3]}}" wx:key="*this">
@@ -451,17 +435,8 @@
         </view>
       </view>
       <!-- 筛选后没有结果 ≠ 还没有记录：给出清除筛选，不让空态说谎 -->
-      <view class="state" wx:elif="{{recFilter.status !== 'all' || recFilter.days || recFilter.month || recFilter.target || recFilter.targetOpenid || recFilter.batch || recFilter.q}}">
-        <view class="li li-inbox state-icon"></view>
-        <view class="state-t1">没有符合筛选条件的记录</view>
-        <view class="state-t2">换个筛选条件，或清除筛选看全部记录</view>
-        <button class="btn btn-fill state-btn" bindtap="clearAllFilters">清除筛选</button>
-      </view>
-      <view class="state" wx:else>
-        <view class="li li-inbox state-icon"></view>
-        <view class="state-t1">还没有发放记录</view>
-        <view class="state-t2">发出的每一笔都会在这里可查</view>
-      </view>
+      <state-view wx:elif="{{recFilter.status !== 'all' || recFilter.days || recFilter.month || recFilter.target || recFilter.targetOpenid || recFilter.batch || recFilter.q}}" icon="inbox" title="没有符合筛选条件的记录" desc="换个筛选条件，或清除筛选看全部记录" btn-text="清除筛选" bind:action="clearAllFilters" />
+      <state-view wx:else icon="inbox" title="还没有发放记录" desc="发出的每一笔都会在这里可查" />
     </block>
 
     <!-- ================= 客户（等级总榜） ================= -->
@@ -496,12 +471,7 @@
         </view>
         <view class="loadmore textbtn" wx:if="{{rankHasMore}}" bindtap="loadMoreRank">{{rankLoading ? '加载中…' : '加载更多'}}</view>
       </block>
-      <view class="state" wx:elif="{{rankError}}">
-        <view class="li li-alert state-icon"></view>
-        <view class="state-t1">榜单加载失败</view>
-        <view class="state-t2">网络开小差了，点下方按钮重试</view>
-        <button class="btn btn-fill state-btn" bindtap="reloadRank">重新加载</button>
-      </view>
+      <state-view wx:elif="{{rankError}}" icon="alert" title="榜单加载失败" desc="网络开小差了，点下方按钮重试" btn-text="重新加载" bind:action="reloadRank" />
       <!-- 加载中：骨架行 ×3 对齐榜单行（名次位 + 名字/次数 + 右侧金额位） -->
       <view class="list-skel" wx:elif="{{!rankLoaded}}" aria-label="正在加载榜单">
         <view class="sk-row hairline-b" wx:for="{{[1, 2, 3]}}" wx:key="*this">
@@ -513,11 +483,7 @@
           <view class="skeleton-base sk-tail"></view>
         </view>
       </view>
-      <view class="state" wx:else>
-        <view class="li li-users state-icon"></view>
-        <view class="state-t1">还没有客户领取记录</view>
-        <view class="state-t2">客户成功领取后，会按累计到账在这里排名定级</view>
-      </view>
+      <state-view wx:else icon="users" title="还没有客户领取记录" desc="客户成功领取后，会按累计到账在这里排名定级" />
     </block>
 
     <!-- ================= 员工 ================= -->
@@ -528,7 +494,7 @@
           <view class="textbtn textbtn-plain" wx:if="{{editingOpenid}}" bindtap="cancelEditStaff">取消编辑</view>
         </view>
         <view class="psub t-light" wx:if="{{!editingOpenid}}">员工打开本小程序复制他的编号发你，粘贴到这里；添加后立即生效</view>
-        <view class="psub t-hint" wx:else>保存将覆盖备注名/角色/企微账号（企微账号留空则保留原值），并重新启用该员工</view>
+        <view class="psub t-light" wx:else>保存将覆盖备注名/角色/企微账号（企微账号留空则保留原值），并重新启用该员工</view>
         <view class="field">
           <text class="flabel">编号</text>
           <input class="input finput" placeholder="粘贴员工 openid" placeholder-class="ph" value="{{newOpenid}}" bindinput="onNewOpenid" disabled="{{!!editingOpenid}}" />
@@ -541,7 +507,7 @@
           <text class="flabel">企微账号</text>
           <input class="input finput" placeholder="员工的企微userid（选填）" placeholder-class="ph" value="{{newWecomUserid}}" bindinput="onNewWecomUserid" />
         </view>
-        <view class="psub t-hint">配置后：该员工发起群发时，他跟进的客户任务会直接派给他本人（企微后台「通讯录-成员-账号」可查）</view>
+        <view class="psub t-light">配置后：该员工发起群发时，他跟进的客户任务会直接派给他本人（企微后台「通讯录-成员-账号」可查）</view>
         <view class="field">
           <text class="flabel">角色</text>
           <view class="chips chips-inline">
@@ -555,7 +521,7 @@
 
       <view class="panel">
         <view class="ptitle t-dark">员工（{{admins.length}}）</view>
-        <view class="err" wx:if="{{staffListErr}}" bindtap="loadAdmins">员工列表加载失败，点此重试</view>
+        <view class="err err-tap" wx:if="{{staffListErr}}" bindtap="loadAdmins">员工列表加载失败，点此重试</view>
         <view class="staff hairline-b" wx:for="{{admins}}" wx:key="openid">
           <view class="staff-l" data-v="{{item.openid}}" bindtap="copyText">
             <view class="staff-name t-dark">
@@ -565,8 +531,8 @@
               <text class="badge" wx:if="{{item.isMe}}">我</text>
               <text class="badge badge-danger" wx:if="{{!item.enabled}}">已停用</text>
             </view>
-            <view class="staff-oid t-hint num">{{item.openid}}</view>
-            <view class="staff-oid t-hint num" wx:if="{{item.wecomUserid}}">企微：{{item.wecomUserid}}</view>
+            <view class="staff-oid t-light num">{{item.openid}}</view>
+            <view class="staff-oid t-light num" wx:if="{{item.wecomUserid}}">企微：{{item.wecomUserid}}</view>
           </view>
           <view class="staff-actions">
             <view class="textbtn staff-act" catchtap="editStaff" data-openid="{{item.openid}}">编辑</view>
@@ -581,11 +547,7 @@
 
   <!-- 非管理员 -->
   <block wx:else>
-    <view class="state">
-      <view class="li li-users state-icon"></view>
-      <view class="state-t1">你还不是发放员</view>
-      <view class="state-t2">把下面的编号发给管理员，加入后即可发奖</view>
-    </view>
+    <state-view icon="users" title="你还不是发放员" desc="把下面的编号发给管理员，加入后即可发奖" />
     <view class="panel">
       <view class="openid-row">
         <text class="openid-text num">{{ openid || '请在微信小程序内打开' }}</text>

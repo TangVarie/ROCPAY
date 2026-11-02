@@ -28,9 +28,9 @@ page {
   --color-success-tint: rgba(0, 181, 120, 0.1);
   --color-warning-tint: rgba(255, 143, 31, 0.1);
   --color-danger-tint: rgba(217, 43, 60, 0.1);
-  /* hint(0.45)：kit 四阶之外的扩展档，信息性辅助文字（时间/提示）的下限，白底约 3.4:1；
+  /* 有信息的小字（时间、失败原因、同步信息、编号）一律用 kit 的 light(0.55)：浅灰底 4.7:1。
+     以前的扩展档 hint(0.45) 在浅灰底只有 3.3:1，撑不起 12–13px 的信息字，已删除（P2）；
      faint(0.3) 白底仅 ~2.1:1，只许用于纯装饰，不许承载信息或交互 */
-  --color-text-hint: rgba(0, 0, 0, 0.45);
   /* 水印（大字报）：品牌色极淡（装饰透明度 8–12% 档） */
   --color-wm-primary: rgba(30, 87, 84, 0.08);
   --color-wm-accent: rgba(184, 80, 47, 0.08);
@@ -70,7 +70,6 @@ page {
 .t-dark { color: var(--color-text-dark); }
 .t-body { color: var(--color-text); }
 .t-light { color: var(--color-text-light); }
-.t-hint { color: var(--color-text-hint); }
 .t-faint { color: var(--color-text-faint); }
 /* 数字：换成本项目的数字字体栈；字重不强制——kit 的 .num 固定 600 是给金额的，
    本项目把时间戳/openid 也标了 .num 取等宽，字重跟随所在文字 */
@@ -179,6 +178,8 @@ page {
 
 /* ---- 错误文字 ---- */
 .err { color: var(--color-danger); margin-top: 16rpx; font-size: 26rpx; }
+/* 可点的错误行（点此重试）：撑到 88rpx 热区 */
+.err-tap { margin-top: 0; padding: 26rpx 0; }
 
 /* ---- 线性图标（lucide 描边，禁 emoji）：SVG data URI，默认 black/30 ---- */
 .li {
@@ -199,7 +200,7 @@ page {
 .wm-label {
   font-size: 24rpx;
   letter-spacing: 4rpx;
-  color: var(--color-text-faint);
+  color: var(--color-text-light); /* 「累计发放」是数字的标签，承载信息，不能用 faint */
   margin-bottom: 8rpx;
 }
 .wm {
@@ -270,7 +271,6 @@ page {
     --color-success-tint: rgba(33, 177, 131, 0.12);
     --color-warning-tint: rgba(255, 162, 77, 0.12);
     --color-danger-tint: rgba(232, 87, 92, 0.12);
-    --color-text-hint: rgba(255, 255, 255, 0.45);
     /* 大字报水印：品牌色极淡在暗底上不可见，换亮青/亮赭同样极淡 */
     --color-wm-primary: rgba(106, 193, 189, 0.1);
     --color-wm-accent: rgba(217, 126, 85, 0.09);
