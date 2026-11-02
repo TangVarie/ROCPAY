@@ -9,6 +9,7 @@ Page({
     token: '',
     amtText: '--',
     amtUnverified: false, // 校验接口不可达：金额还没经后端核验，不上屏、不给领取，只给"重新连接"
+    verifying: false, // 重新连接中：金额仍未核验，按钮转圈不可点
     remark: '',
     tokenGone: '', // 非空 = 令牌已终结（过期/已领/已撤回），显示终态而不是可点的领取块
     // 入口数据已到齐（开屏据此淡出）：令牌流程要等 /api/claim/status 回来（成功、终态或兜底都算），
@@ -56,6 +57,7 @@ Page({
           this.setData({
             amtText: Number(res.amountYuan) > 0 ? yuan(res.amountYuan) : '--',
             amtUnverified: false,
+            verifying: false,
             remark: res.remark || '',
           });
           return;
@@ -67,7 +69,7 @@ Page({
           TARGETED: '这是定向奖励，请从员工发来的小程序卡片打开领取',
           INVALID: '领取链接无效，请联系发放员重新发送',
         };
-        this.setData({ tokenGone: map[res.state] || '该奖励当前不可领取' });
+        this.setData({ tokenGone: map[res.state] || '该奖励当前不可领取', verifying: false });
       })
       .catch(() => this._tokenFallback())
       .then(() => this.setData({ entryReady: true })); // 成功 / 终态 / 兜底三条路都算"到了"
@@ -75,10 +77,13 @@ Page({
   // 校验接口不可达（冷启动/网络抖动）：金额没核验就不上屏，也不给领取按钮——
   // 只给"重新连接"。旧版这里拿 URL 的 amt 兜底，改过的链接能把任意金额显示出来
   _tokenFallback() {
-    this.setData({ amtText: '--', amtUnverified: true });
+    this.setData({ amtText: '--', amtUnverified: true, verifying: false });
   },
+  // 重新连接：核验结果回来之前 amtUnverified 一直保持 true（领取按钮不出现），
+  // 只有拿到 VALID 才放开——否则请求途中就能点领取、看不到核验过的金额
   retryToken() {
-    this.setData({ amtUnverified: false });
+    if (this.data.verifying) return;
+    this.setData({ verifying: true });
     this.checkToken();
   },
 

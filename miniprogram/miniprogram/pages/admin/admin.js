@@ -436,19 +436,29 @@ Page({
       } catch (_) { /* 低版本基础库不支持 selector 定位，只高亮不滚动 */ }
     });
   },
-  submitBatch() {
-    if (this.data.loading) return; // 防连点：重复提交会生成重复奖励（重复打款）
+  // 逐行校验当前名单；有错就高亮定位并返回 false
+  _validateSelected() {
     const { selected, minAmountYuan, perUserCapYuan } = this.data;
     // 最多两位小数：后端按 Math.round(元*100) 落分，1.234 会被静默按 1.23 发出去，必须在输入侧拦住
     const AMT_RE = /^\d+(\.\d{1,2})?$/;
     for (let i = 0; i < selected.length; i++) {
       const raw = String(selected[i].amountYuan == null ? '' : selected[i].amountYuan).trim();
       const yuan = Number(raw);
-      if (!(yuan > 0)) return this._rowErr(i, `「${selected[i].label}」还没填金额`);
-      if (!AMT_RE.test(raw)) return this._rowErr(i, `「${selected[i].label}」金额最多两位小数`);
-      if (yuan < minAmountYuan) return this._rowErr(i, `「${selected[i].label}」金额不能小于 ${minAmountYuan} 元`);
-      if (yuan > perUserCapYuan) return this._rowErr(i, `「${selected[i].label}」单人不能超过 ${perUserCapYuan} 元（微信单日向单用户上限，拆单也绕不过）`);
+      let err = '';
+      if (!(yuan > 0)) err = `「${selected[i].label}」还没填金额`;
+      else if (!AMT_RE.test(raw)) err = `「${selected[i].label}」金额最多两位小数`;
+      else if (yuan < minAmountYuan) err = `「${selected[i].label}」金额不能小于 ${minAmountYuan} 元`;
+      else if (yuan > perUserCapYuan) err = `「${selected[i].label}」单人不能超过 ${perUserCapYuan} 元（微信单日向单用户上限，拆单也绕不过）`;
+      if (err) {
+        this._rowErr(i, err);
+        return false;
+      }
     }
+    return true;
+  },
+  submitBatch() {
+    if (this.data.loading) return; // 防连点：重复提交会生成重复奖励（重复打款）
+    if (!this._validateSelected()) return;
     this.setData({ errIdx: -1, sendErr: '', loading: true });
     // 复核用的必须是此刻的额度：内存里的可能是进页面时拉的（别人刚发过一批就不准了）。
     // 刷新失败不拦发放（额度是自家台账，不是微信余额）：保留上一次的数不清空，复核里写明是几点的
@@ -460,15 +470,19 @@ Page({
       }, () => false)
       .then((fresh) => {
         this.setData({ loading: false });
-        this._confirmBatch(this.data.period, fresh);
+        // 等额度的这段时间输入框仍可改：按此刻的内容重新校验，再冻结成快照——
+        // 复核弹窗展示的和真正提交的是同一份，改出来的 1.234 不会绕过两位小数校验
+        if (!this._validateSelected()) return;
+        const batch = this.data.selected.map((s) => Object.assign({}, s));
+        this._confirmBatch(batch, this.data.period, fresh);
       });
   },
   // 本次提交的完整快照（名单+金额+备注）：幂等键跟它绑定——内容不变才复用旧键
   _batchSnapOf(selected) {
     return JSON.stringify(selected.map((s) => [s.kind, s.key, String(s.amountYuan).trim(), s.note || '']));
   },
-  _confirmBatch(period, fresh) {
-    const { selected, minAmountYuan, splitCapYuan } = this.data;
+  _confirmBatch(selected, period, fresh) {
+    const { minAmountYuan, splitCapYuan } = this.data;
     // 真金白银出账前必须过目一次汇总：人数、拆单后笔数、合计、最大单人；额度不够再多一句硬提醒
     const capFen = Math.round(splitCapYuan * 100);
     const minFen = Math.round(minAmountYuan * 100);
@@ -513,11 +527,11 @@ Page({
       content,
       confirmText: changedAfterDoubt ? '仍然发放' : '确认发放',
       confirmColor: '#1e5754', // v5.1 深青主色 = palette.json brand.primary（系统弹窗吃不到 CSS token，只能写值）
-      success: (r) => { if (r.confirm) this._doSubmitBatch(snap); },
+      success: (r) => { if (r.confirm) this._doSubmitBatch(selected, snap); },
     });
   },
-  _doSubmitBatch(snap) {
-    const { selected } = this.data;
+  // selected = 复核时冻结的快照（不是 this.data.selected：提交途中输入框仍可改）
+  _doSubmitBatch(selected, snap) {
     // 幂等键绑定提交快照：同一内容（含失败后的重试）复用同一键，服务端命中已建批次回放原结果；
     // 名单/金额/备注任何一处改过就换新键——旧键回放的是旧内容，不能让改过的金额被旧结果"顶替"
     if (!this._batchKey || this._batchSnap !== snap) {
@@ -534,11 +548,9 @@ Page({
     call('/api/rewards/batch', 'POST', { items, clientKey: this._batchKey })
       .then((res) => {
         this.setData({ loading: false });
-        // 服务端明确拒绝（校验/权限/额度等）：请求已处理完、什么都没建，结果不再"未知"
-        if (res && res.error) {
-          this._batchInDoubt = false;
-          return this.setData({ sendErr: res.error });
-        }
+        // 服务端拒绝：只说明"这一次"没建，不代表上一次结果未知的那次也没建（比如迁移中间件直接回 503，
+        // 根本没走到批次逻辑）——"结果未知"要保留到真正拿到这一批的结果为止
+        if (res && res.error) return this.setData({ sendErr: res.error });
         this._batchKey = null; // 本批已确认落地，下一批换新键
         this._batchSnap = null;
         this._batchInDoubt = false;
@@ -550,6 +562,16 @@ Page({
         const targetOpenids = [...new Set(created.filter((c) => c.openid).map((c) => c.openid))];
         const labelOf = {};
         selected.forEach((s) => (labelOf[s.key] = s.label)); // key 对企微是 eu、对直连是 openid，errors[].target 两种都能对上
+        // 大额拆单存到一半失败：这个人已经建了几笔（同时出现在 created 和 errors 里）。
+        // 必须和"一笔没建"分开说，否则照"补发"去发全额就多发了
+        const got = {};
+        created.forEach((c) => {
+          const t = c.externalUserid || c.openid;
+          if (!t) return;
+          got[t] = got[t] || { n: 0, fen: 0 };
+          got[t].n++;
+          got[t].fen += Math.round(Number(c.amountYuan) * 100);
+        });
         this.setData({
           step: 'result',
           batchResult: {
@@ -557,7 +579,14 @@ Page({
             peopleCount: res.peopleCount || targets.length + targetOpenids.length,
             batchId: res.batchId || '', // 批次号：结果页可直达"本批台账"
             duplicate: !!res.duplicate, // 重试命中已建批次：展示原结果，未重复创建
-            errors: (res.errors || []).map((er) => ({ ...er, label: labelOf[er.target] || er.target || '' })),
+            errors: (res.errors || []).map((er) => {
+              const g = got[er.target];
+              return {
+                ...er,
+                label: labelOf[er.target] || er.target || '',
+                state: g ? `已创建 ${g.n} 笔共 ¥${fmtYuan(g.fen / 100)}，其余未创建，只补差额` : '未创建',
+              };
+            }),
             targets,
             targetOpenids,
           },

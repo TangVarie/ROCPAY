@@ -50,7 +50,7 @@
 
       <!-- 按钮只在领取前/可重试时出现：金额未核验给"重新连接"；入账查询超时给"刷新到账结果"；
            到账/失败终态不渲染按钮（青面上只许墨字/主色字，一颗禁用按钮既无动作也无合法配色） -->
-      <button wx:if="{{mode==='token' && amtUnverified}}" class="rb-btn" bindtap="retryToken">重新连接</button>
+      <button wx:if="{{mode==='token' && amtUnverified}}" class="rb-btn" bindtap="retryToken" loading="{{verifying}}" disabled="{{verifying}}">重新连接</button>
       <button
         wx:elif="{{status==='idle' || status==='loading' || status==='fail'}}"
         class="rb-btn"
@@ -63,7 +63,7 @@
         <view class="band-spinner"><view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view></view>
       </view>
 
-      <view class="rb-tip" wx:if="{{mode==='token' && amtUnverified}}">暂时连不上服务，金额还没核验，点上方按钮再试</view>
+      <view class="rb-tip" wx:if="{{mode==='token' && amtUnverified}}">{{verifying ? '正在重新连接，核验金额…' : '暂时连不上服务，金额还没核验，点上方按钮再试'}}</view>
       <view class="rb-tip" wx:elif="{{message}}">{{message}}</view>
       <!-- 怎么领的说明只在领取前有用；确认之后还挂着就成了过时提示 -->
       <view class="rb-fine" wx:if="{{!amtUnverified && (status==='idle' || status==='loading' || status==='fail')}}">点领取后弹出微信官方「确认收款」，确认后转入微信零钱</view>
