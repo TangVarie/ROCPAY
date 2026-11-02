@@ -40,8 +40,11 @@
    刚过小字 4.5:1，降透明度即不达标；层级差交给字号/字重，不牺牲对比度） */
 .rb-multi { margin-top: 16rpx; font-size: 24rpx; line-height: 1.5; }
 /* 领取按钮：赭块上白底 + 赭字（4.97:1；深色块底换深赭，白底上对比更高）。到账后按钮不再渲染 */
-.rb-btn {
-  margin-top: 48rpx;
+/* 不是 .btn，同样要压 style v2 的默认 184px 宽（见 app.wxss 按钮段） */
+.rb-btn:not([size='mini']) {
+  width: 100%;
+  margin: 48rpx 0 0;
+  padding: 0 32rpx;
   height: 96rpx;
   display: flex;
   align-items: center;
@@ -57,7 +60,7 @@
 }
 .rb-btn::after { border: none; }
 .rb-btn:active { transform: scale(0.98); }
-.rb-btn[disabled] { background: rgba(255, 255, 255, 0.85); color: rgba(184, 80, 47, 0.55); }
+.reward-block .rb-btn[disabled] { background: rgba(255, 255, 255, 0.85); color: rgba(184, 80, 47, 0.55); }
 .rb-tip { margin-top: 24rpx; font-size: 26rpx; font-weight: 500; min-height: 34rpx; }
 /* 金额未核验：占住金额的位置但不给数字（21px 导语档，比 40px 金额低两档，读得出"不是金额"） */
 .rb-unverified { font-size: 42rpx; font-weight: 600; line-height: 1.9; }
@@ -65,7 +68,7 @@
 .rb-wait { margin-top: 48rpx; height: 96rpx; display: flex; align-items: center; justify-content: center; }
 .rb-wait .band-spinner .band { background: currentColor; }
 /* 管理员入口：奖励块与档案之后，次按钮 */
-.admin-entry { margin-top: 24rpx; }
+.btn.admin-entry { margin-top: 24rpx; }
 .rb-fine { margin-top: 16rpx; font-size: 24rpx; line-height: 1.5; }
 
 /* 状态页（空/错/加载）的版式在 components/state-view 里，两个页面共用 */
@@ -139,4 +142,4 @@
 /* 奖励提醒：一行理由在上，按钮在下；开启/拒绝后只剩一行结果 */
 .sub { margin-top: 40rpx; }
 .sub-t { padding: 0 8rpx; font-size: 24rpx; line-height: 1.6; color: var(--color-text-light); text-align: center; }
-.sub-btn { margin-top: 16rpx; }
+.btn.sub-btn { margin-top: 16rpx; }

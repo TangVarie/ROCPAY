@@ -103,19 +103,34 @@ page {
   transition: transform 120ms ease-out, background-color 120ms ease-out;
 }
 .btn:active { transform: scale(0.98); }
+/* 【真机坑】app.json 开了 "style": "v2"，基础库给原生 button 一套 WeUI 默认样式，其中
+   button:not([size=mini]) { width: 184px; margin: 0 auto; padding: 8px 24px; font-size: 17px; font-weight: 700 }
+   的权重是 (0,1,1)，比单个类名 (0,1,0) 高：真机上 .btn-block 的 width:100% 不生效，整行按钮缩成 184px 居中、
+   长文案折行，搜索按钮撑到 184px 把输入框挤窄（开发者工具的模拟器不一定看得出来）。
+   所以按钮的几何样式（宽、左右外边距、内边距、字号、字重、行高）一律写成两个类名或带 :not([size='mini'])，
+   权重 (0,2,0) 才压得住；颜色不受影响，照常写单个类名。禁用态默认也有一条更高权重的灰字，见下方 [disabled] */
+.btn:not([size='mini']) {
+  width: auto;
+  margin-left: 0;
+  margin-right: 0;
+  padding: 0 32rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  line-height: normal;
+}
 /* 主按钮：主色底；文字随 --color-on-primary（亮色白字 / 深色墨字）*/
 .btn-blue { background: var(--color-primary); color: var(--color-on-primary); }
 .btn-blue:active { background: var(--color-primary-dark); }
 /* 禁用态走 fill 底（kit 模板定式）；文字用 light 档而非 faint——
    加载中的按钮文案（"确认发放 3 人"）是信息，DESIGN.md §2 faint 不承载信息 */
-.btn-blue[disabled] { background: var(--color-fill); color: var(--color-text-light); }
+.btn.btn-blue[disabled], .btn.btn-fill[disabled] { background: var(--color-fill); color: var(--color-text-light); } /* 三个选择器权重，压过基础库默认的禁用灰字 */
 .btn-fill { background: var(--color-fill); color: var(--color-text-dark); }
 .btn-fill:active { background: rgba(0, 0, 0, 0.08); }
 .btn-red { background: var(--color-danger); color: var(--color-on-danger); } /* 深色模式危险色是浅色填充，压墨字（v5.7.1） */
 .btn-red:active { background: var(--color-danger-dark); }
 /* 整行按钮：系统字体放大时长标签会折行，固定高度会把字裁掉——
    改最小高度+内边距，单行时仍是 96rpx 档，折行时按钮自己撑高 */
-.btn-block {
+.btn.btn-block {
   width: 100%;
   height: auto;
   min-height: 96rpx;
