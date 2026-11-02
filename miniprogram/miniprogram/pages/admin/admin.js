@@ -17,7 +17,10 @@ Page({
 
     // ---- 发放 · 定向批量（主）----
     sendMode: 'target', // target | quick
-    step: 'pick', // pick | fill | result
+    step: 'pick', // 定向发放四步：pick 选客户 | fill 填金额 | review 复核 | result 通知
+    review: null, // 复核页展示数据（人数/笔数/合计/最大单人/拆单/额度/警示/明细）
+    fillTotalYuan: '0.00', // 填金额时底部操作栏的实时合计
+    notifySum: null, // 通知结果按客户去向分四类：已直达 / 企微待员工发送 / 需转发 / 发送失败
     custQ: '',
     custList: [],
     custLoaded: false,
@@ -383,8 +386,16 @@ Page({
   clearSelected() { this.setData({ selected: [], selectedMap: {} }); },
   goFill() {
     if (!this.data.selected.length) return this.setData({ sendErr: '先勾选要发放的客户' });
-    this.setData({ step: 'fill', sendErr: '', errIdx: -1 });
+    this.setData({ step: 'fill', sendErr: '', errIdx: -1, fillTotalYuan: this._recalcTotal() });
     this.loadPeriod(); // 额度只在初始化/记录页拉过：填金额时要看的是现在的剩余
+  },
+  // 底部操作栏的实时合计：只算已填的正数金额（格式校验在复核前统一做）
+  _recalcTotal() {
+    const fen = this.data.selected.reduce((acc, s) => {
+      const v = Number(String(s.amountYuan == null ? '' : s.amountYuan).trim());
+      return acc + (v > 0 ? Math.round(v * 100) : 0);
+    }, 0);
+    return fmtYuan(fen / 100);
   },
   backPick() { this.setData({ step: 'pick', sendErr: '', errIdx: -1 }); },
 
@@ -393,6 +404,7 @@ Page({
     const patch = { [`selected[${i}].amountYuan`]: e.detail.value };
     if (this.data.errIdx === i) { patch.errIdx = -1; patch.sendErr = ''; } // 改过就撤掉高亮
     this.setData(patch);
+    this.setData({ fillTotalYuan: this._recalcTotal() });
   },
   onRowNote(e) {
     const i = e.currentTarget.dataset.i;
@@ -405,6 +417,7 @@ Page({
     delete map[selected[i].key];
     selected.splice(i, 1);
     this.setData({ selected, selectedMap: map, step: selected.length ? 'fill' : 'pick', errIdx: -1 });
+    this.setData({ fillTotalYuan: this._recalcTotal() });
   },
   onFillAmount(e) { this.setData({ fillAmount: e.detail.value }); },
   onFillNote(e) { this.setData({ fillNote: e.detail.value }); },
@@ -417,6 +430,7 @@ Page({
       note: n !== '' ? n : s.note,
     }));
     this.setData({ selected });
+    this.setData({ fillTotalYuan: this._recalcTotal() });
   },
 
   // 大额自动拆单（镜像后端逻辑，仅用于预览笔数）：总额按单笔限额拆，余数不够起付就并入最后一笔对半
@@ -474,61 +488,76 @@ Page({
         // 复核弹窗展示的和真正提交的是同一份，改出来的 1.234 不会绕过两位小数校验
         if (!this._validateSelected()) return;
         const batch = this.data.selected.map((s) => Object.assign({}, s));
-        this._confirmBatch(batch, this.data.period, fresh);
+        this._enterReview(batch, this.data.period, fresh);
       });
   },
   // 本次提交的完整快照（名单+金额+备注）：幂等键跟它绑定——内容不变才复用旧键
   _batchSnapOf(selected) {
     return JSON.stringify(selected.map((s) => [s.kind, s.key, String(s.amountYuan).trim(), s.note || '']));
   },
-  _confirmBatch(selected, period, fresh) {
+  // 步骤 3 · 复核：原生确认弹窗写不下拆单明细和逐人金额，换成一整页——
+  // 人数、拆单后笔数、合计、最大单人、拆单明细、此刻额度、警示、逐人明细，确认无误再发
+  _enterReview(selected, period, fresh) {
     const { minAmountYuan, splitCapYuan } = this.data;
-    // 真金白银出账前必须过目一次汇总：人数、拆单后笔数、合计、最大单人；额度不够再多一句硬提醒
     const capFen = Math.round(splitCapYuan * 100);
     const minFen = Math.round(minAmountYuan * 100);
     let totalFen = 0;
     let maxFen = 0;
+    let maxLabel = '';
     let totalBills = 0;
+    const splits = [];
     selected.forEach((s) => {
       const f = Math.round(Number(s.amountYuan) * 100);
       totalFen += f;
-      if (f > maxFen) maxFen = f;
-      totalBills += this._splitBillsCount(f, capFen, minFen);
+      if (f > maxFen) {
+        maxFen = f;
+        maxLabel = s.label;
+      }
+      const k = this._splitBillsCount(f, capFen, minFen);
+      totalBills += k;
+      if (k > 1) splits.push(`${s.label}：¥${fmtYuan(f / 100)} 拆成 ${k} 笔`);
     });
-    const totalYuan = fmtYuan(totalFen / 100);
-    let content = `共 ${selected.length} 人`;
-    if (totalBills > selected.length) content += ` · 拆成 ${totalBills} 笔（单笔≤¥${splitCapYuan}，客户逐笔确认）`;
-    content += `\n合计 ¥${totalYuan}\n最大单人 ¥${fmtYuan(maxFen / 100)}`;
     // remainingYuan 是绝对值的展示串（带千分位），负号在 neg 上：还原成带符号的数再比，
     // 否则已超支（剩余为负）时拿绝对值比，反而可能不提醒
-    const remain = period && period.hasQuota ? (period.neg ? -1 : 1) * num(period.remainingYuan) : null;
-    if (remain != null && remain < totalFen / 100) {
-      content += `\n\n注意：可发额度仅剩 ${period.neg ? '-' : ''}¥${period.remainingYuan}，本次将超出，请先确认商户余额充足。`;
-    }
-    if (period && period.hasQuota) {
-      content += fresh
-        ? `\n（可发额度 ${period.updatedAt} 刚刷新）`
-        : `\n（可发额度刷新失败，以上按 ${period.updatedAt || '进页面时'} 的数计算）`;
-    } else if (!fresh) {
-      content += '\n（可发额度暂时查不到，请自行确认商户余额充足）';
-    }
+    const hasQuota = !!(period && period.hasQuota);
+    const remain = hasQuota ? (period.neg ? -1 : 1) * num(period.remainingYuan) : null;
     // 上一次提交没收到结果（超时/断网，服务端可能已经建好了这批）：
     // 内容没改 → 沿用旧键重试，服务端命中已建批次只回放、不重复建；
     // 内容改了 → 只能当新的一批（换键），若上次其实已建，客户会收到两批——必须先说清楚
     const snap = this._batchSnapOf(selected);
     const changedAfterDoubt = this._batchInDoubt && this._batchKey && this._batchSnap !== snap;
-    if (this._batchInDoubt && !changedAfterDoubt) {
-      content += '\n\n上次提交没有收到结果：本次按原内容重试，已创建的不会重复创建。';
-    } else if (changedAfterDoubt) {
-      content += '\n\n注意：上次提交没有收到结果，可能已经创建成功。内容改过后再提交会作为新的一批发放，若上次已创建，客户会收到两批。建议先到「记录」核对。';
-    }
-    wx.showModal({
-      title: '确认发放',
-      content,
-      confirmText: changedAfterDoubt ? '仍然发放' : '确认发放',
-      confirmColor: '#1e5754', // v5.1 深青主色 = palette.json brand.primary（系统弹窗吃不到 CSS token，只能写值）
-      success: (r) => { if (r.confirm) this._doSubmitBatch(selected, snap); },
+    this._reviewBatch = selected;
+    this._reviewSnap = snap;
+    this.setData({
+      step: 'review',
+      sendErr: '',
+      review: {
+        people: selected.length,
+        bills: totalBills,
+        totalYuan: fmtYuan(totalFen / 100),
+        maxYuan: fmtYuan(maxFen / 100),
+        maxLabel,
+        splits,
+        splitCap: splitCapYuan,
+        quotaText: hasQuota ? `${period.neg ? '-' : ''}¥${period.remainingYuan}` : '',
+        quotaNote: hasQuota
+          ? fresh ? `${period.updatedAt} 刚刷新` : `刷新失败，这是 ${period.updatedAt || '进页面时'} 的数`
+          : fresh ? '未记账，请自行确认商户余额充足' : '暂时查不到，请自行确认商户余额充足',
+        over: remain != null && remain < totalFen / 100,
+        doubt: changedAfterDoubt ? 'changed' : this._batchInDoubt ? 'same' : '',
+        confirmText: changedAfterDoubt ? '仍然发放' : '确认发放',
+        list: selected.map((s) => ({ key: s.key, label: s.label, yuan: fmtYuan(Number(s.amountYuan)), note: s.note || '' })),
+      },
     });
+    wx.pageScrollTo({ scrollTop: 0, duration: 0, fail: () => {} });
+  },
+  confirmReview() {
+    if (this.data.loading || !this._reviewBatch) return;
+    this._doSubmitBatch(this._reviewBatch, this._reviewSnap);
+  },
+  backFromReview() {
+    if (this.data.loading) return;
+    this.setData({ step: 'fill', review: null, sendErr: '' });
   },
   // selected = 复核时冻结的快照（不是 this.data.selected：提交途中输入框仍可改）
   _doSubmitBatch(selected, snap) {
@@ -572,8 +601,13 @@ Page({
           got[t].n++;
           got[t].fen += Math.round(Number(c.amountYuan) * 100);
         });
+        this._labelOf = labelOf; // 通知结果分类要按客户回显备注名
+        this._reach = {}; //       每位客户在两个通知渠道上的去向
+        this._reviewBatch = null;
         this.setData({
           step: 'result',
+          review: null,
+          notifySum: null,
           batchResult: {
             createdCount: res.createdCount, // 拆单后的总笔数
             peopleCount: res.peopleCount || targets.length + targetOpenids.length,
@@ -605,7 +639,7 @@ Page({
   },
   // 全部未创建时回到填金额（名单与金额都保留，改完再提交）
   backToFill() {
-    this.setData({ step: 'fill', batchResult: null, sendErr: '', errIdx: -1 });
+    this.setData({ step: 'fill', batchResult: null, sendErr: '', errIdx: -1, fillTotalYuan: this._recalcTotal() });
     this.loadPeriod();
   },
 
@@ -631,11 +665,10 @@ Page({
       if (!retry.eus.length && !retry.oids.length) return; // 全部处理完且无失败：按钮本应禁用
       targets = retry; // 重试失败名单：结果按本次重试重算
     }
+    // 本轮（含网络中断后的续传）覆盖的全部客户：跑完后不在任何异常名单里的就是已直达
+    if (!rem || !(rem.eus.length || rem.oids.length)) this._miniRunIds = targets.eus.concat(targets.oids);
     const seq = (this._notifySeq = this._notifySeq || 0); // 与群发共用代际：换批后旧回调作废
     this.setData({ miniNotifying: true, sendErr: '' });
-    const labelOf = {};
-    this.data.selected.forEach((s) => (labelOf[s.key] = s.label)); // key 双身份通吃：结果名单两种 id 都能对回备注名
-    const nm = (l) => (l || []).map((id) => labelOf[id] || id).join('、');
     const step = (list) => {
       if (!this._miniKey) this._miniKey = this._newKey(); // 每步一键；同步重试复用同键=服务端回放
       call('/api/notify-mini', 'POST', { externalUserids: list.eus, openids: list.oids, clientKey: this._miniKey })
@@ -662,13 +695,20 @@ Page({
             eus: acc.failed.filter((f) => f.eu).map((f) => f.eu),
             oids: acc.failed.filter((f) => f.openid).map((f) => f.openid),
           };
-          const lines = [`已直达 ${acc.sent} 人（微信服务通知，点开即到领取页）`];
-          if (acc.noQuota.length) lines.push(`未订阅提醒 ${acc.noQuota.length} 人：${nm(acc.noQuota)}——请用${allEus.length ? '企微群发或' : ''}转发补发`);
-          if (acc.noOpenid.length) lines.push(`没开过小程序 ${acc.noOpenid.length} 人：${nm(acc.noOpenid)}——首次需企微群发或转发引导打开`);
-          if (acc.noPending.length) lines.push(`已无待领 ${acc.noPending.length} 人（已领完/已撤回），未打扰`);
-          if (acc.failed.length) lines.push(`发送失败 ${acc.failed.length} 人（授权已退回，可重试）：${acc.failed.map((f) => (labelOf[f.eu || f.openid] || f.eu || f.openid) + '（' + f.error + '）').join('；')}`);
-          this.setData({ miniNotifying: false, miniDone: true, miniNotify: { sent: acc.sent, lines, failedCount: acc.failed.length } });
-          wx.showModal({ title: '直达通知结果', content: lines.join('\n'), showCancel: false });
+          // 逐人记去向（分类展示用）：异常名单按原因记，其余本轮覆盖到的 = 已直达
+          const mark = (id, mini, err) => {
+            this._reach = this._reach || {};
+            this._reach[id] = Object.assign({}, this._reach[id], { mini, err: err || '' });
+          };
+          const bad = new Set();
+          acc.noQuota.forEach((id) => { bad.add(id); mark(id, 'nosub'); });
+          acc.noOpenid.forEach((id) => { bad.add(id); mark(id, 'noopen'); });
+          acc.noPending.forEach((id) => { bad.add(id); mark(id, 'nopending'); });
+          acc.failed.forEach((f) => { const id = f.eu || f.openid; bad.add(id); mark(id, 'failed', f.error); });
+          (this._miniRunIds || []).forEach((id) => { if (!bad.has(id)) mark(id, 'sent'); });
+          this._miniRunIds = null;
+          this.setData({ miniNotifying: false, miniDone: true, miniNotify: { sent: acc.sent, failedCount: acc.failed.length } });
+          this._syncNotifySum();
         })
         .catch((e) => {
           if ((this._notifySeq || 0) !== seq) return;
@@ -715,22 +755,48 @@ Page({
             (er.indeterminate ? '（提交结果未知，可能已创建：请先到企微「客户联系」确认，确认没有再用转发补发）' : '')
           );
         });
+        // 逐人记去向：进了群发任务 = 待员工发送；没进去的（failList）= 需转发
+        const failSet = new Set(res.failList || []);
+        this._reach = this._reach || {};
+        targets.forEach((id) => {
+          this._reach[id] = Object.assign({}, this._reach[id], { wecom: failSet.has(id) ? 'wfail' : 'queued' });
+        });
         this.setData({
           notifyDone: true,
           notifyResult: { lines, failCount: res.failCount || 0, failList: res.failList || [] },
         });
-        wx.showModal({
-          title: '群发任务已创建',
-          content:
-            (lines.length ? lines.join('\n') + '\n\n' : '') +
-            '任务派给了对应跟进员工：请让他们留意企微「消息-客户联系」的提醒（或打开 工作台-群发助手），点一次【发送】即可送达客户。',
-          showCancel: false,
-        });
+        this._syncNotifySum();
       })
       .catch((e) => {
         if ((this._notifySeq || 0) !== seq) return; // 批次已换代：丢弃过期回调
         this.setData({ notifying: false, sendErr: '通知失败：' + (e.errMsg || e.message || '') + '（可放心重试，已创建的任务不会重复）' });
       });
+  },
+
+  // 通知结果按客户去向分四类（每人只归一类，优先级：已直达 > 企微待员工发送 > 发送失败 > 需转发）；
+  // 已领完/已撤回的不再计入。还没用任何渠道通知时不展示
+  _syncNotifySum() {
+    const r = this.data.batchResult;
+    if (!r) return;
+    const reach = this._reach || {};
+    const all = (r.targets || []).concat(r.targetOpenids || []);
+    if (!all.some((id) => reach[id] && (reach[id].mini || reach[id].wecom))) return this.setData({ notifySum: null });
+    const nameOf = (id) => (this._labelOf && this._labelOf[id]) || id;
+    const sum = { direct: [], wecom: [], failed: [], forward: [] };
+    all.forEach((id) => {
+      const x = reach[id] || {};
+      if (x.mini === 'nopending') return;
+      if (x.mini === 'sent') sum.direct.push(nameOf(id));
+      else if (x.wecom === 'queued') sum.wecom.push(nameOf(id));
+      else if (x.mini === 'failed') sum.failed.push(nameOf(id) + (x.err ? '（' + x.err + '）' : ''));
+      else sum.forward.push(nameOf(id)); // 未订阅/没开过小程序/没进群发/还没被任何渠道覆盖
+    });
+    const out = {};
+    Object.keys(sum).forEach((k) => {
+      out[k] = sum[k].length;
+      out[k + 'Text'] = sum[k].join('、');
+    });
+    this.setData({ notifySum: out });
   },
 
   newBatch() {
@@ -744,7 +810,9 @@ Page({
     this._miniAcc = null;
     this._miniRemaining = null;
     this._miniFailedList = null;
-    this.setData({ step: 'pick', selected: [], selectedMap: {}, batchResult: null, sendErr: '', errIdx: -1, notifying: false, notifyDone: false, notifyResult: null, miniNotifying: false, miniNotify: null, miniDone: false });
+    this._reach = {};
+    this._reviewBatch = null;
+    this.setData({ step: 'pick', selected: [], selectedMap: {}, batchResult: null, review: null, notifySum: null, fillTotalYuan: '0.00', sendErr: '', errIdx: -1, notifying: false, notifyDone: false, notifyResult: null, miniNotifying: false, miniNotify: null, miniDone: false });
   },
 
   // ============ 链接快发（副） ============

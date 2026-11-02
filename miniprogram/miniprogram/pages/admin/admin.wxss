@@ -132,16 +132,6 @@
 /* 面板内骨架行：与客户行同高，≥3 行 */
 .pskel { padding: 8rpx 0; }
 
-/* 已选条 */
-.pickbar {
-  margin-top: 16rpx;
-  padding-top: 24rpx;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.pickbar-r { display: flex; align-items: center; gap: 8rpx; }
-.pickbtn { height: 80rpx; padding: 0 32rpx; font-size: 28rpx; margin: 0; }
 
 /* 统一填充：行内文字按钮与 96rpx 输入框等高，避免跨组件 center 对不齐 */
 .fillall { display: flex; align-items: center; gap: 16rpx; margin: 24rpx 0 8rpx; }
@@ -149,13 +139,10 @@
 .fa-note { flex: 1; }
 .fillall .textbtn { height: 96rpx; line-height: 96rpx; padding-top: 0; padding-bottom: 0; }
 
-/* 逐人行 */
-.frow {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  padding: 24rpx 0;
-}
+/* 逐人行：两行——姓名 + 金额 / 备注 + 移除 */
+.frow { padding: 24rpx 0; }
+.frow-top { display: flex; align-items: center; gap: 16rpx; }
+.frow-bot { display: flex; align-items: center; gap: 16rpx; margin-top: 16rpx; }
 .frow-name {
   flex: 1;
   min-width: 0;
@@ -165,15 +152,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.frow-amt { width: 150rpx; flex: none; height: 88rpx; line-height: 88rpx; padding: 0 16rpx; text-align: center; font-size: 30rpx; }
-.frow-note { width: 190rpx; flex: none; height: 88rpx; line-height: 88rpx; padding: 0 16rpx; font-size: 28rpx; }
+.frow-amt { width: 240rpx; flex: none; height: 88rpx; line-height: 88rpx; padding: 0 16rpx; text-align: right; font-size: 32rpx; }
+.frow-note { flex: 1; height: 80rpx; line-height: 80rpx; padding: 0 16rpx; font-size: 28rpx; }
 /* 可交互元素不许用 faint（白底 ~2.1:1，低于 WCAG 组件 3:1 底线），用 light 档 */
 .frow-del { flex: none; font-size: 24rpx; color: var(--color-text-light); padding: 16rpx 8rpx; }
 .frow-del:active { color: var(--color-danger); }
 /* 校验失败的行：语义浅底高亮 + 金额框加深，配合 pageScrollTo 定位，30 人时不用自己翻着找 */
 .frow-err { background: var(--color-danger-tint); }
 .frow-err .frow-amt { border-color: var(--color-danger); }
-.submitbtn { margin-top: 32rpx; }
 
 /* 语义横幅：语义色/10 底 + 黑字（彩字上浅底对比不够，禁止） */
 .banner {
@@ -391,3 +377,53 @@
 .dadd-btn { margin-bottom: 16rpx; }
 /* 直连行副行是 openid 长串（无空格）：强制可断行，不撑破行布局；企微行副行为名字，不受影响 */
 .cust-sub { word-break: break-all; }
+
+/* ===== 定向发放四步任务流 ===== */
+/* 步骤条：kit 的轮尺（主色），当前步文字加深 */
+.steps { margin: 32rpx 8rpx 24rpx; }
+.steps-t { display: flex; justify-content: space-between; margin-top: 12rpx; font-size: 24rpx; color: var(--color-text-light); }
+.steps-t .on { color: var(--color-text-dark); font-weight: 600; }
+
+/* 底部固定操作栏：表面色 + 顶部发丝线，避开安全区；有它时页面底部垫高，不盖住最后一行 */
+.page.page-bar { padding-bottom: calc(176rpx + env(safe-area-inset-bottom)); }
+.actionbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 16rpx 32rpx calc(16rpx + env(safe-area-inset-bottom));
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  box-sizing: border-box;
+}
+.ab-info { flex: 1; min-width: 0; font-size: 28rpx; color: var(--color-text); }
+.ab-strong { font-size: 34rpx; font-weight: 600; }
+.ab-btn { flex: none; height: 88rpx; padding: 0 32rpx; font-size: 30rpx; margin: 0; }
+.actionbar .textbtn { flex: none; }
+
+/* 复核页：三个关键数在上，拆单/额度/警示居中，逐人明细在下 */
+.rv-sum { display: flex; gap: 24rpx; margin: 32rpx 0 8rpx; }
+.rv-cell { flex: 1; }
+.rv-cell-wide { flex: 2; }
+.rv-k { font-size: 24rpx; color: var(--color-text-light); }
+.rv-v { margin-top: 8rpx; font-size: 42rpx; font-weight: 700; line-height: 1.3; color: var(--color-text-dark); }
+.rv-line { margin-top: 16rpx; font-size: 26rpx; color: var(--color-text); }
+.rv-sub { margin-top: 8rpx; padding-left: 24rpx; font-size: 24rpx; color: var(--color-text-light); }
+.rv-warn { margin: 24rpx 0 0; font-size: 26rpx; }
+.rv-list { margin-top: 24rpx; }
+.rv-row { padding: 24rpx 0; }
+.rv-row-top { display: flex; justify-content: space-between; gap: 16rpx; font-size: 30rpx; }
+.rv-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-amt { flex: none; font-weight: 600; }
+.rv-note { margin-top: 8rpx; font-size: 24rpx; }
+
+/* 通知结果分类：一类一行组，发丝线分隔 */
+.nsum { margin: 32rpx 0 24rpx; }
+.nsum-row { padding: 24rpx 0; border-top: 1px solid var(--color-border); }
+.nsum-h { display: flex; justify-content: space-between; font-size: 30rpx; font-weight: 600; }
+.nsum-d { margin-top: 8rpx; font-size: 24rpx; line-height: 1.6; color: var(--color-text-light); }
+.t-danger { color: var(--color-danger); }
