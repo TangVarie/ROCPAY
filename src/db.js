@@ -1509,6 +1509,16 @@ export async function getReward(rid) {
   return rows.length ? rows[0] : null;
 }
 
+/** 这笔奖励是谁发的（领取页"谁发的"）：发放员工的备注名；员工已删/没备注返回 '' */
+export async function getIssuerName(rid) {
+  if (!pool || !rid) return '';
+  const [rows] = await pool.execute(
+    `SELECT a.name FROM rewards r JOIN admins a ON a.openid = r.created_by WHERE r.rid = :rid LIMIT 1`,
+    { rid }
+  );
+  return rows.length ? rows[0].name || '' : '';
+}
+
 /** 某一批次的全部奖励，批量撤回与幂等回放（重试命中已建批次时重构响应）共用。按创建顺序返回 */
 export async function listBatchRewards(batchId) {
   if (!pool || !batchId) return [];
@@ -1671,6 +1681,7 @@ export const db = {
   pendingSummaryForOpenidTargets,
   getRewardTarget,
   getReward,
+  getIssuerName,
   revokeReward,
   markRevoked,
   listBatchRewards,

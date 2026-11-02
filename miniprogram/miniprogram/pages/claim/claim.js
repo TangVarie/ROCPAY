@@ -15,6 +15,9 @@ Page({
     // 入口数据已到齐（开屏据此淡出）：令牌流程要等 /api/claim/status 回来（成功、终态或兜底都算），
     // 直接打开要等 checkMine 落定（mine/empty/error 都算）。不能用 mode 判——mode 在发请求前就已是 token
     entryReady: false,
+    issuer: '', // 谁发的：发放员工备注名（可信收款单第一行；''=只显示品牌）
+    resume: false, // 上次点了领取、没在微信里确认完：这笔是"待确认收款"而不是"待领取"
+    deadTitle: '', // 终态失败的标题：没有到账 / 已被撤回
     // 定向领取（身份识别）
     mineAmt: '',
     mineRemark: '',
@@ -27,7 +30,9 @@ Page({
     // | ok(查单 SUCCESS 才到这) | dead(转账失败/被撤回：终态，不再给领取按钮)
     status: 'idle',
     message: '',
-    claimedCount: 0, // 本次会话已领取笔数（定向可能有多笔）
+    claimedCount: 0, // 本次会话已到账笔数（大额拆单一人多笔：第 N/M 笔）
+    claimedFen: 0, //   本次会话已到账合计（分）
+    claimedYuan: '', // 同上，展示串
     profile: null, // 合作档案 { lv, name, count, totalYuan, nextText }
     roleLabel: '', // 管理员角色名（操作端主页用）
     adminHome: null, // 操作端主页仪表 { hasQuota, remainingYuan, low, todayCount, todayYuan }
@@ -59,6 +64,7 @@ Page({
             amtUnverified: false,
             verifying: false,
             remark: res.remark || '',
+            issuer: res.issuer || '',
           });
           return;
         }
@@ -159,6 +165,8 @@ Page({
           mode: 'mine',
           mineAmt: yuan(mine.reward.amountYuan),
           mineRemark: mine.reward.remark || '',
+          issuer: mine.reward.issuer || '',
+          resume: !!mine.resume,
           minePendCount: (mine.pending && mine.pending.count) || 1,
           minePendYuan: mine.pending ? yuan(mine.pending.totalYuan) : '',
           status: 'idle',
@@ -249,14 +257,6 @@ Page({
     wx.navigateTo({ url: '/pages/admin/admin?tab=records&status=failed' });
   },
 
-  copyOpenid() {
-    if (!this.data.openid) return;
-    wx.setClipboardData({
-      data: this.data.openid,
-      success: () => wx.showToast({ title: '已复制', icon: 'success' }),
-    });
-  },
-
   // 拉起微信官方确认收款。success 只代表客户点了确认，不代表付款成功（微信官方说明）——
   // 先进"等待到账"，查单 SUCCESS 才回调 onOk（到账、庆祝）
   _confirmTransfer(res, onOk) {
@@ -280,7 +280,8 @@ Page({
         const msg = e.errMsg || '';
         // 手滑取消（errMsg 带 cancel）：保留在途凭证，再点直接重开确认页（原设计）
         if (/cancel/i.test(msg)) {
-          this.setData({ status: 'fail', message: '未完成确认收款：' + msg });
+          // 转账已发起、只是确认页被关掉：这笔从"待领取"变成"待确认收款"
+          this.setData({ status: 'fail', resume: true, message: '还没确认收款，点下方按钮继续确认' });
           return;
         }
         // 定向领取的真失败（典型是「订单已失效」：凭证对应的转账已完成/关闭，只是确认
@@ -288,14 +289,14 @@ Page({
         // 不清的话每次点击都在重开同一张死凭证，客户被永久卡住
         if (this.data.mode === 'mine') {
           this._pendingTransfer = null;
-          this.setData({ status: 'fail', message: '确认收款未完成（' + msg + '），已刷新状态，请稍候再点一次领取' });
+          this.setData({ status: 'fail', resume: false, message: '确认收款未完成（' + msg + '），已刷新状态，请稍候再点一次领取' });
           setTimeout(() => this.checkMineQuiet(), 800);
           return;
         }
         // 链接领取：这张凭证是该笔在途转账唯一的重开入口——令牌可能已临期/过期，
         // 清掉后重新 POST 会被令牌校验拒绝，反而把还能确认的钱锁在外面（评审发现）。
         // 保留凭证让"再点一次"能重开；若真已失效，重新打开链接会看到明确的终态提示
-        this.setData({ status: 'fail', message: '未完成确认收款：' + msg + '，请再点一次领取' });
+        this.setData({ status: 'fail', resume: true, message: '未完成确认收款：' + msg + '，请再点一次' });
       },
     });
   },
@@ -325,11 +326,12 @@ Page({
           if (st === 'FAIL' || st === 'CLOSED') {
             return this.setData({
               status: 'dead',
-              message: `没有到账：${r.failText || '微信没有说明具体原因'}。钱没有转出，请联系给你发奖励的员工重新发放`,
+              deadTitle: '没有到账',
+              message: `原因：${r.failText || '微信没有说明具体原因'}。钱没有转出，请联系给你发奖励的员工重新发放`, // 标题已是「没有到账」
             });
           }
           if (st === 'CANCELLED' || st === 'CANCELING') {
-            return this.setData({ status: 'dead', message: '这笔奖励已被发放方撤回，钱没有转出' });
+            return this.setData({ status: 'dead', deadTitle: '已被撤回', message: '这笔奖励已被发放方撤回，钱没有转出' });
           }
           next(); // 处理中/待确认/查不到（极短窗口）/接口报错：继续等
         })
@@ -364,7 +366,7 @@ Page({
   },
   _tokenOk() {
     this._pendingTransfer = null;
-    this.setData({ status: 'ok', message: '已到账微信零钱' });
+    this.setData({ status: 'ok', message: '' }); // 标题已是"已到账微信零钱"，提示行不再重复
     this._celebrate('amtText');
     setTimeout(() => this.refreshProfile(), 1200); // 到账后档案(合作次数/累计)自动 +1
   },
@@ -484,12 +486,29 @@ Page({
       );
   },
 
+  // 大额拆单一人多笔：中间几笔到账只记账、接着出下一笔，不庆祝；最后一笔（或唯一一笔）
+  // 到账才翻青面——每笔都放一次到账仪式，客户会以为领完了
   _afterMineOk() {
     this._pendingTransfer = null;
     const n = this.data.claimedCount + 1;
-    this.setData({ status: 'ok', message: '已到账微信零钱', claimedCount: n });
+    const fen = this.data.claimedFen + Math.round(num(this.data.mineAmt) * 100);
+    this.setData({ claimedCount: n, claimedFen: fen, claimedYuan: yuan(fen / 100), resume: false });
+    if (this.data.minePendCount > 1) {
+      this.setData({ status: 'between', message: `第 ${n} 笔已到账，正在准备下一笔` });
+      setTimeout(() => this.checkMineQuiet(), 800);
+      return;
+    }
+    this._finishAll();
+  },
+  // 整批完成：多笔时大数字换成本次累计，标题写清共几笔
+  _finishAll(extra) {
+    const n = this.data.claimedCount;
+    const patch = { status: 'ok', message: n > 1 ? `共 ${n} 笔已全部到账微信零钱` : '' };
+    if (n > 1) patch.mineAmt = this.data.claimedYuan;
+    if (extra) patch.message = `已到账 ${n} 笔，${extra}`;
+    this.setData(patch);
     this._celebrate('mineAmt');
-    // 可能还有下一笔：安静地查，绝不用 loading/empty 盖掉"已到账"画面；档案也顺带刷新
+    // 可能又来了新奖励：安静地查，绝不用 loading/empty 盖掉"已到账"画面；档案也顺带刷新
     setTimeout(() => {
       this.checkMineQuiet();
       this.refreshProfile();
@@ -508,6 +527,8 @@ Page({
             mode: 'mine',
             mineAmt: yuan(mine.reward.amountYuan),
             mineRemark: mine.reward.remark || '',
+            issuer: mine.reward.issuer || '',
+            resume: !!mine.resume,
             minePendCount: (mine.pending && mine.pending.count) || 1,
             minePendYuan: mine.pending ? yuan(mine.pending.totalYuan) : '',
             status: 'idle',
@@ -515,8 +536,12 @@ Page({
           });
         } else {
           this.setData({ minePendCount: 0, minePendYuan: '' }); // 全部领完
+          if (this.data.status === 'between') this._finishAll(); // 原以为还有下一笔，其实领完了
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        // 查不到下一笔（网络）：已到账的照实庆祝，剩下的请客户稍后重开
+        if (this.data.status === 'between') this._finishAll('其余奖励请稍后重新打开本页领取');
+      });
   },
 });
