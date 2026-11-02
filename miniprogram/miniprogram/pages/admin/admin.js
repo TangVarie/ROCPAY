@@ -1,4 +1,6 @@
 const { call } = require('../../api.js');
+// 本文件不少地方有叫 yuan 的局部变量（输入的金额），格式化函数改名引入，免得被遮住
+const { yuan: fmtYuan, num } = require('../../money.js');
 
 Page({
   data: {
@@ -459,12 +461,15 @@ Page({
       if (f > maxFen) maxFen = f;
       totalBills += this._splitBillsCount(f, capFen, minFen);
     });
-    const totalYuan = (totalFen / 100).toFixed(2);
+    const totalYuan = fmtYuan(totalFen / 100);
     let content = `共 ${selected.length} 人`;
     if (totalBills > selected.length) content += ` · 拆成 ${totalBills} 笔（单笔≤¥${splitCapYuan}，客户逐笔确认）`;
-    content += `\n合计 ¥${totalYuan}\n最大单人 ¥${(maxFen / 100).toFixed(2)}`;
-    if (period && period.hasQuota && Number(period.remainingYuan) < totalFen / 100) {
-      content += `\n\n注意：可发额度仅剩 ¥${period.remainingYuan}，本次将超出，请先确认商户余额充足。`;
+    content += `\n合计 ¥${totalYuan}\n最大单人 ¥${fmtYuan(maxFen / 100)}`;
+    // remainingYuan 是绝对值的展示串（带千分位），负号在 neg 上：还原成带符号的数再比，
+    // 否则已超支（剩余为负）时拿绝对值比，反而可能不提醒
+    const remain = period && period.hasQuota ? (period.neg ? -1 : 1) * num(period.remainingYuan) : null;
+    if (remain != null && remain < totalFen / 100) {
+      content += `\n\n注意：可发额度仅剩 ${period.neg ? '-' : ''}¥${period.remainingYuan}，本次将超出，请先确认商户余额充足。`;
     }
     wx.showModal({
       title: '确认发放',
@@ -681,7 +686,8 @@ Page({
         this.setData({ loading: false });
         if (res && res.error) return this.setData({ error: res.error });
         this._quickKey = null; // 已成功拿到 token，下一单换新键
-        this.setData({ reward: res });
+        // amountYuan 原值留给分享链接（领取页按数值解析），界面用带千分位的 amountText
+        this.setData({ reward: Object.assign({}, res, { amountText: fmtYuan(res.amountYuan) }) });
         this.loadRecords();
       })
       .catch((e) => this.setData({ loading: false, error: '网络错误：' + (e.errMsg || e.message || '') + '（可放心重试，不会重复生成）' }));
@@ -691,12 +697,12 @@ Page({
     const r = this.data.reward;
     if (this.data.sendMode === 'quick' && r && r.token) {
       return {
-        title: `请领取 ¥${r.amountYuan} 奖励`,
+        title: `请领取 ¥${r.amountText || r.amountYuan} 奖励`,
         path: `/pages/claim/claim?token=${encodeURIComponent(r.token)}&amt=${r.amountYuan}&remark=${encodeURIComponent(r.remark || '')}`,
       };
     }
     // 定向发放：分享领取入口即可（客户按身份识别，无需令牌）。标题带品牌名增强信任
-    return { title: '梨响 ROC · 你的奖励到啦，点开领取', path: '/pages/claim/claim' };
+    return { title: '梨响ROC · 你的奖励到啦，点开领取', path: '/pages/claim/claim' };
   },
 
   // ============ 记录 ============
@@ -714,9 +720,9 @@ Page({
       period: {
         hasQuota: true,
         // 负数 = 待领取已超出账户余额（校准会扣掉待领取，可能出现）。符号放 ¥ 前面，别显示成 ¥-12.00
-        remainingYuan: Math.abs(rem).toFixed(2),
+        remainingYuan: fmtYuan(Math.abs(rem)),
         neg: rem < 0,
-        paidSinceYuan: (Number(res.paidSinceYuan) || 0).toFixed(2),
+        paidSinceYuan: fmtYuan(res.paidSinceYuan),
         low: rem <= 0, // 剩余告罄/超支
       },
     });
@@ -765,7 +771,7 @@ Page({
   _showQuotaResult(isSet, yuan, res) {
     // 后端还没升级（没给前后对比）：退回原来的一句提示，别把缺字段当成「剩余 ¥0、首次记账」
     if (res.afterYuan == null) return wx.showToast({ title: isSet ? '已校准' : '已充值', icon: 'success' });
-    const fmt = (v) => (v < 0 ? '-¥' : '¥') + Math.abs(v).toFixed(2);
+    const fmt = (v) => (v < 0 ? '-¥' : '¥') + fmtYuan(Math.abs(v));
     const verb = isSet ? '校准' : '充值';
     const before = res.beforeYuan; // null = 此前从未记过账
     const after = Number(res.afterYuan) || 0;
@@ -849,7 +855,7 @@ Page({
           const full = (r.created_at || '').replace('T', ' ');
           return {
             rid: r.rid,
-            yuan: (r.amount_fen / 100).toFixed(2),
+            yuan: fmtYuan(r.amount_fen / 100),
             // 副行：备注 + 谁发的（多发放员团队对账/追责要看这个）
             sub: (r.remark || '客户奖励') + (by ? ' · ' + by + ' 发放' : ''),
             // 定向对象：企微客户显备注/名字；直连客户显名单备注 > 借企微备注（openid 桥）> openid 尾号
@@ -894,8 +900,8 @@ Page({
           recLoaded: true,
           recLoading: false,
           stats: res.stats || null,
-          statsTotalYuan: res.stats ? (res.stats.total_fen / 100).toFixed(2) : '0.00',
-          statsPaidYuan: res.stats ? ((res.stats.paid_fen || 0) / 100).toFixed(2) : '0.00',
+          statsTotalYuan: fmtYuan(res.stats ? res.stats.total_fen / 100 : 0),
+          statsPaidYuan: fmtYuan(res.stats ? (res.stats.paid_fen || 0) / 100 : 0),
         });
       })
       .catch(() => {
@@ -1073,7 +1079,7 @@ Page({
       .then((res) => {
         if (seq !== this._rankSeq) return; // 筛选已切换：旧响应作废
         if (!res || !res.list) return this.setData({ rankLoading: false, rankLoaded: true, rankError: true });
-        const page = res.list.map((r) => Object.assign({}, r, { totalYuanText: (Number(r.totalYuan) || 0).toFixed(2) }));
+        const page = res.list.map((r) => Object.assign({}, r, { totalYuanText: fmtYuan(r.totalYuan) }));
         const patch = {
           rank: isMore ? this.data.rank.concat(page) : page,
           rankOffset: offset + page.length,

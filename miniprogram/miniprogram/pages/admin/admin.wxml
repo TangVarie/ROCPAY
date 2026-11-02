@@ -227,7 +227,7 @@
         <view class="err" wx:if="{{error}}">{{error}}</view>
         <block wx:if="{{reward}}">
           <view class="banner banner-success reward-ok">
-            <text class="t-dark">已生成 <text class="num">¥{{reward.amountYuan}}</text>{{reward.remark ? ' · ' + reward.remark : ''}}，转发给客户即可领取</text>
+            <text class="t-dark">已生成 <text class="num">¥{{reward.amountText}}</text>{{reward.remark ? ' · ' + reward.remark : ''}}，转发给客户即可领取</text>
           </view>
           <button class="btn btn-blue btn-block" open-type="share">转发给客户领取</button>
         </block>
@@ -247,7 +247,7 @@
           </view>
         </view>
         <block wx:if="{{period.hasQuota}}">
-          <view class="bal-num num {{period.low ? 'bal-low' : ''}}">{{period.neg ? '-' : ''}}¥{{period.remainingYuan}}</view>
+          <view class="bal-num num">{{period.neg ? '-' : ''}}¥{{period.remainingYuan}}</view>
           <view class="bal-sub">自上次充值或校准已发放 ¥{{period.paidSinceYuan}}{{period.neg ? ' · 待领取已超出账户余额，请充值' : period.low ? ' · 额度已用尽，请充值' : ''}}</view>
         </block>
         <block wx:else>
@@ -278,15 +278,18 @@
         <button class="btn btn-blue searchbtn" bindtap="searchRecords">搜索</button>
       </view>
 
-      <!-- 台账筛选：状态 × 时间范围（天数窗/自然月互斥）；点客户名可只看单人往来 -->
-      <view class="fchips">
+      <!-- 台账筛选：状态 × 时间范围（天数窗/自然月互斥）；点客户名可只看单人往来。
+           状态 6 个放一行横滑（折行时单独掉一个「失败/撤回」，筛选区占三行）；出血到屏幕边，
+           右缘露半个 chip 提示还能滑 -->
+      <scroll-view class="fscroll" scroll-x enable-flex enhanced show-scrollbar="{{false}}">
         <view class="fchip {{recFilter.status==='all'?'on':''}}" data-k="status" data-v="all" bindtap="pickRecFilter">全部</view>
         <view class="fchip {{recFilter.status==='created'?'on':''}}" data-k="status" data-v="created" bindtap="pickRecFilter">待领取</view>
         <view class="fchip {{recFilter.status==='expired'?'on':''}}" data-k="status" data-v="expired" bindtap="pickRecFilter">已过期</view>
         <view class="fchip {{recFilter.status==='waiting'?'on':''}}" data-k="status" data-v="waiting" bindtap="pickRecFilter">待确认</view>
         <view class="fchip {{recFilter.status==='success'?'on':''}}" data-k="status" data-v="success" bindtap="pickRecFilter">已到账</view>
         <view class="fchip {{recFilter.status==='failed'?'on':''}}" data-k="status" data-v="failed" bindtap="pickRecFilter">失败/撤回</view>
-      </view>
+        <view class="fscroll-end"></view>
+      </scroll-view>
       <view class="fchips">
         <view class="fchip {{recFilter.days===0 && !recFilter.month ?'on':''}}" data-k="days" data-v="0" bindtap="pickRecFilter">全部时间</view>
         <view class="fchip {{recFilter.days===7?'on':''}}" data-k="days" data-v="7" bindtap="pickRecFilter">近7天</view>
@@ -294,10 +297,11 @@
         <picker mode="date" fields="month" value="{{recFilter.month}}" bindchange="pickRecMonth">
           <view class="fchip {{recFilter.month?'on':''}}">{{recFilter.month || '按月'}}</view>
         </picker>
-        <view class="fchip fchip-target on" wx:if="{{recFilter.month}}" bindtap="clearRecMonth">✕</view>
-        <view class="fchip fchip-target on" wx:if="{{recFilter.q}}" bindtap="clearRecQ">「{{recFilter.q}}」 ✕</view>
-        <view class="fchip fchip-target on" wx:if="{{recFilter.target || recFilter.targetOpenid}}" bindtap="clearCustomerFilter">{{recFilter.targetLabel}} ✕</view>
-        <view class="fchip fchip-target on" wx:if="{{recFilter.batch}}" bindtap="clearBatchFilter">本批发放 ✕</view>
+        <!-- 生效中的附加筛选：点一下清除。清除图标与全站同一套线性图标（不用 ✕ 字符） -->
+        <view class="fchip fchip-target" wx:if="{{recFilter.month}}" bindtap="clearRecMonth" aria-label="清除月份"><view class="ic-x"></view></view>
+        <view class="fchip fchip-target" wx:if="{{recFilter.q}}" bindtap="clearRecQ">「{{recFilter.q}}」<view class="ic-x"></view></view>
+        <view class="fchip fchip-target" wx:if="{{recFilter.target || recFilter.targetOpenid}}" bindtap="clearCustomerFilter">{{recFilter.targetLabel}}<view class="ic-x"></view></view>
+        <view class="fchip fchip-target" wx:if="{{recFilter.batch}}" bindtap="clearBatchFilter">本批发放<view class="ic-x"></view></view>
       </view>
 
       <!-- 失败筛选下的知悉出口：处理完标记一下，角标/主页警示清零；历史单永远可查。
@@ -342,11 +346,17 @@
             </view>
             <view class="rec-remark t-light">{{item.sub}}</view>
           </view>
+          <!-- 右列固定两层，与左列两行对齐：时间 + 状态 / 操作（查看本批、撤回并成一行）。
+               原先四样竖排，带操作的行比普通行高出一倍 -->
           <view class="rec-r">
-            <text class="badge {{item.cls==='ok'?'badge-success':item.cls==='fail'?'badge-danger':item.cls==='muted'?'badge-muted':'badge-warning'}}">{{item.statusText}}</text>
-            <text class="rec-time t-hint num">{{item.createdAt}}</text>
-            <text class="rec-batch" wx:if="{{item.batchId && !recFilter.batch}}" data-batch="{{item.batchId}}" catchtap="filterByBatch">查看本批</text>
-            <text class="rec-revoke" wx:if="{{item.canRevoke}}" data-rid="{{item.rid}}" data-yuan="{{item.yuan}}" data-who="{{item.who}}" catchtap="revokeReward">撤回</text>
+            <view class="rec-meta">
+              <text class="rec-time t-hint num">{{item.createdAt}}</text>
+              <text class="badge {{item.cls==='ok'?'badge-success':item.cls==='fail'?'badge-danger':item.cls==='muted'?'badge-muted':'badge-warning'}}">{{item.statusText}}</text>
+            </view>
+            <view class="rec-acts" wx:if="{{(item.batchId && !recFilter.batch) || item.canRevoke}}">
+              <text class="rec-batch" wx:if="{{item.batchId && !recFilter.batch}}" data-batch="{{item.batchId}}" catchtap="filterByBatch">查看本批</text>
+              <text class="rec-revoke" wx:if="{{item.canRevoke}}" data-rid="{{item.rid}}" data-yuan="{{item.yuan}}" data-who="{{item.who}}" catchtap="revokeReward">撤回</text>
+            </view>
           </view>
         </view>
         <view class="loadmore textbtn" wx:if="{{recHasMore}}" bindtap="loadMoreRecords">{{recLoading ? '加载中…' : '加载更多'}}</view>
