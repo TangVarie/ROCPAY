@@ -315,7 +315,7 @@ app.get('/api/me', async (req, res) => {
     wecom: wecom.wecomEnabled, // 企微是否已连接（前端据此提示）
     wecomUserid: adminWecomUserid(openid), // 本人的企微账号映射（''=未配置，群发任务会派给客户跟进人）
     db: db.dbEnabled,
-    // 订阅消息直达通知：非空 = 已配置。客户端据此在领取时请求授权；管理端据此显示"小程序直达通知"
+    // 订阅消息直达通知：非空 = 已配置。领取页据此显示「有新奖励时提醒我」（勾过总是允许的客户领取时静默续）；管理端据此显示"小程序直达通知"
     subscribeTmplId: weixin.subscribeEnabled && db.dbEnabled ? config.weixin.subscribeTemplateId : '',
     profile,
   });

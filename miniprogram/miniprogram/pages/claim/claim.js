@@ -39,6 +39,7 @@ Page({
     // 「有新奖励时提醒我」：后端配了订阅模板才显示；只在到账后和空态由用户主动点，领取前不弹
     subOn: false,
     subState: '', // '' 未开 | saving 落库中 | on 已开启 | off 拒绝了（给去设置打开的说明，不再出按钮）
+    subAlways: false, // 客户在订阅面板勾过「总是保持以上选择」并选了允许：以后不弹窗，每次领取自动续上
     adminHome: null, // 操作端主页仪表 { hasQuota, remainingYuan, low, todayCount, todayYuan }
   },
 
@@ -125,6 +126,7 @@ Page({
             profile: this._profileOf(me),
             subOn: !!this._subTmplId && !this._subBanned, // 到账后刷新档案也走这里，被封禁的模板别再冒出来
           });
+          this._readSubSetting();
         }
       })
       .catch(() => {});
@@ -160,6 +162,7 @@ Page({
         roleLabel: me.role === 'super' ? '超级管理员' : me.role === 'operator' ? '发放员' : '',
         subOn: !!this._subTmplId && !this._subBanned, // "有新奖励时提醒我"的开关（空态、到账后）
       };
+      this._readSubSetting();
       if (me.isAdmin) this.loadAdminHome(); // 管理员进门：拉仪表数据（额度剩余 + 近24h发放）
       if (mine && mine.reward) {
         // 在途单续办：上次转账已发起但确认页没走完，后端带回 package_info——
@@ -202,6 +205,8 @@ Page({
   // 本页在页面栈里被缓存，不刷新会一直显示旧警示。首次进入时 mode 还是 loading，天然跳过
   onShow() {
     if (this.data.isAdmin && this.data.mode === 'empty') this.loadAdminHome();
+    // 客户可能刚去「设置 › 通知管理」改过提醒开关，回来按新设置显示
+    if (this._subTmplId) this._readSubSetting();
   },
 
   goAdmin() {
@@ -381,7 +386,8 @@ Page({
   // 「有新奖励时提醒我」：只在用户主动点时弹系统授权——领取前不打扰（那一刻客户只想领钱，
   // 授权窗还会和微信「确认收款」半屏抢位置），到账后和空态各给一个入口。
   // 按钮上方先说清为什么要（场景 04：先说为什么，再弹授权）；拒绝了就给去设置里打开的说明，
-  // 本次不再出按钮，不反复弹。一次授权 = 之后一条服务通知，所以文案写「开一次提醒一次」
+  // 本次不再出按钮，不反复弹。一次授权 = 之后一条服务通知，所以文案写「开一次提醒一次」。
+  // 例外：勾过「总是允许」的客户不会再看到弹窗，领取时静默续（见 _withSilentRenew）
   askSubscribe() {
     const id = this._subTmplId;
     if (!id || this.data.subState === 'saving') return;
@@ -398,6 +404,7 @@ Page({
           this._subBanned = true;
           return this.setData({ subOn: false });
         }
+        this._subRejected = true; // 这次会话里拒绝过：重读设置时也不再把按钮放回来（不反复问）
         this.setData({ subState: 'off' }); // reject：这次拒绝，或勾过「总是保持以上选择」
       },
       fail: (e) => {
@@ -409,19 +416,114 @@ Page({
   },
   // 授权落库：微信侧已实际消耗一次授权，落库失败 = 白丢。失败自动重试一次；仍失败退回未开启，
   // 让客户再点（勾过「总是保持」的客户再点不弹窗，等于纯重试落库）。万一本地多记：
-  // 发送时微信回 43101 会把本地配额对齐清零，能自愈。只有后端确认成功才显示「已开启」
-  _saveGrant(retried) {
-    this.setData({ subState: 'saving' });
+  // 发送时微信回 43101 会把本地配额对齐清零，能自愈。只有后端确认成功才显示「已开启」。
+  // silent：领取时静默续的那一次，失败不打扰客户（下次领取再续）
+  _saveGrant(retried, silent) {
+    if (!silent) this.setData({ subState: 'saving' });
     call('/api/subscribe/grant', 'POST', {})
       .then((res) => {
         if (res && res.error) throw new Error(res.error);
         this.setData({ subState: 'on' });
+        // 客户这次在面板里勾了「总是保持以上选择」的话，提示换成「每次领取自动续上」
+        if (!silent) this._readSubSetting();
       })
       .catch(() => {
-        if (!retried) return setTimeout(() => this._saveGrant(true), 1000);
+        if (!retried) return setTimeout(() => this._saveGrant(true, silent), 1000);
+        if (silent) return;
         this.setData({ subState: '' });
         wx.showToast({ title: '网络错误，提醒没开成，请再点一次', icon: 'none' });
       });
+  },
+
+  // 读客户在微信里对这个提醒「记住的选择」。只有在订阅面板里勾过「总是保持以上选择，不再询问」才有记录，
+  // 之后再请求授权微信都不弹窗、直接按记住的选择处理——客户会觉得「点了没反应」：
+  //   accept → 不用再问：点领取时顺手静默续一次（_withSilentRenew），到账后提示「每次领取自动续上」
+  //   reject，或微信「接收通知」总开关关着 → 请求也不弹窗、直接算拒绝：不放按钮，直接给去设置打开的说明
+  //   ban / filter → 模板被封禁或被过滤，收起入口
+  //   没有记录（没勾过）→ 照旧：到账后由客户自己点「有新奖励时提醒我」
+  // 基础库太老读不到（没有 withSubscriptions）或读失败：当作没有记录，不影响别的
+  _readSubSetting() {
+    if (!this._subTmplId || typeof wx.getSetting !== 'function') return;
+    wx.getSetting({
+      withSubscriptions: true,
+      success: (res) => this._applySubSetting(res && res.subscriptionsSetting),
+      fail: () => this._applySubSetting(null),
+    });
+  },
+  _applySubSetting(ss) {
+    const id = this._subTmplId;
+    if (!id) return;
+    if (!ss) {
+      // 读不到（失败，或基础库没有订阅设置）：当作没有记录。之前读到的「总是允许」不能再当依据——
+      // 客户可能刚在设置里改过，沿用旧记录静默续，下次点领取就可能真弹出授权窗
+      this._subAlways = '';
+      return this.setData({ subAlways: false });
+    }
+    const item = ss.itemSettings ? ss.itemSettings[id] : undefined;
+    if (item === 'ban' || item === 'filter') {
+      this._subBanned = true;
+      this._subAlways = '';
+      return this.setData({ subOn: false, subAlways: false });
+    }
+    const always = ss.mainSwitch === false || item === 'reject' ? 'reject' : item === 'accept' ? 'accept' : '';
+    this._subAlways = always;
+    const patch = { subAlways: always === 'accept' };
+    const cur = this.data.subState;
+    if (always === 'reject') {
+      // 明确的拒绝、或通知总开关关着：连「已开启」也要覆盖——客户刚去设置关掉，再说「微信会通知你」就不对了。
+      // 正在落库的不动：手动开启落库成功后会再读一次设置，按那时的结果校正
+      if (cur !== 'saving') patch.subState = 'off';
+    } else if (cur === 'off' && !this._subRejected) {
+      // 设置里已经不是拒绝了（客户刚去打开过）：把按钮放回来；这次会话里亲手拒绝过的除外
+      patch.subState = '';
+    }
+    this.setData(patch);
+  },
+  // 勾过「总是允许」的客户：点领取时顺手续一次提醒授权。这时微信不弹窗，不会和「确认收款」半屏抢位置；
+  // 必须在点击手势里同步调起（微信规定），所以放在领取按钮的处理函数开头。每次打开页面最多续一次。
+  // 串行：授权调用结束（complete）再走领取——万一设置刚被改过、微信还是弹了窗，也不会和确认页叠在一起。
+  // 续没续上都不影响领取；没续上的到账后还有按钮可点
+  _withSilentRenew(next) {
+    const id = this._subTmplId;
+    if (this._subAlways !== 'accept' || !id || this._subRenewed || typeof wx.requestSubscribeMessage !== 'function') {
+      return next();
+    }
+    this._subRenewed = true;
+    let done = false;
+    const go = () => {
+      if (done) return;
+      done = true;
+      next();
+    };
+    wx.requestSubscribeMessage({
+      tmplIds: [id],
+      success: (r) => {
+        const v = r && r[id];
+        if (v === 'accept') return this._saveGrant(false, true);
+        if (v === 'ban' || v === 'filter') {
+          this._subBanned = true;
+          this._subAlways = '';
+          return this.setData({ subOn: false, subAlways: false });
+        }
+        if (v === 'reject') {
+          // 设置刚被改过、这次真弹了窗被客户拒绝：和亲手点按钮拒绝一样记下来，本次不再问
+          this._subRejected = true;
+          this._subAlways = '';
+          this.setData({ subState: 'off', subAlways: false });
+        }
+        this._readSubSetting(); // 记住的选择变了：重读，界面跟着变
+      },
+      fail: (e) => {
+        // 「本页已续过」不撤：失败也不在下一笔领取时再请求一次
+        if (e && e.errCode === 20004) {
+          // 通知总开关刚被关掉：和读到总开关关着一样，给去设置的说明
+          this._subAlways = 'reject';
+          return this.setData({ subState: 'off', subAlways: false });
+        }
+        this._readSubSetting();
+      },
+      complete: go,
+    });
   },
 
   // 链接领取（令牌）
@@ -430,11 +532,11 @@ Page({
     // 确认页被手滑关掉后再点：直接重开确认，别再 POST（转账已发起，重开即可）
     if (this._pendingTransfer) {
       this.setData({ status: 'loading', message: '' });
-      return this._confirmTransfer(this._pendingTransfer, () => this._tokenOk());
+      return this._withSilentRenew(() => this._confirmTransfer(this._pendingTransfer, () => this._tokenOk()));
     }
     if (this.data.amtUnverified) return; // 金额没核验不许领（按钮本就不渲染，这里兜底）
     this.setData({ status: 'loading', message: '' });
-    this._doClaimToken();
+    this._withSilentRenew(() => this._doClaimToken());
   },
   _doClaimToken() {
     call('/api/claim', 'POST', { token: this.data.token })
@@ -454,10 +556,10 @@ Page({
     // 确认页被手滑关掉后再点：直接重开确认（那笔已 CLAIMED，再 POST 会 404）
     if (this._pendingTransfer) {
       this.setData({ status: 'loading', message: '' });
-      return this._confirmTransfer(this._pendingTransfer, () => this._afterMineOk());
+      return this._withSilentRenew(() => this._confirmTransfer(this._pendingTransfer, () => this._afterMineOk()));
     }
     this.setData({ status: 'loading', message: '' });
-    this._doClaimMine();
+    this._withSilentRenew(() => this._doClaimMine());
   },
   _doClaimMine() {
     call('/api/claim/mine', 'POST', {})
