@@ -447,11 +447,18 @@ Page({
     wx.getSetting({
       withSubscriptions: true,
       success: (res) => this._applySubSetting(res && res.subscriptionsSetting),
+      fail: () => this._applySubSetting(null),
     });
   },
   _applySubSetting(ss) {
     const id = this._subTmplId;
-    if (!id || !ss) return;
+    if (!id) return;
+    if (!ss) {
+      // 读不到（失败，或基础库没有订阅设置）：当作没有记录。之前读到的「总是允许」不能再当依据——
+      // 客户可能刚在设置里改过，沿用旧记录静默续，下次点领取就可能真弹出授权窗
+      this._subAlways = '';
+      return this.setData({ subAlways: false });
+    }
     const item = ss.itemSettings ? ss.itemSettings[id] : undefined;
     if (item === 'ban' || item === 'filter') {
       this._subBanned = true;
@@ -462,10 +469,13 @@ Page({
     this._subAlways = always;
     const patch = { subAlways: always === 'accept' };
     const cur = this.data.subState;
-    if (cur !== 'saving' && cur !== 'on') {
-      if (always === 'reject') patch.subState = 'off';
+    if (always === 'reject') {
+      // 明确的拒绝、或通知总开关关着：连「已开启」也要覆盖——客户刚去设置关掉，再说「微信会通知你」就不对了。
+      // 正在落库的不动：手动开启落库成功后会再读一次设置，按那时的结果校正
+      if (cur !== 'saving') patch.subState = 'off';
+    } else if (cur === 'off' && !this._subRejected) {
       // 设置里已经不是拒绝了（客户刚去打开过）：把按钮放回来；这次会话里亲手拒绝过的除外
-      else if (cur === 'off' && !this._subRejected) patch.subState = '';
+      patch.subState = '';
     }
     this.setData(patch);
   },
@@ -488,11 +498,29 @@ Page({
     wx.requestSubscribeMessage({
       tmplIds: [id],
       success: (r) => {
-        if (r && r[id] === 'accept') this._saveGrant(false, true);
-        else this._readSubSetting(); // 记住的选择变了：重读，界面跟着变
+        const v = r && r[id];
+        if (v === 'accept') return this._saveGrant(false, true);
+        if (v === 'ban' || v === 'filter') {
+          this._subBanned = true;
+          this._subAlways = '';
+          return this.setData({ subOn: false, subAlways: false });
+        }
+        if (v === 'reject') {
+          // 设置刚被改过、这次真弹了窗被客户拒绝：和亲手点按钮拒绝一样记下来，本次不再问
+          this._subRejected = true;
+          this._subAlways = '';
+          this.setData({ subState: 'off', subAlways: false });
+        }
+        this._readSubSetting(); // 记住的选择变了：重读，界面跟着变
       },
-      fail: () => {
-        this._subRenewed = false;
+      fail: (e) => {
+        // 「本页已续过」不撤：失败也不在下一笔领取时再请求一次
+        if (e && e.errCode === 20004) {
+          // 通知总开关刚被关掉：和读到总开关关着一样，给去设置的说明
+          this._subAlways = 'reject';
+          return this.setData({ subState: 'off', subAlways: false });
+        }
+        this._readSubSetting();
       },
       complete: go,
     });
