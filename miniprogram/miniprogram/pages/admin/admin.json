@@ -1,6 +1,9 @@
 {
-  "usingComponents": { "splash": "/components/splash/splash", "state-view": "/components/state-view/state-view" },
+  "usingComponents": {
+    "splash": "/components/splash/splash",
+    "state-view": "/components/state-view/state-view"
+  },
   "navigationBarTitleText": "奖励工作台",
   "enablePullDownRefresh": true,
-  "backgroundTextStyle": "dark"
+  "backgroundTextStyle": "@bgTxtStyle"
 }

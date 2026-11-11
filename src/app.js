@@ -1780,7 +1780,12 @@ app.get('/api/claim/result', async (req, res) => {
       })
     );
     const failed = data.state === 'FAIL' || data.state === 'CLOSED';
-    res.json({ state: data.state, failText: failed ? customerFailText(data.fail_reason) : '' });
+    res.json({
+      state: data.state,
+      failText: failed ? customerFailText(data.fail_reason) : '',
+      // 到账凭证用：微信侧最后一次状态变更时间（SUCCESS 时即到账时间，RFC3339）。微信没给就空着，前端不显示这一行
+      arrivedAt: data.state === 'SUCCESS' ? String(data.update_time || '') : '',
+    });
   } catch (e) {
     // 微信侧还查不到这张单（刚发起的极短窗口）：按在途处理，前端继续等
     if (e.status === 404 || (e.data && e.data.code === 'NOT_FOUND')) return res.json({ state: 'NOT_FOUND' });
