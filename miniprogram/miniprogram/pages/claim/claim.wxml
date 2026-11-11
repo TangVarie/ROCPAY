@@ -42,6 +42,16 @@
         <view class="rb-meta">
           <view class="rb-row" wx:if="{{mode==='mine' ? mineRemark : remark}}"><text class="rb-k">事由</text><text class="rb-v">{{ mode==='mine' ? mineRemark : remark }}</text></view>
           <view class="rb-row"><text class="rb-k">到账</text><text class="rb-v">微信零钱</text></view>
+          <!-- 到账凭证：到账后多两行——到账时间、单号（可复制，员工在台账里搜这个单号就能找到这笔）。
+               单号是 32 位，单独占一行才放得下；多笔时显示第一笔的单号，标签注明共几笔，复制出来是全部单号 -->
+          <block wx:if="{{status==='ok' && receipt}}">
+            <view class="rb-row" wx:if="{{receipt.time}}"><text class="rb-k">到账时间</text><text class="rb-v num">{{receipt.time}}</text></view>
+            <view class="rb-row rb-row-copy">
+              <text class="rb-k">单号{{receipt.count > 1 ? '（共 ' + receipt.count + ' 笔，复制得到全部）' : ''}}</text>
+              <view class="rb-copy" bindtap="copyReceipt" aria-role="button" aria-label="复制单号"><text class="rb-copy-t">复制</text></view>
+            </view>
+            <view class="rb-rid"><text class="num" user-select="{{true}}">{{receipt.rid}}</text></view>
+          </block>
         </view>
         <!-- 大额拆单：一人多笔逐笔领，进度与已到账累计一直可见 -->
         <view class="rb-multi" wx:if="{{mode==='mine' && claimedCount + minePendCount > 1 && status!=='ok'}}">第 {{claimedCount + 1}}/{{claimedCount + minePendCount}} 笔{{claimedCount > 0 ? ' · 已到账 ¥' + claimedYuan : ''}}</view>
@@ -79,7 +89,7 @@
       </view>
 
       <!-- ⑥ 帮助：按状态给一句下一步 -->
-      <view class="help">{{ status==='ok' ? '可在微信「我 › 服务 › 钱包 › 零钱」查看这笔入账' : (status==='confirming' || status==='arriving' || status==='between') ? '微信入账通常几秒到几分钟，可稍后重新打开本页查看' : '对这笔奖励有疑问，请联系' + (issuer || '给你发奖励的员工') }}</view>
+      <view class="help">{{ status==='ok' ? '可在微信「我 › 服务 › 钱包 › 零钱」查看这笔入账' : (status==='confirming' || status==='arriving' || status==='between') ? '微信入账通常几秒到几分钟，可下拉刷新，或稍后重新打开本页查看' : '对这笔奖励有疑问，请联系' + (issuer || '给你发奖励的员工') }}</view>
 
       <!-- 奖励提醒：到账之后再问（领取前不打扰）。先说为什么，客户主动点才弹系统授权。
            勾过「总是允许」的客户点领取时已静默续上，这里直接显示已开启；勾过「总是拒绝」的直接给去设置的说明 -->

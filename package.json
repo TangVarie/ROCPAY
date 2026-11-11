@@ -12,7 +12,8 @@
     "smoke": "node src/smoke-test.js",
     "db:ping": "node src/db-cli.js ping",
     "db:migrate": "node src/db-cli.js migrate",
-    "design:check": "python3 design/tools/check-design.py miniprogram/miniprogram"
+    "design:check": "python3 design/tools/check-design.py miniprogram/miniprogram",
+    "mp:shots": "node scripts/mp-shots.cjs"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

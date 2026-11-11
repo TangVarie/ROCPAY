@@ -97,7 +97,7 @@ DDL 见 [`db/schema.sql`](./db/schema.sql)（与 `src/db.js` 中的建表语句�
 | `GET/POST /api/admins` · `POST /api/admins/remove` | 员工列表 / 加员工 / 移除 | 超管 |
 | `GET/POST /api/claim/mine` | 客户按身份查/领定向奖励（防领错） | callContainer |
 | `POST /api/claim` | 令牌领取（快发卡片） | 令牌 HMAC |
-| `GET /api/claim/result?rid=` | 客户确认收款后查到账（向微信查单，SUCCESS 才算到账；只许收款人本人查） | callContainer |
+| `GET /api/claim/result?rid=` | 客户确认收款后查到账（向微信查单，SUCCESS 才算到账，并带回到账时间 `arrivedAt` 供领取页显示凭证；只许收款人本人查） | callContainer |
 | `GET /api/transfers/:outBillNo` | 查单并回写状态（对账） | 管理员 或 `?key=` |
 | `POST /api/notify` | 微信支付回调（验签 + 落库，失败回 FAIL 让微信重试） | 签名 |
 | `GET/POST /api/wecom/callback` | 企微接收消息回调（验签解密，用于解锁企业可信IP） | 企微签名 |
@@ -126,6 +126,7 @@ DDL 见 [`db/schema.sql`](./db/schema.sql)（与 `src/db.js` 中的建表语句�
 ├── Dockerfile · package.json · .env.example
 ├── public/                # 静态：安全医生 verify 文件（根目录直达）
 ├── assets/reward-cover.png# 分享卡封面（企微群发卡片与小程序转发共用，scripts/make-cover.mjs 生成）
+├── scripts/mp-shots.cjs   # 发版前看图：驱动微信开发者工具，把各页面各状态在模拟器里逐一截图（npm run mp:shots）
 ├── db/schema.sql          # 建表参考（启动自动建，通常不用手跑）
 ├── src/
 │   ├── config.js          # 配置加载 + 启动校验

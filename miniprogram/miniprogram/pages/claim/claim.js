@@ -1,6 +1,15 @@
 const { call } = require('../../api.js');
 const { yuan, num } = require('../../money.js');
 
+// 到账时间：后端给的是微信的 RFC3339 时间（带时区），按手机本地时间显示到分钟；给的不是合法时间就不显示
+function fmtArrived(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const p = (n) => (n < 10 ? '0' + n : '' + n);
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 Page({
   data: {
     // 模式：loading(识别中) | token(链接领取) | mine(定向领取) | empty(无奖励) | error(连不上后端)
@@ -39,6 +48,8 @@ Page({
     // 「有新奖励时提醒我」：后端配了订阅模板才显示；只在到账后和空态由用户主动点，领取前不弹
     subOn: false,
     subState: '', // '' 未开 | saving 落库中 | on 已开启 | off 拒绝了（给去设置打开的说明，不再出按钮）
+    // 到账凭证（到账后才有）：{ time 到账时间（可能为空）, rid 展示的单号（多笔时是第一笔）, all 复制用（多笔一行一个）, count 笔数 }
+    receipt: null,
     subAlways: false, // 客户在订阅面板勾过「总是保持以上选择」并选了允许：以后不弹窗，每次领取自动续上
     adminHome: null, // 操作端主页仪表 { hasQuota, remainingYuan, low, todayCount, todayYuan }
   },
@@ -293,7 +304,7 @@ Page({
         // 手滑取消（errMsg 带 cancel）：保留在途凭证，再点直接重开确认页（原设计）
         if (/cancel/i.test(msg)) {
           // 转账已发起、只是确认页被关掉：这笔从"待领取"变成"待确认收款"
-          this.setData({ status: 'fail', resume: true, message: '还没确认收款，点下方按钮继续确认' });
+          this.setData({ status: 'fail', resume: true, message: '还没确认收款，点上方按钮继续确认' });
           return;
         }
         // 定向领取的真失败（典型是「订单已失效」：凭证对应的转账已完成/关闭，只是确认
@@ -334,7 +345,10 @@ Page({
         .then((r) => {
           if (seq !== this._arrSeq) return;
           const st = r && r.state;
-          if (st === 'SUCCESS') return onArrived();
+          if (st === 'SUCCESS') {
+            this._noteArrival(rid, r.arrivedAt);
+            return onArrived();
+          }
           if (st === 'FAIL' || st === 'CLOSED') {
             return this.setData({
               status: 'dead',
@@ -352,7 +366,7 @@ Page({
     next();
   },
   _stillArriving() {
-    this.setData({ status: 'arriving', message: '微信正在入账，通常几秒到几分钟。稍后点下方按钮刷新结果' });
+    this.setData({ status: 'arriving', message: '微信正在入账，通常几秒到几分钟。稍后下拉页面或点上方按钮刷新结果' });
   },
   refreshArrival() {
     if (this.data.status !== 'arriving') return;
@@ -360,6 +374,55 @@ Page({
   },
   onUnload() {
     this._arrSeq = (this._arrSeq || 0) + 1; // 离开页面：停掉查单轮询
+  },
+
+  // 下拉刷新：只在「等结果 / 出错了」的状态下有事可做，其余状态松手即回弹，不打断正在进行的领取
+  onPullDownRefresh() {
+    const d = this.data;
+    if (d.mode === 'error' || d.mode === 'empty') this.checkMine(); // 连不上重试；空态看看有没有新奖励
+    else if (d.mode === 'token' && d.amtUnverified) {
+      if (!d.verifying) this.retryToken();
+    } else if (d.status === 'arriving') this.refreshArrival();
+    else if (d.status === 'nextfail') this.retryNext();
+    wx.stopPullDownRefresh(); // 结果都落在页面自己的状态上，下拉的三个点不用一直转
+  },
+
+  // ---- 到账凭证 ----
+  // 每笔查到 SUCCESS 时记一条（单号 + 微信给的到账时间）；整批到账时汇成一张凭证放进收款单：
+  // 客户被问「到了没」截一张图就行，员工拿单号在台账里一搜就到这笔
+  _noteArrival(rid, arrivedAt) {
+    if (!rid) return;
+    const list = this._arrivals || (this._arrivals = []);
+    if (!list.some((x) => x.rid === rid)) list.push({ rid, at: arrivedAt || '' });
+  },
+  _receiptOf() {
+    const list = this._arrivals || [];
+    if (!list.length) return null;
+    const n = list.length;
+    return {
+      time: fmtArrived(list[n - 1].at), // 多笔取最后一笔的到账时间
+      rid: list[0].rid,
+      all: list.map((x) => x.rid).join('\n'),
+      count: n,
+    };
+  },
+  copyReceipt() {
+    const r = this.data.receipt;
+    if (!r || !r.all) return;
+    // 复制成功微信自带「内容已复制」提示，不再叠一个；失败（如隐私指引没声明剪贴板）给长按的退路
+    wx.setClipboardData({
+      data: r.all,
+      fail: () => wx.showToast({ title: '复制失败，请长按单号复制', icon: 'none' }),
+    });
+  },
+  // 到账那一下轻震一次（只在整批到账时，中间几笔不震）。机型不支持或被系统关掉都无所谓
+  _buzz() {
+    if (typeof wx.vibrateShort !== 'function') return;
+    try {
+      wx.vibrateShort({ type: 'light', fail() {} });
+    } catch (e) {
+      /* 老基础库不认 type 参数 */
+    }
   },
 
   // 到账仪式：画勾淡入（CSS）+ 金额数字滚动到位（JS 更新展示值）。展示值带千分位，取数要 num() 还原
@@ -378,7 +441,8 @@ Page({
   },
   _tokenOk() {
     this._pendingTransfer = null;
-    this.setData({ status: 'ok', message: '' }); // 标题已是"已到账微信零钱"，提示行不再重复
+    this.setData({ status: 'ok', message: '', receipt: this._receiptOf() }); // 标题已是"已到账微信零钱"，提示行不再重复
+    this._buzz();
     this._celebrate('amtText');
     setTimeout(() => this.refreshProfile(), 1200); // 到账后档案(合作次数/累计)自动 +1
   },
@@ -593,9 +657,10 @@ Page({
   // 整批完成：多笔时大数字换成本次累计，标题写清共几笔。只在后端明确"没有下一笔"时才到这
   _finishAll() {
     const n = this.data.claimedCount;
-    const patch = { status: 'ok', message: n > 1 ? `共 ${n} 笔已全部到账微信零钱` : '' };
+    const patch = { status: 'ok', message: n > 1 ? `共 ${n} 笔已全部到账微信零钱` : '', receipt: this._receiptOf() };
     if (n > 1) patch.mineAmt = this.data.claimedYuan;
     this.setData(patch);
+    this._buzz();
     this._celebrate('mineAmt');
     // 可能又来了新奖励：安静地查，绝不用 loading/empty 盖掉"已到账"画面；档案也顺带刷新
     setTimeout(() => {
@@ -606,7 +671,7 @@ Page({
 
   // 查下一笔失败（接口报错/断网）不能当"领完了"——剩下的钱还挂着。停在"本笔已到账"，给重试
   _nextFailed() {
-    this.setData({ status: 'nextfail', message: `已到账 ${this.data.claimedCount} 笔，下一笔暂时没查到，点下方按钮再试` });
+    this.setData({ status: 'nextfail', message: `已到账 ${this.data.claimedCount} 笔，下一笔暂时没查到，点上方按钮再试` });
   },
   retryNext() {
     if (this.data.status !== 'nextfail') return;

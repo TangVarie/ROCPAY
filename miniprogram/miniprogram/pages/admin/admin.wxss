@@ -60,6 +60,8 @@
 .ptitle { font-size: 34rpx; font-weight: 600; }
 /* 标题下面直接跟整行按钮（通知客户来领 → 小程序直达通知）：原先贴着标题，没有间距 */
 .ptitle + .btn.btn-block { margin-top: 24rpx; }
+/* 说明文字下面直接跟整行按钮（还没发通知时，「转发领取入口给客户」紧贴上面的说明）：同样补间距 */
+.psub + .btn.btn-block { margin-top: 24rpx; }
 .psub { font-size: 26rpx; margin-top: 8rpx; line-height: 1.6; }
 .psub.center { text-align: center; margin-top: 16rpx; }
 
