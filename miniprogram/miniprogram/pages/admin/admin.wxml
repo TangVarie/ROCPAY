@@ -167,7 +167,10 @@
             <view class="rv-k">合计</view>
             <view class="rv-total n1"><text class="unit">¥</text>{{review.totalYuan}}</view>
             <!-- 要先处理的提醒紧贴合计（留在出事的地方）：语义色加深档圆点记号，不铺语义色底 -->
-            <view class="st st-warn st-line rv-warn" wx:if="{{review.over}}">本次合计超出可发额度，请先确认商户余额充足</view>
+            <!-- 超出可发额度：不能发放（底部按钮禁用），说清差多少、怎么解开 -->
+            <view class="st st-fail st-line rv-warn" wx:if="{{review.block}}">超出可发额度 ¥{{review.overYuan}}，不能发放。到「记录」充值或校准后，返回修改再复核</view>
+            <!-- 唯一放行：按原内容重试上次没收到结果的那批（上次若已建成，额度已扣过，超出是重复计算） -->
+            <view class="st st-warn st-line rv-warn" wx:elif="{{review.over}}">本次合计超出可发额度 ¥{{review.overYuan}}。这是按原内容重试上次没收到结果的那批，不会重复创建，仍可提交</view>
             <view class="st st-warn st-line rv-warn" wx:if="{{review.doubt==='same'}}">上次提交没有收到结果：本次按原内容重试，已创建的不会重复创建</view>
             <view class="st st-fail st-line rv-warn" wx:if="{{review.doubt==='changed'}}">上次提交没有收到结果，可能已经创建成功。内容改过后再提交会作为新的一批发放，若上次已创建，客户会收到两批。建议先到「记录」核对</view>
             <view class="rv-cells">
@@ -575,8 +578,9 @@
     </block>
     <block wx:else>
       <view class="textbtn textbtn-plain" bindtap="backFromReview" hover-class="is-press">返回修改</view>
-      <view class="ab-info"></view>
-      <button class="btn btn-primary btn-md ab-btn" hover-class="is-press" bindtap="confirmReview" loading="{{loading}}" disabled="{{loading}}">{{review.confirmText}} {{review.people}} 人</button>
+      <!-- 禁用要说清为什么：超出多少就写在按钮旁边 -->
+      <view class="ab-info"><text class="st st-fail ab-over" wx:if="{{review.block}}">超出额度 ¥{{review.overYuan}}</text></view>
+      <button class="btn btn-primary btn-md ab-btn" hover-class="is-press" bindtap="confirmReview" loading="{{loading}}" disabled="{{loading || review.block}}">{{review.confirmText}} {{review.people}} 人</button>
     </block>
   </view>
 

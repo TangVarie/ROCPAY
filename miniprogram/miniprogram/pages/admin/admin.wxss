@@ -366,6 +366,7 @@
 .ab-strong { font-size: 34rpx; font-weight: 700; color: var(--color-text-dark); }
 .btn.ab-btn { flex: none; margin: 0; padding: 0 32rpx; }
 .actionbar .textbtn { flex: none; }
+.ab-over { justify-content: flex-end; width: 100%; font-size: 26rpx; } /* 超额度：禁用按钮旁边一句为什么 */
 
 /* 复核：一屏一句判断 = 合计（n1）；人数与笔数 n2；拆单/额度/警示随后，逐人明细在下 */
 .rv-sum { margin: 32rpx 0 8rpx; }
