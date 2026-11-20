@@ -139,7 +139,7 @@ DDL 见 [`db/schema.sql`](./db/schema.sql)（与 `src/db.js` 中的建表语句�
 │   └── app.js             # Express 路由入口（含公网防护、自动对账定时器）
 └── miniprogram/           # 小程序（微信开发者工具打开，不部署到云托管，已被 .dockerignore 排除）
     └── miniprogram/
-        ├── app.wxss       # BYWOOD 设计系统 v5.1 token（青赭双色 / 直角 / 黑色阶 / 语义色 / 深色模式翻转）
+        ├── app.wxss       # BYWOOD 设计系统 v6.3（四种底 / 容器与控件两档圆角 / 七个字级 / 按角色的动效 / 深色模式翻转）
         ├── api.js         # 统一调用封装（串行队列 + 超时 + 重试）
         ├── components/
         │   ├── splash/     # 开屏（第一次打开 1.8 秒 + 跳过，之后 0.6 秒）

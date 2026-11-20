@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""BYWOOD 设计系统机器闸 · v3.4
+"""BYWOOD 设计系统机器闸 · v4.2（包 v6.3）
+
+v4.2：随 v6.3 [RADIUS] 认两档——线上载体的容器 --radius-container（12px）与控件 --radius-control（8px），嵌一层减 4；文档线仍整体直角
+v4.1：随 v6.1 加 [MOTION]（CSS 默认 ease、transition: all、动画去改布局属性）；[RADIUS] 放行控件内件
+      calc(var(--radius-control) - 4px)（小程序 - 8rpx，CRAFT §十二），同样不许落在容器上；[TPLVAR] 加比 tokens/ui.css。
+v4.0：随 v6 只改一处——[CASE] 只看本案自己的行（修 5 条误报）；本闸只管值，样子交给 tools/audit.py 与 REVIEW.md。
+
 
 一条命令扫全轨。品牌跑偏从此是构建错误，不是审美分歧。
 
@@ -32,7 +38,13 @@
                写有该案名的行中逐字出现（正本在索引，记录不先于索引写事实）；不许出现金额；索引写了对外匿名的
                不许标 public；prev 链要接得上。找不到 skill 目录时只查结构
     [SYNTAX]   css / wxss 花括号配平（v5.4.1：多一个 } 会让小程序 @import 整份失败）
-    [RADIUS]   border-radius 非 0（例外：50% 圆形本体、系统件）；整值匹配，0.5rem / 08px / "0 0 4px 0" 都不放行（v5.5.1）
+    [MOTION]   动效写法（v4.1，CRAFT §一）：CSS 默认 ease 不是选择；transition: all 不许；transition 与 @keyframes
+               不动 width / height / top / left / right / bottom / margin / padding / inset——确有理由在同一行写 /* ok: 理由 */
+    [RADIUS]   容器直角、控件圆角一档（v3.5 / 包 v5.9）：border-radius 只放行 0、50% 圆形本体与 var(--radius-control)；
+               字面量（含 8px 本身）与别的 var() 都不放行，整值匹配（v5.5.1）。--radius-control 的定义只许 8px（.wxss 里 16rpx），
+               不许出现第二个 --radius-* token；它写在名字像容器的选择器上（card / block / sheet / modal / toast / tag /
+               badge / track / 表格 / 导航与 Tab 项 …）即 FAIL；本包的文档 / 演示 / 物料模板里出现它即 FAIL。
+               选择器判断只看名字，是启发式：真有例外写 /* ok: 理由 */
     [BLUR]     backdrop-filter（毛玻璃，零豁免）
     [GRADIENT] UI 渐变（例外：骨架屏微光）
     [SHADOW]   box-shadow（例外：抽屉 --shadow-sheet）
@@ -43,7 +55,7 @@
                「v4 起…红＝信号系统」就是带着版本号漏过去的。CHANGELOG.md / reference/ / demo-v5/
                是存档，不扫。机器闸此前只认色值不认文字，换届后散文里的旧口径没有任何东西拦
     [GLYPH]    网页文件里出现 » / &raquo;（v5.7）：双箭的衍生用法（区块前标、链接尾标、步骤连接符）
-               已随旧标志退役（BRAND.md §4），注释里的说明不算
+               已随旧标志退役（BRAND.md §二），注释里的说明不算
     [TPLVAR]   模板与规范里的内联 token 漂移（v5.7.1）：界面轨模板（:root 里有 --block-primary）的亮 / 暗两块
                短名变量逐值比对 palette.json screen；任何 --X-rgb 三元组必须与同名 --X 的 hex 一致。
                此前派生文件之外的内联 token 没有任何比对——深色 --danger 写成赭石、deck 覆盖变量的 rgb 停在 v5.0 主色
@@ -59,6 +71,7 @@ import sys
 import os
 import re
 import json
+import glob
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -120,6 +133,22 @@ MIRROR_CANDIDATES = [
     '/root/.claude/skills/synced/bywood-proposal',
     '/mnt/skills/user/bywood-proposal',
 ]
+# v3.4.1：云端会话把账号技能同步到 synced/<哈希>/bywood-proposal，固定路径找不到，[MIRROR] 与 [CASE] 的数字对账会被跳过
+MIRROR_GLOBS = [
+    os.path.expanduser('~/.claude/skills/synced/*/bywood-proposal'),
+    '/root/.claude/skills/synced/*/bywood-proposal',
+    '/mnt/skills/*/bywood-proposal',
+]
+
+
+def find_mirror():
+    for c in MIRROR_CANDIDATES:
+        if os.path.isdir(c):
+            return c
+    hits = sorted({h for g in MIRROR_GLOBS for h in glob.glob(g) if os.path.isdir(h)})
+    if len(hits) > 1:
+        warn('MIRROR', hits[0], f'找到 {len(hits)} 份 skill 副本，比对的是这一份；要比别的用 --mirror=<路径>')
+    return hits[0] if hits else None
 
 fails = []
 warns = []
@@ -279,10 +308,14 @@ def check_template_tokens(root, p):
     v5.7 包里深色 --danger 写成了赭石 #D97E55（两份模板），场景 06 的 --accent-rgb 停在 v5.0 主色 28,79,98。"""
     tdir = os.path.join(root, 'templates')
     n = 0
-    for fn in sorted(os.listdir(tdir)) if os.path.isdir(tdir) else []:
-        if not fn.endswith('.html'):
+    # v4.1：界面轨网页 token tokens/ui.css 与模板同样比对
+    files = [os.path.join(tdir, fn) for fn in (sorted(os.listdir(tdir)) if os.path.isdir(tdir) else []) if fn.endswith('.html')]
+    files.append(os.path.join(root, 'tokens', 'ui.css'))
+    for fp_ in files:
+        fn = os.path.relpath(fp_, tdir) if fp_.startswith(tdir) else os.path.relpath(fp_, root)
+        if not os.path.exists(fp_):
             continue
-        src = open(os.path.join(tdir, fn), encoding='utf-8', errors='replace').read()
+        src = open(fp_, encoding='utf-8', errors='replace').read()
         m = re.search(r':root\s*\{(.*?)\}', src, re.S)
         if not m or '--block-primary' not in m.group(1):
             continue   # 只认界面轨模板；deck / 物料 / 图表模板的 --accent 等是另一套语义
@@ -295,7 +328,7 @@ def check_template_tokens(root, p):
                 key = TPL_VAR.get(var)
                 want = p['screen'][mode].get(key, '') if key else ''
                 if want.startswith('#') and _hex6(val) != _hex6(want):
-                    fail('TPLVAR', f'templates/{fn}',
+                    fail('TPLVAR', (f'templates/{fn}' if not fn.startswith('tokens') else fn),
                          f'{"亮色" if mode == "light" else "深色"} {var} = {val}，palette.json screen.{mode}.{key} 是 {want}')
     t = 0
     for dirpath, dirs, files in os.walk(root):
@@ -640,7 +673,7 @@ def colors_in(line):
         except ValueError:
             continue
         yield m.group(0), '%02X%02X%02X' % tuple(rgb)
-RE_RADIUS = re.compile(r'border-radius\s*:\s*([^;}\n]+)')
+RE_RADIUS = re.compile(r'border-radius\s*:\s*([^;}\n"\']+)')   # v3.5：值到引号为止，行内 style 不再把 0">… 整段吃进去
 RE_BLUR = re.compile(r'backdrop-filter\s*:|(?<![\w-])-webkit-backdrop-filter\s*:')
 RE_GRAD = re.compile(r'(linear|radial|conic)-gradient\s*\(')
 # 单文件产物（demo / 分享卡 / 邮件模板）必须把标志内联，不能引 logo/ 下的文件。
@@ -653,7 +686,84 @@ RE_SHADOW = re.compile(r'box-shadow\s*:\s*([^;}\n]+)')
 # 只放行"本体即圆形"与继承值。药丸形 999px/9999px 不在 DESIGN.md §5 例外清单里，
 # 真要用就写 /* ok: 理由 */，不给静默通道。
 # v5.5.1：整值匹配。此前只匹配前缀，0.5rem / 08px / "0 0 4px 0" 都从 0 那条缝里漏过去（外部代码审查指出）。
-RADIUS_OK = re.compile(r'^\s*(?:0|0px|0%|none|50%|inherit|initial|unset|var\([^)]*\))\s*(?:!important\s*)?$', re.I)
+# v3.5（包 v5.9）：var() 只认 --radius-control 一个——此前任何 var(...) 都放行，等于给第二个圆角 token 留了门。
+# v4.2（包 v6.3）：线上载体的容器有了一档 --radius-container（12px / 24rpx），嵌一层减 4。
+# 放行：0、50%、两个 token、它们各自减 4px / 8rpx 的 calc，以及由这些值组成的 1–4 角写法（抽屉、贴边的托盘只圆一侧）。字面量仍不放行。
+_R_ONE = (r'(?:0|0px|0%|var\(\s*--radius-(?:control|container)\s*\)'
+          r'|calc\(\s*var\(\s*--radius-(?:control|container)\s*\)\s*-\s*(?:4px|8rpx)\s*\))')
+RADIUS_OK = re.compile(r'^\s*(?:none|50%|inherit|initial|unset|' + _R_ONE + r'(?:\s+' + _R_ONE + r'){0,3})\s*(?:!important\s*)?$', re.I)
+RE_RADIUS_CONTROL = re.compile(r'^\s*var\(\s*--radius-control\s*\)\s*$')   # v4.1：内件 calc(var(--radius-control) - 4px) 也含它，同样查是否落在容器上
+
+# v4.1 · [MOTION]（CRAFT §一）
+RE_MOTION_DECL = re.compile(r'(?<![-\w])(transition|animation)(-property|-timing-function)?\s*:\s*([^;{}"\']+)')
+RE_BARE_EASE = re.compile(r'(?<![-\w])ease(?![-\w])')
+LAYOUT_PROPS = re.compile(r'^(?:width|height|min-width|min-height|max-width|max-height|top|left|right|bottom|inset(?:-[a-z-]+)?|margin(?:-[a-z-]+)?|padding(?:-[a-z-]+)?)$')
+RE_KEYFRAMES = re.compile(r'@keyframes\s+([\w-]+)\s*\{')
+RE_KF_PROP = re.compile(r'(?<![-\w])(width|height|top|left|right|bottom|margin(?:-[a-z]+)?|padding(?:-[a-z]+)?|inset)\s*:')
+RE_RADIUS_TOKEN = re.compile(r'(--radius-[A-Za-z0-9_-]+)\s*:\s*([^;}\n]+)')
+RADIUS_CONTROL_VALUE = {'.wxss': '16rpx'}   # 其余一律 8px
+RADIUS_CONTAINER_VALUE = {'.wxss': '24rpx'}  # 其余一律 12px（v6.3）
+# 控件圆角不许落在容器上（DESIGN.md §5）。只看选择器里的名字，是启发式：名字里同时带控件词的放行（.card-btn 是按钮）。
+RADIUS_CONTAINER_WORDS = {
+    'card', 'cards', 'block', 'tile', 'kpi', 'stat', 'sheet', 'drawer', 'modal', 'dialog', 'toast', 'tooltip', 'tip',
+    'popover', 'panel', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'row', 'cell', 'list', 'item',
+    'track', 'fillbar', 'progress', 'img', 'image', 'figure', 'chart', 'banner', 'hero', 'section', 'page',
+    'app', 'task', 'tabbar', 'navbar', 'sidebar', 'nav', 'tab', 'tabs', 'menu', 'article', 'main', 'header', 'footer',
+    'body', 'html',
+}
+RADIUS_CONTROL_WORDS = {'btn', 'button', 'input', 'search', 'chip', 'chips', 'select', 'field', 'textarea', 'cta'}
+RADIUS_NAV_ANCESTORS = set()   # v4.2：导航项是控件，可以写控件圆角（此前导航与 Tab 项一律直角）
+# 本包里不属界面轨的可扫文件：文档 / 演示 / 物料轨与生成层样张不用控件圆角
+RADIUS_FENCED = ('templates/deck-swiss.html', 'templates/social-cards.html', 'templates/email-signature.html',
+                 'templates/docx-template.js', 'templates/guancha-issue.js', 'composition/')
+
+
+def _radius_selector(lines, i, col):
+    """第 i 行（1 起）第 col 列那条 border-radius 声明属于谁：行内 style 返回「标签.类名」，样式规则返回选择器文本，认不出返回 None。"""
+    before = lines[i - 1][:col]
+    mi = re.search(r'<([A-Za-z][\w-]*)([^<>]*)\bstyle\s*=\s*["\'][^"\']*$', before)
+    if mi:
+        mc = re.search(r'\bclass\s*=\s*["\']([^"\']*)', mi.group(2))
+        return mi.group(1) + ''.join('.' + c for c in (mc.group(1).split() if mc else []))
+    row, k = i - 1, before.rfind('{')          # row：选择器所在行（0 起）
+    if k == -1:
+        for row in range(i - 2, max(-1, i - 42), -1):
+            L = lines[row]
+            if '{' in L:
+                before, k = L, L.rfind('{')
+                break
+            if '}' in L:
+                return None
+        else:
+            return None
+    sel = before[:k]
+    sel = sel[max(sel.rfind('}'), sel.rfind('{'), sel.rfind(';')) + 1:]
+    row -= 1
+    while row >= 0 and lines[row].rstrip().endswith(','):   # 多行选择器：把以逗号结尾的上几行接回来
+        sel = lines[row].strip() + ' ' + sel
+        row -= 1
+    return sel.strip() or None
+
+
+def _radius_on_container(sel):
+    """选择器的主体（每个逗号段的最后一节）名字像容器、或是导航 / Tab 里的裸元素，返回说明；否则 None。"""
+    words = lambda t: {w.lower() for w in re.findall(r'[A-Za-z][A-Za-z0-9]*', t)}
+    for part in sel.split(','):
+        comps = [c for c in re.split(r'[\s>+~]+', part.strip()) if c and not c.startswith('@')]
+        if not comps:
+            continue
+        subj = re.sub(r'\[[^\]]*\]|::?[\w-]+(?:\([^)]*\))?', '', comps[-1])
+        w = words(subj)
+        if not re.search(r'[.#]', subj) and len(comps) > 1:
+            anc = set().union(*[words(c) for c in comps[:-1]])
+            if anc & RADIUS_NAV_ANCESTORS:
+                return f'「{part.strip()}」是导航 / Tab 项'
+        if w & RADIUS_CONTROL_WORDS:
+            continue
+        hit = w & RADIUS_CONTAINER_WORDS
+        if hit:
+            return f'「{comps[-1]}」名字像容器（{" / ".join(sorted(hit))}）'
+    return None
 
 
 def scan_web(path, allowed, strict):
@@ -663,6 +773,8 @@ def scan_web(path, allowed, strict):
         return
     rel = os.path.relpath(path, os.getcwd())
     lines = src.splitlines()
+    in_pkg = os.path.relpath(os.path.abspath(path), ROOT).replace(os.sep, '/')
+    fenced = in_pkg.startswith(RADIUS_FENCED)
     # 注释块（含跨行的 /* */ 与 <!-- -->）换成等量换行，[GLYPH] 只看注释之外——注释里写「» 已退役」是说明不是使用
     _blank = lambda m: '\n' * m.group(0).count('\n')
     code_lines = re.sub(r'/\*.*?\*/|<!--.*?-->', _blank, src, flags=re.S).splitlines()
@@ -694,7 +806,7 @@ def scan_web(path, allowed, strict):
             continue
         code = code_lines[i - 1] if i - 1 < len(code_lines) else ''
         if RE_GLYPH.search(code) or RE_GLYPH_CSS.search(code):
-            fail('GLYPH', f'{rel}:{i}', '» 已随双箭退役（区块前标 / 链接尾标 / 步骤连接符，BRAND.md §4）——层级交给字重与主色，步骤交给编号')
+            fail('GLYPH', f'{rel}:{i}', '» 已随双箭退役（区块前标 / 链接尾标 / 步骤连接符，BRAND.md §二）——层级交给字重与主色，步骤交给编号')
         for mv in RE_VAR_DEF.finditer(code):
             segs = mv.group(1)[2:].lower().split('-')
             if HUE_SEGS & set(segs):
@@ -716,7 +828,39 @@ def scan_web(path, allowed, strict):
 
         m = RE_RADIUS.search(line)
         if m and not RADIUS_OK.match(m.group(1)):
-            fail('RADIUS', f'{rel}:{i}', f'border-radius: {m.group(1).strip()}（直角制度，例外仅 50% 圆形本体）')
+            fail('RADIUS', f'{rel}:{i}', f'border-radius: {m.group(1).strip()}（线上载体：容器写 var(--radius-container)、控件写 var(--radius-control)，嵌一层用 calc 减 4px，不写字面量；文档线整体直角；例外仅 50% 圆形本体）')
+        elif m and RE_RADIUS_CONTROL.search(m.group(1)):
+            sel = _radius_selector(lines, i, m.start())
+            why = _radius_on_container(sel) if sel else None
+            if why:
+                fail('RADIUS', f'{rel}:{i}', f'控件圆角写在容器上：{why}——卡片、色块、浮层、面板写 var(--radius-container)（DESIGN.md §六）；确是控件就在同一行写 /* ok: 理由 */')
+        for mt in RE_RADIUS_TOKEN.finditer(code):
+            name, val = mt.group(1), mt.group(2).strip()
+            want = RADIUS_CONTROL_VALUE.get(os.path.splitext(path)[1].lower(), '8px')
+            if name == '--radius-container':
+                wantc = RADIUS_CONTAINER_VALUE.get(os.path.splitext(path)[1].lower(), '12px')
+                if val.split('/*')[0].strip() != wantc:
+                    fail('RADIUS', f'{rel}:{i}', f'--radius-container = {val}，应为 {wantc}（A 级的值）')
+            elif name != '--radius-control':
+                fail('RADIUS', f'{rel}:{i}', f'{name}：圆角只有 --radius-control 与 --radius-container 两档，不许新增圆角 token（DESIGN.md §六）')
+            elif val != want:
+                fail('RADIUS', f'{rel}:{i}', f'--radius-control = {val}，应为 {want}（A 级的值：改它要拍板并同步 DESIGN.md §5、tokens/ 与各界面模板）')
+        if ('--radius-control' in code or '--radius-container' in code) and fenced:
+            fail('RADIUS', f'{rel}:{i}', '文档线（docx、deck、PDF、社媒图）与生成层样张整体直角——圆角 token 只属线上载体（DESIGN.md §六）')
+
+        for mm in RE_MOTION_DECL.finditer(code):
+            prop, sub, val = mm.group(1), mm.group(2) or '', mm.group(3)
+            if RE_BARE_EASE.search(val):
+                fail('MOTION', f'{rel}:{i}', f'{prop}{sub} 用了 CSS 默认 ease——曲线按角色选（--ease-out / -strong / -in / -in-out / -overshoot / -continuity / -spring，CRAFT §一）')
+            if prop == 'transition' and sub in ('', '-property'):
+                for seg in val.split(','):
+                    tok = seg.strip().split()
+                    if not tok:
+                        continue
+                    if tok[0] == 'all':
+                        fail('MOTION', f'{rel}:{i}', 'transition: all——写清动哪个属性（CRAFT §一）')
+                    elif LAYOUT_PROPS.match(tok[0]):
+                        fail('MOTION', f'{rel}:{i}', f'transition 动了布局属性 {tok[0]}——只动 transform 与 opacity，尺寸变化用 FLIP（CRAFT §一）')
 
         if RE_BLUR.search(line):
             fail('BLUR', f'{rel}:{i}', 'backdrop-filter 毛玻璃，零豁免')
@@ -730,6 +874,21 @@ def scan_web(path, allowed, strict):
             val = ms.group(1).strip()
             if 'shadow-sheet' not in val and val not in ('none', 'inherit'):
                 fail('SHADOW', f'{rel}:{i}', f'box-shadow: {val[:44]}（阴影仅抽屉 --shadow-sheet 一档）')
+
+    # [MOTION] v4.1：@keyframes 里动布局属性（注释已去掉；@keyframes 那一行写 /* ok: 理由 */ 可放行）
+    if os.path.splitext(path)[1].lower() in ('.css', '.wxss', '.html', '.htm', '.vue', '.svelte'):
+        body = '\n'.join(code_lines)
+        for mk in RE_KEYFRAMES.finditer(body):
+            depth, j = 1, mk.end()
+            while j < len(body) and depth:
+                depth += {'{': 1, '}': -1}.get(body[j], 0)
+                j += 1
+            ln = body[:mk.start()].count('\n') + 1
+            if RE_OK.search(lines[ln - 1] if ln - 1 < len(lines) else ''):
+                continue
+            hit = RE_KF_PROP.search(body[mk.end():j])
+            if hit:
+                fail('MOTION', f'{rel}:{ln}', f'@keyframes {mk.group(1)} 动了布局属性 {hit.group(1)}——只动 transform 与 opacity（CRAFT §一）')
 
     if os.path.splitext(path)[1].lower() in ('.html', '.htm'):
         check_mode_html(path, src)
@@ -1080,7 +1239,7 @@ def check_teal_containment(root, targets):
     ② **品牌面色**——写在 background / background-color 或 --color-field-brand 里（做底不做字）。
     写进 color / border / stroke / fill 就是把 1.77:1 的青当前景用，照旧 FAIL。
     青面块内的文字对比由 palette.json 的 _contrastPairs 保证（墨字 9.85 / 主色字 5.06），
-    但赭石压青只有 2.81、白字压青 1.77——这两条闸门测不到，靠 BRAND.md §2 的用法纪律。"""
+    但赭石压青只有 2.81、白字压青 1.77——这两条闸门测不到，靠 DESIGN.md §二 规则 3 的用法纪律。"""
     has_teal = lambda text: any(H == TEAL for _, H in colors_in(text))   # 任何写法：hex / rgb() / hsl()
     inlined_logo = RE_INLINE_LOGO
     logo_dir = os.path.join(root, 'logo') + os.sep
@@ -1104,7 +1263,7 @@ def check_teal_containment(root, targets):
                     fields += 1
     for h in hits:
         fail('LOGO', h, '标志青 #7ED1CD 当前景用了（color / border / stroke / fill）——它只做标志图形与品牌面色（background），'
-                        '文字/线条/描边一律改用 primary #1E5754（BRAND.md §2）')
+                        '文字/线条/描边一律改用 primary #1E5754（DESIGN.md §二）')
     if not hits:
         print(f'  · 标志青未当前景用（品牌面色写法 {fields} 处）')
 
@@ -1168,7 +1327,10 @@ def check_cases(mirror):
         miss = sorted({tok for t in texts for tok in RE_NUMTOK.findall(t) if tok not in src})
         if miss:
             fail('CASE', where, '这些数在案例索引里找不到：' + ' '.join(miss) + '——先记进索引，再进记录')
-        if r.get('reuse') == 'public' and '匿名' in src:
+        # v4.0：只看本案自己的行（案名在表格第一格），不看索引里顺带提到案名的变更记录行——
+        # v5.9 时 2026-11-11 那条变更记录同时提到三案与「匿名规则」，整行找字导致 5 条误报
+        own = [ln for ln in hit if re.match(r'\|\s*\**\s*' + re.escape(ref['case']), ln)]
+        if r.get('reuse') == 'public' and any('匿名' in ln for ln in own):
             fail('CASE', where, '案例索引写了对外匿名，记录却标 public')
     print(f'  · {len(recs)} 条记录' + (f'，数字逐个对过案例索引（{mirror}）' if mirror else '，未找到 skill 目录，只查了结构'))
 
@@ -1237,12 +1399,13 @@ def main(argv):
 
         mirror = next((a.split('=', 1)[1] for a in argv if a.startswith('--mirror=')), None)
         if mirror is None:
-            mirror = next((c for c in MIRROR_CANDIDATES if os.path.isdir(c)), None)
+            mirror = find_mirror()
         print('\n[MIRROR] bywood-proposal skill 镜像')
         if mirror:
             check_mirror(p, mirror)
         else:
             print('  · 未找到 skill 安装目录，跳过（可用 --mirror=<路径> 指定）')
+            warn('MIRROR', '—', '没找到 bywood-proposal 目录：镜像没比对，[CASE] 也只查了结构。用 --mirror=<路径> 指定')
 
     if targets == [ROOT]:
         print('\n[PROSE] 规范文本漂移')

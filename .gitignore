@@ -3,3 +3,4 @@ node_modules/
 cert/*.pem
 *.log
 mp-shots/
+__pycache__/

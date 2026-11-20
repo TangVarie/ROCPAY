@@ -1,187 +1,324 @@
 /* ============================================================
-   BYWOOD 设计系统 · 色板 v5.1 / 版式 v4（DESIGN.md + BRAND.md + tokens/palette.json）
-   编辑部亮色块 × 青赭双色制：深青＝动作与结构，赭石＝价值与增长，
-   标志青＝品牌面色（v5.1：只做底不做字，块内墨字，每屏 ≤1 块），语义色只表状态
-   画布比表面深一档（白块无阴影也能"浮起成形"）；黑色阶文字；禁 emoji/渐变/毛玻璃/阴影
-   直角制度：一切容器/按钮/输入/chip/徽标圆角一律 0，"圆"只存在于状态圆点与勾选画勾
+   BYWOOD 设计系统 v6.3（DESIGN.md + scenarios/04-miniprogram.md + CRAFT.md / CRAFT-UI.md）· 色板 v5.1
+   语法：四种底就是四种角色，七个字级，两种数字，一张构件清单，一组按角色选的动效。
+   - 底（小程序以「块」出现，画布 + 表面组织界面）：
+       深青 deep = 证据（可发额度、待领奖励）· 浅青 tint = 方法与范围（筛选口径、空态说明）
+       标志青 field = 承诺与里程碑（到账、开屏；青面三件套：青底、墨字、墨版标志）· 白表面 = 判断与操作
+   - 形状（v6.3 线上线）：容器 24rpx（--radius-container）、控件 16rpx（--radius-control），嵌一层减 8rpx；
+       通栏的栏（底部操作栏、Tab 栏）、行表的行、进度与轮尺直角；圆形本体（状态点、编号圆）例外
+   - 字：d1 56 · d3 34 · lede 42 · body 30 · sm 26 · mi 24 · n1 80 · n2 34（rpx）；粗细只用两端：
+       显示字 900/800，正文与注 400，标签与行表头 600–700
+   - 动效：曲线与时长只取 token（--ease-* / --duration-*）；按下 = scale(.97) + 底色同时变，用 hover-class="is-press"
+       （不用基础库默认的 button-hover）；不写默认 ease、不写 transition: all、不动布局属性
+   - 不做：阴影、渐变（骨架除外）、毛玻璃、emoji、没有信息的装饰
 
-   token 来源：tokens/miniprogram.wxss = 设计系统包 v5.8.1 原件（未改一字；升级整份覆盖）。
-   这里只放 kit 没有的本项目扩展 token 与组件；深色模式：app.json darkmode:true + theme.json 管导航栏，
+   token 来源：tokens/miniprogram.wxss = 设计系统包 v6.3 原件（未改一字；升级整份覆盖）。
+   这里只放 kit 没有的本项目扩展 token 与构件；深色模式：app.json darkmode:true + theme.json 管导航栏，
    token 翻转在 tokens/miniprogram.wxss 与下方扩展块各自的 @media 里。
-   交付前跑 npm run design:check（design/tools/check-design.py 同为原件，色板外色值即 FAIL）。
+   交付前跑 npm run design:check（design/tools/check-design.py v4.2 同为原件）。
    ============================================================ */
 @import "tokens/miniprogram.wxss";
 
 page {
-  /* 圆角 token 全部置 0（直角制度）。保留变量名以便个别系统件例外时可局部覆写 */
-  --r-block: 0;
-  --r-control: 0;
-  --r-badge: 0;
-  --r-check: 0;
+  /* ---- 四种底的搭档（palette.json grounds）：组件不写自己的颜色，只读所在底的变量 ---- */
+  /* 深青：证据。两模式同值（深色模式下仍是一块深青，不翻成亮青） */
+  --color-deep: #16413f;
+  --color-on-deep: #ffffff;                       /* c1 11.3:1 */
+  --color-on-deep-2: rgba(255, 255, 255, 0.72);   /* c2 正文 */
+  --color-on-deep-3: rgba(255, 255, 255, 0.55);   /* c3 注 */
+  --color-line-on-deep: rgba(255, 255, 255, 0.14);
+  /* 标志青：承诺与里程碑。青面两模式同值，墨字也不翻转 */
+  --color-ink: rgba(0, 0, 0, 0.9);                /* c1 10.5:1 */
+  --color-ink-2: rgba(0, 0, 0, 0.72);             /* c2 */
+  --color-ink-3: rgba(0, 0, 0, 0.6);              /* c3 */
+  --color-line-on-field: rgba(0, 0, 0, 0.14);
+  /* 白表面 / 浅青上的线：发丝线带一点青，不用纯灰；强线给章节头顶线 */
+  --color-hl: rgba(22, 65, 63, 0.16);
+  --color-hl-strong: rgba(22, 65, 63, 0.6);
+  /* 遮罩：取深色画布色 48% */
+  --color-scrim: rgba(15, 19, 24, 0.48);
 
-  /* ---- kit 没有的角色 token（值仍取 palette.json）----
-     v5.8.1 起 kit 自带 --color-on-primary / --color-on-danger 与语义加深档 --color-*-deep（含深色翻转），
-     本文件不再重复维护 */
-  --color-ink: rgba(0, 0, 0, 0.9); /* 青面上的墨字（9.85:1）：青面不翻转，墨字也不翻转 */
+  /* ---- 语义：kit 自带 --color-*-deep 与 on-danger；这里补按下态与浅底 ---- */
   --color-danger-dark: #b02330; /* 危险按钮按下态 */
-  /* 语义浅底（语义色 /10）：徽标、横幅、警示块共用 */
   --color-success-tint: rgba(0, 181, 120, 0.1);
   --color-warning-tint: rgba(255, 143, 31, 0.1);
   --color-danger-tint: rgba(217, 43, 60, 0.1);
-  /* 有信息的小字（时间、失败原因、同步信息、编号）一律用 kit 的 light(0.55)：浅灰底 4.7:1。
-     以前的扩展档 hint(0.45) 在浅灰底只有 3.3:1，撑不起 12–13px 的信息字，已删除（P2）；
-     faint(0.3) 白底仅 ~2.1:1，只许用于纯装饰，不许承载信息或交互 */
-  /* 水印（大字报）：品牌色极淡（装饰透明度 8–12% 档） */
-  --color-wm-primary: rgba(30, 87, 84, 0.08);
-  --color-wm-accent: rgba(184, 80, 47, 0.08);
+  /* 有信息的小字（时间、失败原因、编号）一律用 kit 的 light(0.55)：浅灰底 4.7:1；
+     faint(0.3) 白底仅 ~2.1:1，只许用于占位符与纯装饰 */
 
-  /* 数字字体：只用系统栈（v5.8 规则：小程序不加载网络字体）——DIN(iOS)/Bahnschrift(Win) + 主流安卓厂商字体 */
+  /* 数字字体：只用系统栈（小程序不加载网络字体）——DIN(iOS)/Bahnschrift(Win) + 主流安卓厂商字体 */
   --font-num: 'DIN Alternate', 'Bahnschrift', 'MiSans', 'HarmonyOS Sans SC', 'OPPO Sans', 'vivo Sans', 'Roboto Condensed', 'Helvetica Neue', sans-serif;
 
   line-height: 1.6; /* 背景/文字色/字体/字号由 kit 的 page 规则给 */
 }
 
-/* 页容器：屏幕留边 16px */
+/* 页容器：屏幕留边 32rpx（16px） */
 .page {
-  padding: 24rpx 32rpx calc(48rpx + env(safe-area-inset-bottom));
+  padding: 24rpx 32rpx calc(64rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
-/* ---- 色块：kit 提供 .block-primary/.block-accent/.tint-primary/.tint-accent（v5.7 角色名；旧色相名仅为兼容别名）；
-   这里补 .block 的直角与盒模型、品牌面色块 ---- */
-.block {
-  border-radius: var(--r-block);
-  padding: 32rpx;
-  box-sizing: border-box;
-}
-/* 品牌面色块（v5.1）：青底 + 墨字，每屏 ≤1、不与主色块相邻；块内禁白字与赭石。kit 只有 token 没有类 */
-.field-brand { background: var(--color-field-brand); color: var(--color-ink); }
-
-/* 白底描边块（设置类内容） */
-.panel {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border); /* 物理像素，避免 1rpx 在部分机型被吞 */
-  border-radius: var(--r-block);
-  padding: 32rpx;
-  box-sizing: border-box;
-}
-
-/* ---- 文字色阶助手（kit 的 .t-* 是字号档，这里是颜色档，各管一头）---- */
+/* ============================================================
+   字：七个字级 + 两级数字（DESIGN §三，小程序 rpx 列）
+   ============================================================ */
+.t-d1 { font-size: 56rpx; line-height: 1.3; font-weight: 900; color: var(--color-text-dark); }
+.t-d3 { font-size: 34rpx; line-height: 1.4; font-weight: 900; color: var(--color-text-dark); }
+.t-sm { font-size: 26rpx; line-height: 1.6; }
+.t-mi { font-size: 24rpx; line-height: 1.6; color: var(--color-text-light); }
+/* 文字色阶（kit 的 .t-* 是字号档，这几档只管颜色） */
 .t-dark { color: var(--color-text-dark); }
-.t-body { color: var(--color-text); }
 .t-light { color: var(--color-text-light); }
-.t-faint { color: var(--color-text-faint); }
-/* 数字：换成本项目的数字字体栈；字重不强制——kit 的 .num 固定 600 是给金额的，
-   本项目把时间戳/openid 也标了 .num 取等宽，字重跟随所在文字 */
+
+/* 数字：系统数字栈 + 等宽；字重跟随所在文字（时间戳、openid 也标 .num 取等宽） */
 .num {
   font-family: var(--font-num);
   font-variant-numeric: tabular-nums lining-nums;
   font-weight: inherit;
 }
+/* n1 主数字（40px 档）：800，紧字距；单位跟着数字走——显示字 0.4em、紧贴数字 */
+.n1 { font-family: var(--font-num); font-variant-numeric: tabular-nums lining-nums; font-size: 80rpx; font-weight: 800; line-height: 1.1; letter-spacing: -1rpx; white-space: nowrap; }
+.n2 { font-family: var(--font-num); font-variant-numeric: tabular-nums lining-nums; font-size: 34rpx; font-weight: 700; line-height: 1.3; white-space: nowrap; }
+.unit { font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; font-size: 0.4em; font-weight: 900; letter-spacing: 0; margin-right: 4rpx; }
 
-/* 编辑式导语：21px 次级色 + 加粗重点（走 token，深色模式自动翻转） */
+/* 编辑导语（lede 42rpx）：基色注档，重点词主字 600 */
 .lede {
   font-size: 42rpx;
-  line-height: 1.5;
-  font-weight: 500;
+  line-height: 1.55;
+  font-weight: 400;
   color: var(--color-text-light);
 }
 .lede .em { color: var(--color-text-dark); font-weight: 600; }
 
-/* ---- 按钮：在 kit .btn（直角/无边/600）之上定高度与居中 ----
-   垂直居中用 flex，不用 line-height=height（后者在部分真机上文字偏上/偏下，
-   就是"宽按钮文字总对不齐"的根源） */
+/* 章节头（构件 #1 的界面版）：强线顶线 + d3 主句（+ 右侧一个尾值或文字链）+ 一行说明 */
+.sec {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding-top: 24rpx;
+  border-top: 1px solid var(--color-hl-strong);
+}
+.sec-t { font-size: 34rpx; line-height: 1.4; font-weight: 900; color: var(--color-text-dark); }
+.sec-v { flex: none; font-size: 26rpx; color: var(--color-text-light); }
+.sec-note { margin-top: 8rpx; font-size: 26rpx; line-height: 1.6; color: var(--color-text-light); }
+
+/* ============================================================
+   块与面板：四种底以块出现；容器 24rpx 圆角，无阴影无描边——画布比表面深一档，白块自己成形
+   ============================================================ */
+.block { border-radius: var(--radius-container); padding: 32rpx; box-sizing: border-box; }
+/* 深青证据块：白字三档、白 14% 线；块里的按钮是标志青底墨字 */
+.block-deep { background: var(--color-deep); color: var(--color-on-deep-2); }
+/* 标志青承诺块（青面三件套）：墨字三档；不放白字、赭石、青色山形 */
+.field-brand { background: var(--color-field-brand); color: var(--color-ink); }
+/* 白表面：判断与操作 */
+.panel {
+  background: var(--color-surface);
+  border-radius: var(--radius-container);
+  padding: 32rpx;
+  box-sizing: border-box;
+}
+/* 浅青：方法与范围（空态说明、筛选口径） */
+.tint { background: var(--color-tint-primary); }
+
+/* ============================================================
+   行表（构件 #5）：收进一张圆角白卡，行间发丝线（左缩 32rpx），整行可点时按下只变底色
+   ============================================================ */
+.rows { background: var(--color-surface); border-radius: var(--radius-container); overflow: hidden; }
+.row { position: relative; transition: background-color var(--duration-press) var(--ease-out); }
+.row + .row::before {
+  content: '';
+  position: absolute;
+  left: 32rpx; right: 0; top: 0;
+  height: 1px;
+  background: var(--color-hl);
+  transform: scaleY(0.5);
+  transform-origin: 0 0;
+}
+.row.is-press { background: var(--color-fill); }
+/* 面板里的行（面板自带内边距）：分隔线不缩进 */
+.panel .row + .row::before { left: 0; }
+
+/* ============================================================
+   按钮（构件 #14）：96rpx / 80rpx 两档（底部操作栏、块内次动作用 80，块里的小按钮 72）
+   ============================================================ */
 .btn {
-  height: 96rpx; /* 主 CTA 48px 档 */
+  position: relative;
+  height: 96rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: normal;
-  border-radius: var(--r-control);
-  font-size: 32rpx;
+  border-radius: var(--radius-control);
   text-align: center;
-  transition: transform 120ms ease-out, background-color 120ms ease-out;
+  white-space: nowrap;
+  transition: transform var(--duration-press) var(--ease-out), background-color var(--duration-hover) var(--ease-out), color var(--duration-hover) var(--ease-out);
 }
-.btn:active { transform: scale(0.98); }
 /* 【真机坑】app.json 开了 "style": "v2"，基础库给原生 button 一套 WeUI 默认样式，其中
    button:not([size=mini]) { width: 184px; margin: 0 auto; padding: 8px 24px; font-size: 17px; font-weight: 700 }
-   的权重是 (0,1,1)，比单个类名 (0,1,0) 高：真机上 .btn-block 的 width:100% 不生效，整行按钮缩成 184px 居中、
-   长文案折行，搜索按钮撑到 184px 把输入框挤窄（开发者工具的模拟器不一定看得出来）。
+   的权重是 (0,1,1)，比单个类名 (0,1,0) 高：真机上 .btn-block 的 width:100% 不生效，整行按钮缩成 184px 居中。
    所以按钮的几何样式（宽、左右外边距、内边距、字号、字重、行高）一律写成两个类名或带 :not([size='mini'])，
-   权重 (0,2,0) 才压得住；颜色不受影响，照常写单个类名。禁用态默认也有一条更高权重的灰字，见下方 [disabled] */
+   权重 (0,2,0) 才压得住；颜色照常写单个类名。禁用态默认也有一条更高权重的灰字，见下方 [disabled] */
 .btn:not([size='mini']) {
   width: auto;
   margin-left: 0;
   margin-right: 0;
   padding: 0 32rpx;
-  font-size: 32rpx;
-  font-weight: 600;
+  font-size: 30rpx;
+  font-weight: 700;
   line-height: normal;
 }
-/* 主按钮：主色底；文字随 --color-on-primary（亮色白字 / 深色墨字）*/
-.btn-blue { background: var(--color-primary); color: var(--color-on-primary); }
-.btn-blue:active { background: var(--color-primary-dark); }
-/* 禁用态走 fill 底（kit 模板定式）；文字用 light 档而非 faint——
-   加载中的按钮文案（"确认发放 3 人"）是信息，DESIGN.md §2 faint 不承载信息 */
-.btn.btn-blue[disabled], .btn.btn-fill[disabled] { background: var(--color-fill); color: var(--color-text-light); } /* 三个选择器权重，压过基础库默认的禁用灰字 */
-.btn-fill { background: var(--color-fill); color: var(--color-text-dark); }
-.btn-fill:active { background: rgba(0, 0, 0, 0.08); }
-.btn-red { background: var(--color-danger); color: var(--color-on-danger); } /* 深色模式危险色是浅色填充，压墨字（v5.7.1） */
-.btn-red:active { background: var(--color-danger-dark); }
+.btn::after { border: none; }
+/* 次一档 80rpx（40px）：底部操作栏、面板里的次动作 */
+.btn.btn-md { height: 80rpx; font-size: 28rpx; font-weight: 600; }
+/* 块里的小按钮 72rpx（36px）：热区由伪元素向外扩到 88rpx */
+.btn.btn-sm { height: 72rpx; padding: 0 28rpx; font-size: 26rpx; font-weight: 600; overflow: visible; }
+.btn.btn-sm::before { content: ''; position: absolute; left: 0; right: 0; top: -8rpx; bottom: -8rpx; }
+/* 按下：位置（缩放）与底色一起变（CRAFT §二）；基础库默认 hover 态在 WXML 里用 hover-class="is-press" 替掉 */
+.btn.is-press { transform: scale(0.97); }
+
+/* 主按钮：主色底，字随 --color-on-primary（亮色白 / 深色墨，kit v5.7.1） */
+.btn-primary { background: var(--color-primary); color: var(--color-on-primary); }
+.btn-primary.is-press { background: var(--color-primary-dark); }
+/* 次按钮：填充底 */
+.btn-secondary { background: var(--color-fill); color: var(--color-text-dark); }
+.btn-secondary.is-press { background: var(--color-border); }
+/* 危险按钮：深色模式危险色是浅色填充，压墨字（kit --color-on-danger） */
+.btn-danger { background: var(--color-danger); color: var(--color-on-danger); }
+.btn-danger.is-press { background: var(--color-danger-dark); }
+/* 深青块上的按钮：标志青底墨字，按下白底（grounds.deep.button） */
+.btn-on-deep { background: var(--color-field-brand); color: var(--color-ink); }
+.btn-on-deep.is-press { background: var(--color-on-deep); }
+/* 深青块上的次动作：透明底白字，按下白 14% */
+.btn-ghost-on-deep { background: transparent; color: var(--color-on-deep); }
+.btn-ghost-on-deep.is-press { background: var(--color-line-on-deep); }
+/* 禁用：灰底淡字、无按下。文字用 light 档而非 faint——加载中的按钮文案（"确认发放 3 人"）是信息。
+   三个选择器权重，压过基础库默认的禁用灰字 */
+.btn.btn-primary[disabled], .btn.btn-secondary[disabled], .btn.btn-danger[disabled] { background: var(--color-fill); color: var(--color-text-light); transform: none; }
 /* 整行按钮：系统字体放大时长标签会折行，固定高度会把字裁掉——
-   改最小高度+内边距，单行时仍是 96rpx 档，折行时按钮自己撑高 */
+   改最小高度 + 内边距，单行时仍是 96rpx，折行时按钮自己撑高 */
 .btn.btn-block {
   width: 100%;
   height: auto;
   min-height: 96rpx;
   padding: 16rpx 24rpx;
   box-sizing: border-box;
+  white-space: normal;
 }
 
-/* ---- 发丝线：覆盖 kit 的 1rpx 版 ----
-   1rpx 在部分机型换算成 <1 物理像素会被吞/深浅不一，改用 1px + scaleY(0.5) 经典半像素方案 */
-.hairline-b::after {
-  height: 1px;
-  transform: scaleY(0.5);
-  transform-origin: 0 100%;
+/* 文字按钮：主色 600，热区 88rpx 由内边距保证；按下换加深档 */
+.textbtn {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--color-primary);
+  padding: 0 16rpx;
+  min-width: 88rpx;
+  min-height: 88rpx;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--duration-hover) var(--ease-out);
 }
-.hairline-t { position: relative; }
-.hairline-t::before {
+.textbtn.is-press { color: var(--color-primary-dark); }
+.textbtn-plain { color: var(--color-text-light); }
+.textbtn-plain.is-press { color: var(--color-text-dark); }
+.textbtn-danger { color: var(--color-danger-deep); }
+.textbtn-danger.is-press { color: var(--color-danger); }
+
+/* ============================================================
+   选择控件（CRAFT-UI §九）
+   ============================================================ */
+/* 分段：2–5 个短选项、只能选一个（发放方式、员工角色）。轨填充底，滑块是表面色 + 发丝线，
+   在项之间移动 200ms ease-in-out；滑块圆角 = 控件 − 内边距（内件档） */
+.seg {
+  position: relative;
+  display: flex;
+  height: 88rpx;
+  padding: 8rpx;
+  box-sizing: border-box;
+  border-radius: var(--radius-control);
+  background: var(--color-fill);
+}
+.seg-k {
+  position: absolute;
+  top: 8rpx;
+  bottom: 8rpx;
+  left: 8rpx;
+  width: calc((100% - 16rpx) / 2);
+  box-sizing: border-box;
+  border-radius: calc(var(--radius-control) - 8rpx);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  transition: transform var(--duration-sm) var(--ease-in-out);
+}
+.seg-k.at-1 { transform: translateX(100%); }
+.seg-i {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--color-text-light);
+  transition: color var(--duration-sm) var(--ease-out);
+}
+.seg-i.on { color: var(--color-text-dark); }
+.seg-i.is-press { color: var(--color-text-dark); }
+
+/* 筛选 chips：看上去 72rpx 高，能点 88rpx——上下各 8rpx 透明边框，底色只铺到 padding 盒 */
+.chip {
+  height: 72rpx;
+  line-height: 72rpx;
+  padding: 0 28rpx;
+  border-top: 8rpx solid transparent;
+  border-bottom: 8rpx solid transparent;
+  box-sizing: content-box;
+  background-clip: padding-box;
+  border-radius: var(--radius-control);
+  font-size: 26rpx;
+  font-weight: 600;
+  background-color: var(--color-fill); /* 只写 color：background 简写会重置上面的 clip */
+  color: var(--color-text);
+  white-space: nowrap;
+  transition: transform var(--duration-press) var(--ease-out), background-color var(--duration-hover) var(--ease-out), color var(--duration-hover) var(--ease-out);
+}
+.chip.on { background-color: var(--color-primary); color: var(--color-on-primary); }
+.chip.is-press { transform: scale(0.97); }
+
+/* 复选：40rpx、内件圆角；选中主色填充 + --color-on-primary 的勾（深色模式亮青底上白勾只有 2.11:1） */
+.cb {
+  width: 40rpx;
+  height: 40rpx;
+  flex: none;
+  border: 3rpx solid var(--color-text-light);
+  border-radius: calc(var(--radius-control) - 8rpx);
+  box-sizing: border-box;
+  position: relative;
+  transition: background-color var(--duration-hover) var(--ease-out), border-color var(--duration-hover) var(--ease-out);
+}
+.cb.on { background: var(--color-primary); border-color: var(--color-primary); }
+.cb::after {
   content: '';
   position: absolute;
-  left: 0; right: 0; top: 0;
-  height: 1px;
-  background: var(--color-border);
-  transform: scaleY(0.5);
-  transform-origin: 0 0;
+  left: 50%; top: 50%;
+  width: 18rpx; height: 9rpx;
+  border-left: 4rpx solid var(--color-on-primary);
+  border-bottom: 4rpx solid var(--color-on-primary);
+  /* transform 居中代替硬坐标：rpx 取整在不同机型上不会再偏心 */
+  transform: translate(-50%, -65%) rotate(-45deg) scale(0);
+  transition: transform var(--duration-sm) var(--ease-overshoot);
 }
+.cb.on::after { transform: translate(-50%, -65%) rotate(-45deg) scale(1); }
 
-/* ---- 状态标签：在 kit .badge（高 40rpx · 0 12rpx · 24rpx 字）之上补直角 token、深色可翻转的浅底 ---- */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  font-weight: 600;
-  border-radius: var(--r-badge);
-  background: var(--color-fill);
-  color: var(--color-text);
-  flex-shrink: 0;       /* flex 行内不许被挤压折行 */
-  white-space: nowrap;
-}
-/* kit 的语义徽标底色是写死的 rgba，深色模式下太暗；改走 tint token（值同 kit，深色换亮档） */
-.badge-success { background: var(--color-success-tint); color: var(--color-success-deep); }
-.badge-warning { background: var(--color-warning-tint); color: var(--color-warning-deep); }
-.badge-danger { background: var(--color-danger-tint); color: var(--color-danger-deep); }
-/* 主色徽标：主浅调底 + 主色字（palette 校验对「主色 on 主浅调」7.01:1；深色 5.80:1）*/
-.badge-blue { background: var(--color-tint-primary); color: var(--color-primary); }
-.badge-muted { background: var(--color-fill); color: var(--color-text-light); } /* 已过期等中性态 */
-
-/* ---- 输入（kit 定式：直角 + border-strong 描边 + 高 96rpx/48px）----
-   小程序 input 是原生组件：必须给固定 height（并配 line-height），
-   只给 padding 会按默认高度渲染，出现"被压扁/文字切顶"的错位。 */
+/* ============================================================
+   输入：控件圆角 + 强描边 + 96rpx。小程序 input 是原生组件：必须给固定 height（并配 line-height）
+   ============================================================ */
 .input {
   background: var(--color-surface);
   border: 1px solid var(--color-border-strong); /* 物理像素，避免 1rpx 在部分机型被吞 */
-  border-radius: var(--r-control);
+  border-radius: var(--radius-control);
   height: 96rpx;
   line-height: 96rpx;
   padding: 0 24rpx;
@@ -190,52 +327,73 @@ page {
   box-sizing: border-box;
   min-width: 0; /* 在 flex 行里允许正确收缩而不是溢出 */
 }
+.ph { color: var(--color-text-faint); }
 
-/* ---- 错误文字 ---- */
-.err { color: var(--color-danger); margin-top: 16rpx; font-size: 26rpx; }
+/* ============================================================
+   记号（构件 #15）：状态 = 语义色加深档 + 圆点；标签 = 填充底、内件圆角
+   ============================================================ */
+.st {
+  display: inline-flex;
+  align-items: center;
+  gap: 10rpx;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 24rpx;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+.st::before { content: ''; width: 12rpx; height: 12rpx; flex: none; border-radius: 50%; background: currentColor; } /* ok: 状态点本体即圆形 */
+.st-ok { color: var(--color-success-deep); }
+.st-warn { color: var(--color-warning-deep); }
+.st-fail { color: var(--color-danger-deep); }
+.st-muted { color: var(--color-text-light); }
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;       /* flex 行内不许被挤压折行 */
+  height: 44rpx;
+  padding: 0 14rpx;
+  box-sizing: border-box;
+  border-radius: calc(var(--radius-control) - 8rpx);
+  background: var(--color-fill);
+  color: var(--color-text);
+  font-size: 24rpx;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+/* 主色标签：主浅调底 + 主色字（palette「主色 on 主浅调」7.01:1；深色 5.80:1） */
+.tag-primary { background: var(--color-tint-primary); color: var(--color-primary); }
+.tag-danger { background: var(--color-danger-tint); color: var(--color-danger-deep); }
+
+/* ---- 发丝线：覆盖 kit 的 1rpx 版 ----
+   1rpx 在部分机型换算成 <1 物理像素会被吞/深浅不一，改用 1px + scaleY(0.5)；颜色取带青的发丝线 */
+.hairline-b::after {
+  background: var(--color-hl);
+  height: 1px;
+  transform: scaleY(0.5);
+  transform-origin: 0 100%;
+}
+
+/* ---- 语义横幅：语义色 /10 底 + 墨字（彩字压浅底对比不够）；容器圆角 ---- */
+.banner {
+  border-radius: var(--radius-container);
+  padding: 24rpx 32rpx;
+  font-size: 28rpx;
+  line-height: 1.6;
+  color: var(--color-text-dark);
+}
+.banner-success { background: var(--color-success-tint); }
+.banner-danger { background: var(--color-danger-tint); }
+.banner-warning { background: var(--color-warning-tint); }
+.banner-line { margin-top: 8rpx; font-size: 26rpx; color: var(--color-text); }
+
+/* ---- 错误文字：留在出事的地方，危险色加深档 ---- */
+.err { color: var(--color-danger-deep); margin-top: 16rpx; font-size: 26rpx; line-height: 1.6; }
 /* 可点的错误行（点此重试）：撑到 88rpx 热区 */
 .err-tap { margin-top: 0; padding: 26rpx 0; }
-
-/* ---- 线性图标（lucide 描边，禁 emoji）：SVG data URI，默认 black/30 ---- */
-.li {
-  width: 96rpx;
-  height: 96rpx;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: contain;
-}
-.li-gift { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-opacity='0.3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='8' width='18' height='4' rx='1'/%3E%3Cpath d='M12 8v13'/%3E%3Cpath d='M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7'/%3E%3Cpath d='M7.5 8a2.5 2.5 0 0 1 0-5C9.5 3 11 5 12 8c1-3 2.5-5 4.5-5a2.5 2.5 0 0 1 0 5'/%3E%3C/svg%3E"); }
-.li-users { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-opacity='0.3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/%3E%3Ccircle cx='9' cy='7' r='4'/%3E%3Cpath d='M22 21v-2a4 4 0 0 0-3-3.87'/%3E%3Cpath d='M16 3.13a4 4 0 0 1 0 7.75'/%3E%3C/svg%3E"); }
-.li-inbox { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-opacity='0.3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='22 12 16 12 14 15 10 15 8 12 2 12'/%3E%3Cpath d='M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/%3E%3C/svg%3E"); }
-.li-alert { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-opacity='0.3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='12' y1='8' x2='12' y2='12'/%3E%3Cline x1='12' y1='16' x2='12.01' y2='16'/%3E%3C/svg%3E"); }
-
-/* ---- 编辑部大字报水印：超大版面元素填充留白（极淡品牌色，不抢主体）----
-   字号在阶梯之外是有意的：它是版面装饰不是文字内容（DESIGN.md §4 空区域用有信息的元素补）*/
-.wm-zone { margin-top: 48rpx; overflow: hidden; }
-.wm-label {
-  font-size: 24rpx;
-  letter-spacing: 4rpx;
-  color: var(--color-text-light); /* 「累计发放」是数字的标签，承载信息，不能用 faint */
-  margin-bottom: 8rpx;
-}
-.wm {
-  font-family: var(--font-num);
-  font-weight: 800;
-  font-size: 220rpx;
-  line-height: 1.05;
-  letter-spacing: -8rpx;
-  white-space: nowrap;
-  color: var(--color-wm-primary);
-  margin-left: -8rpx; /* 轻微出血，版面感 */
-}
-.wm-num { font-size: 150rpx; letter-spacing: -4rpx; }
-.wm-red { color: var(--color-wm-accent); } /* 赭石极淡（到账后呼应奖励块） */
-.wm-line {
-  margin-top: 8rpx;
-  font-size: 24rpx;
-  letter-spacing: 6rpx;
-  color: var(--color-text-faint);
-}
 
 /* ---- 轮印里的山形（v5.5）：kit 只给了 .round-seal 的框与三行字，.mark 留给使用方——
    按 band-spinner 同款四条横条静态排布（不动画：印是签章），高 ≈ 印边长 22%（BRAND.md §3 轮印段） ---- */
@@ -247,51 +405,48 @@ page {
 .round-seal .mark .b4 { width: 38rpx; }
 
 /* ---- 加载：.band-spinner 与 .skeleton-base 由 kit 提供；这里只补骨架行的排版 ----
-   列表加载优先用骨架行（scenarios/04「骨架屏优先」），≥3 行占位；行高对齐真实列表行 */
-.sk-row { display: flex; align-items: center; gap: 24rpx; padding: 24rpx 8rpx; }
-.sk-row .sk-main { flex: 1; display: flex; flex-direction: column; gap: 8rpx; }
-.sk-line { height: 28rpx; }
+   版式已知用骨架（CRAFT-UI §八），≥3 行占位，尺寸与真实行一致；线比文字略短，圆角取内件档 */
+.sk-row { display: flex; align-items: center; gap: 24rpx; padding: 32rpx; }
+.sk-row .sk-main { flex: 1; display: flex; flex-direction: column; gap: 12rpx; }
+.sk-line { height: 28rpx; border-radius: calc(var(--radius-control) - 8rpx); }
 .sk-line-w { width: 60%; }
-.sk-line-n { width: 36%; }
-.sk-tail { width: 96rpx; height: 40rpx; flex: none; }
+.sk-line-n { width: 36%; height: 24rpx; }
+.sk-tail { width: 120rpx; height: 34rpx; flex: none; border-radius: calc(var(--radius-control) - 8rpx); }
 
-/* ---- 块级联入场（唯一允许的入场动效，有信息含义）---- */
-@keyframes fadeUpIn {
-  from { opacity: 0; transform: translateY(14rpx); }
-  to { opacity: 1; transform: translateY(0); }
+/* ============================================================
+   进场（CRAFT §一）：只给成组内容，一次；向上 24rpx（12px），组内间隔 60ms、最多 4 个；
+   淡入比位移先完成（opacity 360ms ease-out，位移 480ms 落定曲线）
+   ============================================================ */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes riseIn { from { transform: translateY(24rpx); } to { transform: translateY(0); } }
+.stagger-in > view {
+  animation: fadeIn 360ms var(--ease-out) backwards, riseIn var(--duration-lg) var(--ease-out-strong) backwards;
+  animation-delay: 180ms;
 }
-.stagger-in > view { animation: fadeUpIn 300ms ease-out backwards; }
 .stagger-in > view:nth-child(1) { animation-delay: 0ms; }
-.stagger-in > view:nth-child(2) { animation-delay: 55ms; }
-.stagger-in > view:nth-child(3) { animation-delay: 110ms; }
-.stagger-in > view:nth-child(4) { animation-delay: 165ms; }
-.stagger-in > view:nth-child(5) { animation-delay: 220ms; }
-.stagger-in > view:nth-child(6) { animation-delay: 275ms; }
+.stagger-in > view:nth-child(2) { animation-delay: 60ms; }
+.stagger-in > view:nth-child(3) { animation-delay: 120ms; }
 
-/* 尊重系统「减弱动态效果」：入场/庆祝动效停用；
-   加载是功能性动效——放慢而不是停掉（kit 未处理，这里补） */
+/* 减少动效：保留状态变化与淡入（150ms），去掉位移、缩放；加载是功能性动效——放慢而不是停掉 */
 @media (prefers-reduced-motion: reduce) {
-  .stagger-in > view { animation: none; }
+  .stagger-in > view { animation: fadeIn 150ms var(--ease-out) backwards; }
+  .btn.is-press, .chip.is-press { transform: none; }
+  .seg-k { transition-duration: 1ms; }
   .band-spinner .band { animation-duration: 1.8s; }
   .skeleton-base { animation-duration: 2.4s; }
 }
 
 /* ============================================================
-   深色模式——kit token 的翻转在 tokens/miniprogram.wxss；这里只翻本项目扩展 token
-   （值取 palette.json screen.dark）与几处写死的按压态
+   深色模式——kit token 的翻转在 tokens/miniprogram.wxss；这里只翻本项目扩展 token（值取 palette.json screen.dark）
+   深青块与青面两模式同值，块内文字也不翻
    ============================================================ */
 @media (prefers-color-scheme: dark) {
   page {
-    --color-danger-dark: #c64449; /* 深色危险按下态：压墨字 3.84:1，只持续 120ms，按状态件 3:1 线放行（v5.7.1） */
+    --color-hl: rgba(255, 255, 255, 0.1);
+    --color-hl-strong: rgba(255, 255, 255, 0.5);
+    --color-danger-dark: #c64449; /* 深色危险按下态：压墨字 3.84:1，只持续 100ms，按状态件 3:1 线放行（v5.7.1） */
     --color-success-tint: rgba(33, 177, 131, 0.12);
     --color-warning-tint: rgba(255, 162, 77, 0.12);
     --color-danger-tint: rgba(232, 87, 92, 0.12);
-    /* 大字报水印：品牌色极淡在暗底上不可见，换亮青/亮赭同样极淡 */
-    --color-wm-primary: rgba(106, 193, 189, 0.1);
-    --color-wm-accent: rgba(217, 126, 85, 0.09);
   }
-  /* 线性图标是黑描边 data URI，CSS 改不了 stroke：整体反相，黑/30 → 白/30 */
-  .li { filter: invert(1); }
-  .cb { border-color: rgba(255, 255, 255, 0.25); }
-  .btn-fill:active { background: rgba(255, 255, 255, 0.12); }
 }
