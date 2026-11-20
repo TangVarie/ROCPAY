@@ -16,7 +16,7 @@
   <block wx:elif="{{isAdmin}}">
     <!-- 编辑式导语：一句判断 + 角色标签 -->
     <view class="head">
-      <view class="lede">把奖励<text class="em">发给对的人</text>，到账<text class="em">全程可查</text>。</view>
+      <view class="lede"><view>把奖励<text class="em">发给对的人</text>，</view><view>到账<text class="em">全程可查</text>。</view></view>
       <view class="head-sub" wx:if="{{roleLabel}}">
         <text class="tag tag-primary">{{roleLabel}}</text>
       </view>
@@ -141,7 +141,7 @@
           </view>
           <view class="psub">单人 {{minAmountYuan}}–{{perUserCapYuan}} 元；超过 ¥{{splitCapYuan}} 自动拆成多笔，客户逐笔确认收款；备注客户可见</view>
           <!-- 进入本步即刷新额度（提交复核前还会再刷一次） -->
-          <view class="psub" wx:if="{{period && period.hasQuota}}">可发额度剩余 <text class="num psub-em">{{period.neg ? '-' : ''}}¥{{period.remainingYuan}}</text>（{{period.updatedAt}} 更新）</view>
+          <view class="psub" wx:if="{{period && period.hasQuota}}">可发额度剩余 <text class="num psub-em">{{period.neg ? '−' : ''}}¥{{period.remainingYuan}}</text>（{{period.updatedAt}} 更新）</view>
 
           <view class="fillall">
             <input class="input fa-amt num" type="digit" placeholder="统一金额" placeholder-class="ph" value="{{fillAmount}}" bindinput="onFillAmount" />
@@ -174,6 +174,10 @@
           <view class="rv-sum">
             <view class="rv-k">合计</view>
             <view class="rv-total n1"><text class="unit">¥</text>{{review.totalYuan}}</view>
+            <!-- 要先处理的提醒紧贴合计（留在出事的地方）：语义色加深档圆点记号，不铺语义色底 -->
+            <view class="st st-warn st-line rv-warn" wx:if="{{review.over}}">本次合计超出可发额度，请先确认商户余额充足</view>
+            <view class="st st-warn st-line rv-warn" wx:if="{{review.doubt==='same'}}">上次提交没有收到结果：本次按原内容重试，已创建的不会重复创建</view>
+            <view class="st st-fail st-line rv-warn" wx:if="{{review.doubt==='changed'}}">上次提交没有收到结果，可能已经创建成功。内容改过后再提交会作为新的一批发放，若上次已创建，客户会收到两批。建议先到「记录」核对</view>
             <view class="rv-cells">
               <view class="rv-cell"><view class="rv-k">人数</view><view class="rv-v n2">{{review.people}}</view></view>
               <view class="rv-cell"><view class="rv-k">笔数</view><view class="rv-v n2">{{review.bills}}</view></view>
@@ -185,9 +189,6 @@
             <view class="rv-sub" wx:for="{{review.splits}}" wx:key="*this">{{item}}</view>
           </block>
           <view class="rv-line">可发额度 <text class="num rv-em" wx:if="{{review.quotaText}}">{{review.quotaText}}</text>（{{review.quotaNote}}）</view>
-          <view class="banner banner-warning rv-warn" wx:if="{{review.over}}">本次合计超出可发额度，请先确认商户余额充足</view>
-          <view class="banner banner-warning rv-warn" wx:if="{{review.doubt==='same'}}">上次提交没有收到结果：本次按原内容重试，已创建的不会重复创建</view>
-          <view class="banner banner-danger rv-warn" wx:if="{{review.doubt==='changed'}}">上次提交没有收到结果，可能已经创建成功。内容改过后再提交会作为新的一批发放，若上次已创建，客户会收到两批。建议先到「记录」核对</view>
           <view class="rv-list">
             <view class="row rv-row" wx:for="{{review.list}}" wx:key="key">
               <view class="rv-row-top"><text class="rv-name">{{item.label}}</text><text class="rv-amt num">¥{{item.yuan}}</text></view>
@@ -200,21 +201,25 @@
         <!-- 步骤4 · 结果 + 通知。三态：全部成功 / 部分成功 / 一笔都没建（后端允许 createdCount=0，
              那时绝不能出绿色"已创建"和"通知客户"——钱一分没发，只给原因和"返回修改"） -->
         <block wx:if="{{step==='result' && batchResult && !batchResult.createdCount}}">
-          <view class="banner banner-danger">
-            <view class="banner-t">这一批没有创建成功，钱没有发出</view>
-            <view class="banner-line" wx:for="{{batchResult.errors}}" wx:key="i">{{item.label}}：{{item.error}}</view>
+          <!-- 一笔都没建：白表面上的失败结论（d3，危险加深档）+ 逐人原因 -->
+          <view class="notice">
+            <view class="notice-h">这一批没有创建成功，钱没有发出</view>
+            <view class="notice-d" wx:for="{{batchResult.errors}}" wx:key="i">{{item.label}}：{{item.error}}</view>
           </view>
           <button class="btn btn-primary btn-block result-btn" hover-class="is-press" bindtap="backToFill">返回修改</button>
           <view class="textbtn center-self" bindtap="newBatch" hover-class="is-press">放弃，重新选人</view>
         </block>
         <block wx:elif="{{step==='result' && batchResult}}">
-          <view class="banner {{batchResult.errors.length ? 'banner-warning' : 'banner-success'}}">
-            <text>{{batchResult.errors.length ? '部分创建成功：' : ''}}已为 <text class="num">{{batchResult.peopleCount}}</text> 人创建 <text class="num">{{batchResult.createdCount}}</text> 笔定向奖励{{batchResult.createdCount > batchResult.peopleCount ? '（大额已自动拆单，客户逐笔确认）' : ''}}，客户打开小程序即可领取</text>
-            <view class="banner-line" wx:if="{{batchResult.duplicate}}">检测到该批此前已创建成功——以上为已建结果，未重复创建</view>
+          <!-- 结果是这一屏的判断：全部成功 = 标志青里程碑块（墨字，d3）；部分成功 = 白表面 + 警示记号 -->
+          <view class="outcome {{batchResult.errors.length ? 'outcome-partial' : ''}}">
+            <view class="st st-warn outcome-mark" wx:if="{{batchResult.errors.length}}">部分创建成功</view>
+            <view class="outcome-t">已为 <text class="num">{{batchResult.peopleCount}}</text> 人创建 <text class="num">{{batchResult.createdCount}}</text> 笔定向奖励</view>
+            <view class="outcome-d">{{batchResult.createdCount > batchResult.peopleCount ? '大额已自动拆单，客户逐笔确认；' : ''}}客户打开小程序即可领取</view>
+            <view class="outcome-d" wx:if="{{batchResult.duplicate}}">检测到该批此前已创建成功——以上为已建结果，未重复创建</view>
           </view>
-          <view class="banner banner-danger" wx:if="{{batchResult.errors.length}}">
-            <view class="banner-t">{{batchResult.errors.length}} 位客户没有全部发出，补发前请先核对：</view>
-            <view class="banner-line" wx:for="{{batchResult.errors}}" wx:key="i">{{item.label}}：{{item.state}}——{{item.error}}</view>
+          <view class="notice" wx:if="{{batchResult.errors.length}}">
+            <view class="st st-fail st-line notice-t">{{batchResult.errors.length}} 位客户没有全部发出，补发前请先核对：</view>
+            <view class="notice-d" wx:for="{{batchResult.errors}}" wx:key="i">{{item.label}}：{{item.state}}——{{item.error}}</view>
           </view>
 
           <view class="panel notify-panel">
@@ -231,7 +236,7 @@
             <!-- 企微群发只对企微客户有意义：本批全是直连客户时整块隐藏 -->
             <block wx:if="{{wecomOn && batchResult.targets.length}}">
               <textarea class="input notify-ta" value="{{notifyText}}" bindinput="onNotifyText" maxlength="200" auto-height />
-              <button class="btn btn-primary btn-block" hover-class="is-press" bindtap="sendNotify" loading="{{notifying}}"
+              <button class="btn {{subMiniOn ? 'btn-secondary' : 'btn-primary'}} btn-block" hover-class="is-press" bindtap="sendNotify" loading="{{notifying}}"
                       disabled="{{notifyDone && !(notifyResult && notifyResult.failCount)}}">{{notifyDone ? (notifyResult && notifyResult.failCount ? '重试 ' + notifyResult.failCount + ' 位未进入群发的客户' : '已创建群发，去企微点发送') : '企微群发通知'}}</button>
               <view class="psub" wx:if="{{!notifyDone}}">任务按「谁跟进谁发」派给对应员工，在企微「消息-客户联系」提醒里点一次发送即可送达</view>
               <view class="psub" wx:if="{{!myWecomUserid}}">提示：让超管在「员工」里给你配置企微账号后，你跟进的客户任务会直接派给你</view>
@@ -286,11 +291,13 @@
           <text class="flabel">姓名</text>
           <input class="input finput" placeholder="单笔 2000 元及以上必填实名" placeholder-class="ph" value="{{name}}" bindinput="onName" />
         </view>
-        <button class="btn btn-primary btn-block quick-btn" hover-class="is-press" bindtap="onGenerate" loading="{{loading}}" disabled="{{loading}}">生成奖励</button>
+        <button class="btn {{reward ? 'btn-secondary' : 'btn-primary'}} btn-block quick-btn" hover-class="is-press" bindtap="onGenerate" loading="{{loading}}" disabled="{{loading}}">生成奖励</button>
         <view class="err" wx:if="{{error}}">{{error}}</view>
         <block wx:if="{{reward}}">
-          <view class="banner banner-success reward-ok">
-            <text>已生成 <text class="num">¥{{reward.amountText}}</text>{{reward.remark ? ' · ' + reward.remark : ''}}，转发给客户即可领取</text>
+          <!-- 生成好了 = 标志青里程碑块；此后「生成奖励」退为次按钮，转发是唯一的主按钮 -->
+          <view class="outcome reward-ok">
+            <view class="outcome-t">已生成 <text class="num">¥{{reward.amountText}}</text>{{reward.remark ? ' · ' + reward.remark : ''}}</view>
+            <view class="outcome-d">转发给客户即可领取</view>
           </view>
           <button class="btn btn-primary btn-block" hover-class="is-press" open-type="share">转发给客户领取</button>
         </block>
@@ -304,7 +311,7 @@
       <view class="block block-deep bal" wx:if="{{period}}">
         <view class="bal-label">可发额度 · 剩余</view>
         <block wx:if="{{period.hasQuota}}">
-          <view class="bal-num n1">{{period.neg ? '-' : ''}}<text class="unit">¥</text>{{period.remainingYuan}}</view>
+          <view class="bal-num n1">{{period.neg ? '−' : ''}}<text class="unit">¥</text>{{period.remainingYuan}}</view>
           <view class="bal-sub">自上次充值或校准已发放 ¥{{period.paidSinceYuan}}{{period.neg ? ' · 待领取已超出账户余额，请充值' : period.low ? ' · 额度已用尽，请充值' : ''}}</view>
         </block>
         <block wx:else>
@@ -373,11 +380,13 @@
         <view class="textbtn" bindtap="ackAlerts" hover-class="is-press">标记 {{failAlert}} 笔异常为已处理</view>
       </view>
 
-      <!-- 汇总 = 浅青块（方法与范围：跟随筛选的口径——范围内合计/动账，即期间或单人资金消耗）。
+      <!-- 汇总 = 浅青块（方法与范围：跟随筛选的口径——范围内合计/动账，即期间或单人资金消耗）；数字只用 n2，额度块的 n1 是这页唯一的主数字。
            两个在途状态分开数：待领取 = 客户还没点领取（未过期）；待确认 = 已发起转账、客户还没在微信里确认 -->
       <view class="block tint stats" wx:if="{{stats}}">
-        <view class="sm-label">{{recFilter.target || recFilter.targetOpenid ? recFilter.targetLabel + ' · 往来合计' : '发放合计'}}</view>
-        <view class="sm-num"><text class="unit">¥</text>{{statsTotalYuan}}</view>
+        <view class="stats-top">
+          <text class="sm-label">{{recFilter.target || recFilter.targetOpenid ? recFilter.targetLabel + ' · 往来合计' : '发放合计'}}</text>
+          <text class="sm-num n2">¥{{statsTotalYuan}}</text>
+        </view>
         <view class="sm-sub">共 {{stats.total}} 笔 · 已到账 {{stats.success_count}} 笔 · 实际动账 ¥{{statsPaidYuan}}{{stats.cancelled_count > 0 ? ' · 撤回 ' + stats.cancelled_count + ' 笔' : ''}}</view>
         <view class="stat-pair">
           <view class="stat-cell">
@@ -589,7 +598,7 @@
     </view>
     <view class="sheet-body">
       <view class="sh-amt">
-        <text class="sh-amt-v"><text class="unit">¥</text>{{detail.yuan}}</text>
+        <text class="sh-amt-v n1"><text class="unit">¥</text>{{detail.yuan}}</text>
         <text class="st st-{{detail.cls}}">{{detail.statusText}}</text>
       </view>
       <view class="sh-next" wx:if="{{detail.nextStep}}">{{detail.nextStep}}</view>
@@ -607,7 +616,7 @@
     <view class="sheet-acts" wx:if="{{detail.eu || detail.oid || (detail.batchId && !recFilter.batch) || detail.canRevoke}}">
       <button class="btn btn-secondary btn-md sh-btn" hover-class="is-press" wx:if="{{detail.eu || detail.oid}}" bindtap="detailCustomer">只看此客户</button>
       <button class="btn btn-secondary btn-md sh-btn" hover-class="is-press" wx:if="{{detail.batchId && !recFilter.batch}}" bindtap="detailBatch">查看本批</button>
-      <button class="btn btn-danger btn-md sh-btn" hover-class="is-press" wx:if="{{detail.canRevoke}}" bindtap="detailRevoke">撤回</button>
+      <button class="btn btn-danger-quiet btn-md sh-btn" hover-class="is-press" wx:if="{{detail.canRevoke}}" bindtap="detailRevoke">撤回</button>
     </view>
   </view>
 

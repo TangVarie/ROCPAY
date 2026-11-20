@@ -32,13 +32,13 @@
           <text class="n">扶摇</text><text class="r">ROC</text><text class="u">结构性复利</text>
         </view>
         <!-- ② 当前状态：标题就是状态；到账时前面落一个勾 -->
-        <view class="rb-label">
+        <view class="rb-label {{status==='dead' ? 'rb-label-dead' : ''}}">
           <view class="rb-check" wx:if="{{status==='ok'}}" aria-hidden="true"></view>
           <text>{{ status==='ok' ? (claimedCount > 1 ? '全部到账' : '已到账微信零钱') : (status==='between' || status==='nextfail') ? '本笔已到账' : (status==='confirming' || status==='arriving') ? '已确认收款 · 到账中' : status==='dead' ? deadTitle : resume ? '待确认收款' : '待领取' }}</text>
         </view>
         <!-- 金额（n1）：链接金额没经后端核验（校验接口不可达）时不上屏任何数字 -->
         <view class="rb-amount" wx:if="{{mode==='token' && amtUnverified}}"><text class="rb-unverified">金额待核验</text></view>
-        <view class="rb-amount n1" wx:else><text class="unit">¥</text><text class="rb-num">{{ mode==='mine' ? mineAmt : amtText }}</text></view>
+        <view class="rb-amount {{status==='dead' ? 'n2 rb-amount-dead' : 'n1'}}" wx:else><text class="unit">¥</text><text class="rb-num">{{ mode==='mine' ? mineAmt : amtText }}</text></view>
         <!-- 大额拆单：一人多笔逐笔领，进度与已到账累计一直可见 -->
         <view class="rb-multi" wx:if="{{mode==='mine' && claimedCount + minePendCount > 1 && status!=='ok'}}">第 {{claimedCount + 1}}/{{claimedCount + minePendCount}} 笔{{claimedCount > 0 ? ' · 已到账 ¥' + claimedYuan : ''}}</view>
         <!-- 事由与去向：收款单的行表（标签 / 内容），行间线跟随所在底 -->
@@ -64,7 +64,11 @@
             <view class="r {{ (status==='idle' || status==='loading' || status==='fail') ? (resume ? 'r-now' : '') : 'r-done' }}"></view>
             <view class="r {{ (status==='ok' || status==='between' || status==='nextfail') ? 'r-done' : (status==='confirming' || status==='arriving') ? 'r-now' : '' }}"></view>
           </view>
-          <view class="rb-steps-t"><text>领取</text><text>微信确认</text><text>到账</text></view>
+          <view class="rb-steps-t">
+            <text class="{{ (status==='idle' || status==='loading' || status==='fail') && !resume ? 'on' : '' }}">领取</text>
+            <text class="{{ (status==='idle' || status==='loading' || status==='fail') && resume ? 'on' : '' }}">微信确认</text>
+            <text class="{{ (status==='idle' || status==='loading' || status==='fail') ? '' : 'on' }}">到账</text>
+          </view>
         </view>
 
         <!-- ④ 主按钮（深青块上：标志青底墨字）：只在领取前/可重试时出现。金额未核验给"重新连接"；入账查询超时给"刷新到账结果"；
@@ -114,35 +118,32 @@
 
   <!-- 无奖励 -->
   <block wx:if="{{mode==='empty'}}">
-    <!-- 操作端主页：进门即仪表盘——导语一句判断；深青证据块放可发额度（n1）与累计发放；
-         资金异常留在出事的地方；近 24 小时两块白表面；一个主按钮 -->
+    <!-- 操作端主页：进门即仪表盘——导语一句判断；深青证据块放可发额度（n1，一屏唯一）与累计发放；
+         资金异常留在出事的地方（白表面 + 危险记号）；近 24 小时是一张行表（尾值 n2）；一个主按钮 -->
     <block wx:if="{{isAdmin}}">
       <view class="ahome-lede">
-        <view class="lede">你好，<text class="em">{{roleLabel || '管理员'}}</text>。今天把奖励<text class="em">发给对的人</text>。</view>
+        <view class="lede"><view>你好，<text class="em">{{roleLabel || '管理员'}}</text>。</view><view>今天把奖励<text class="em">发给对的人</text>。</view></view>
       </view>
 
       <view class="block block-deep ah-hero" wx:if="{{adminHome && adminHome.hasQuota}}">
         <view class="ah-label">可发额度 · 剩余</view>
-        <view class="ah-num n1">{{adminHome.neg ? '-' : ''}}<text class="unit">¥</text>{{adminHome.remainingYuan}}</view>
+        <view class="ah-num n1">{{adminHome.neg ? '−' : ''}}<text class="unit">¥</text>{{adminHome.remainingYuan}}</view>
         <view class="ah-sub" wx:if="{{adminHome.low}}">额度已用尽，进工作台充值</view>
         <view class="ah-foot" wx:if="{{adminHome.totalAllYuan}}"><text>累计发放</text><text class="num">¥{{adminHome.totalAllYuan}}</text></view>
       </view>
 
       <!-- 资金异常主动亮出来：失败/被关闭（不含主动撤回），点击直达失败台账 -->
-      <view class="block ah-alert" wx:if="{{adminHome && adminHome.failCount > 0}}" bindtap="goFailed" hover-class="is-press">
-        <view class="ah-alert-t">待处理异常 <text class="num">{{adminHome.failCount}}</text> 笔</view>
-        <view class="ah-alert-s">转账失败或被关闭，点击查看失败台账</view>
+      <view class="panel ah-alert" wx:if="{{adminHome && adminHome.failCount > 0}}" bindtap="goFailed" hover-class="is-press">
+        <view class="ah-alert-main">
+          <view class="ah-alert-t st st-fail">待处理异常 <text class="num">{{adminHome.failCount}}</text> 笔</view>
+          <view class="ah-alert-s">转账失败或被关闭，点击查看失败台账</view>
+        </view>
+        <view class="chev" aria-hidden="true"></view>
       </view>
 
-      <view class="ah-minis" wx:if="{{adminHome}}">
-        <view class="panel ah-mini">
-          <view class="ahm-label">近24小时发放</view>
-          <view class="ahm-num"><text class="num">{{adminHome.todayCount || 0}}</text><text class="ahm-u">笔</text></view>
-        </view>
-        <view class="panel ah-mini">
-          <view class="ahm-label">近24小时动账</view>
-          <view class="ahm-num"><text class="ahm-cur">¥</text><text class="num">{{adminHome.todayYuan || '0.00'}}</text></view>
-        </view>
+      <view class="rows ah-rows" wx:if="{{adminHome}}">
+        <view class="row ah-row"><text class="ah-k">近24小时发放</text><text class="ah-v n2">{{adminHome.todayCount || 0}} 笔</text></view>
+        <view class="row ah-row"><text class="ah-k">近24小时动账</text><text class="ah-v n2">¥{{adminHome.todayYuan || '0.00'}}</text></view>
       </view>
 
       <button class="btn btn-primary btn-block" hover-class="is-press" bindtap="goAdmin">进入工作台</button>

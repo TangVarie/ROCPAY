@@ -64,8 +64,12 @@
   to { opacity: 1; transform: translateY(0) rotate(-45deg) scale(1); }
 }
 
+/* 失败 / 撤回终态：一屏一句判断是结论（没有到账 / 已被撤回），升到 d3；金额降为 n2 注档色 */
+.rb-label.rb-label-dead { font-size: 34rpx; line-height: 1.4; font-weight: 900; color: var(--rb-c1); }
+
 /* 金额：n1（80rpx / 800），¥ 跟着数字走（0.4em 显示字） */
 .rb-amount { margin-top: 16rpx; color: var(--rb-c1); }
+.rb-amount.rb-amount-dead { margin-top: 8rpx; color: var(--rb-c2); }
 /* 金额未核验：占住金额的位置但不给数字（d3 档，比 n1 低两档，读得出"不是金额"） */
 .rb-unverified { display: block; font-size: 34rpx; font-weight: 900; line-height: 88rpx; }
 /* 大额拆单：第 N/M 笔 · 已到账累计 */
@@ -99,6 +103,7 @@
 .rb-steps .round-ruler { color: var(--rb-c1); }
 .rb-steps .r-now::after { border-color: var(--rb-bg); }
 .rb-steps-t { display: flex; justify-content: space-between; margin-top: 12rpx; font-size: 24rpx; color: var(--rb-c2); }
+.rb-steps-t .on { color: var(--rb-c1); font-weight: 600; } /* 当前步：与工作台的步骤条同一种写法 */
 
 /* ④ 主按钮：深青块上标志青底墨字（app.wxss .btn-on-deep），整行 96rpx */
 .reward-block .btn.rb-btn { margin-top: 48rpx; }
@@ -143,20 +148,17 @@
   color: var(--color-on-deep-2);
 }
 .ah-foot .num { font-weight: 700; color: var(--color-on-deep); }
-/* 异常：语义 danger 浅底 + 加深档标题，进门可见、点击直达失败筛选（必须修的，留在出事的地方）。
-   大块区域按下只变底色，不缩放 */
-.ah-alert { margin-bottom: 16rpx; padding: 28rpx 32rpx; background: var(--color-danger-tint); transition: background-color var(--duration-press) var(--ease-out); }
-.ah-alert.is-press { background: var(--color-fill); }
-.ah-alert-t { font-size: 30rpx; font-weight: 700; color: var(--color-danger-deep); }
+/* 异常：必须修的，留在出事的地方——白表面 + 危险加深档圆点记号 + 箭头，点击直达失败台账；大块区域按下只变底色 */
+.panel.ah-alert { display: flex; align-items: center; gap: 24rpx; margin-bottom: 16rpx; padding: 28rpx 32rpx; transition: background-color var(--duration-press) var(--ease-out); }
+.panel.ah-alert.is-press { background: var(--color-fill); }
+.ah-alert-main { flex: 1; min-width: 0; }
+.ah-alert-t.st { font-size: 30rpx; font-weight: 700; }
 .ah-alert-s { margin-top: 8rpx; font-size: 24rpx; color: var(--color-text-light); }
-/* 近 24 小时：两块白表面（判断），数字 42rpx 800（半宽块放得下五位金额），单位 sm 600 */
-.ah-minis { display: flex; gap: 16rpx; margin-bottom: 32rpx; }
-.panel.ah-mini { flex: 1; min-width: 0; padding: 28rpx 32rpx; }
-.ahm-label { font-size: 26rpx; color: var(--color-text-light); }
-.ahm-num { margin-top: 16rpx; font-size: 42rpx; font-weight: 800; line-height: 1.1; color: var(--color-text-dark); white-space: nowrap; }
-.ahm-num .num { font-weight: 800; }
-.ahm-u { margin-left: 8rpx; font-size: 26rpx; font-weight: 600; }
-.ahm-cur { margin-right: 4rpx; font-size: 26rpx; font-weight: 600; }
+/* 近 24 小时：一张行表，标签 / 尾值（n2） */
+.ah-rows { margin-bottom: 32rpx; }
+.ah-row { display: flex; align-items: center; justify-content: space-between; gap: 24rpx; min-height: 104rpx; padding: 0 32rpx; box-sizing: border-box; }
+.ah-k { font-size: 26rpx; color: var(--color-text); }
+.ah-v { color: var(--color-text-dark); }
 .ah-tips { margin-top: 24rpx; font-size: 24rpx; color: var(--color-text-light); text-align: center; }
 .ah-total { margin-top: 16rpx; font-size: 24rpx; color: var(--color-text-light); text-align: center; }
 .ah-total .num { font-weight: 700; color: var(--color-text-dark); }

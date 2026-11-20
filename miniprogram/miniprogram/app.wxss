@@ -35,6 +35,11 @@ page {
   /* 白表面 / 浅青上的线：发丝线带一点青，不用纯灰；强线给章节头顶线 */
   --color-hl: rgba(22, 65, 63, 0.16);
   --color-hl-strong: rgba(22, 65, 63, 0.6);
+  /* 浅青（方法与说明）块的底：亮色 = 浅青；深色模式下 kit 的浅青 #163b39 与深青证据块 #16413f 只差 1.08:1、
+     读成两块一样的证据，所以深色模式改用表面色 + 发丝线框（面板里的内层块用填充底），见下方 @media */
+  --color-method: var(--color-tint-primary);
+  --color-method-inner: var(--color-tint-primary);
+  --color-method-line: transparent;
   /* 遮罩：取深色画布色 48% */
   --color-scrim: rgba(15, 19, 24, 0.48);
 
@@ -118,7 +123,7 @@ page {
   box-sizing: border-box;
 }
 /* 浅青：方法与范围（空态说明、筛选口径） */
-.tint { background: var(--color-tint-primary); }
+.tint { background: var(--color-method); border: 1px solid var(--color-method-line); }
 
 /* ============================================================
    行表（构件 #5）：收进一张圆角白卡，行间发丝线（左缩 32rpx），整行可点时按下只变底色
@@ -185,6 +190,9 @@ page {
 /* 危险按钮：深色模式危险色是浅色填充，压墨字（kit --color-on-danger） */
 .btn-danger { background: var(--color-danger); color: var(--color-on-danger); }
 .btn-danger.is-press { background: var(--color-danger-dark); }
+/* 安静的危险动作（抽屉里的撤回，点了还有确认弹窗）：填充底 + 危险加深档字，不做全场最响的那颗按钮 */
+.btn-danger-quiet { background: var(--color-fill); color: var(--color-danger-deep); }
+.btn-danger-quiet.is-press { background: var(--color-danger-tint); }
 /* 深青块上的按钮：标志青底墨字，按下白底（grounds.deep.button） */
 .btn-on-deep { background: var(--color-field-brand); color: var(--color-ink); }
 .btn-on-deep.is-press { background: var(--color-on-deep); }
@@ -348,6 +356,12 @@ page {
 .st-warn { color: var(--color-warning-deep); }
 .st-fail { color: var(--color-danger-deep); }
 .st-muted { color: var(--color-text-light); }
+/* 成行的状态说明（要处理的提醒）：可折行，圆点对齐第一行 */
+.st.st-line { display: flex; align-items: flex-start; white-space: normal; font-size: 26rpx; line-height: 1.6; }
+.st.st-line::before { margin-top: 15rpx; }
+
+/* 行尾箭头：整块可点的入口 */
+.chev { flex: none; width: 16rpx; height: 16rpx; border-top: 3rpx solid var(--color-text-light); border-right: 3rpx solid var(--color-text-light); transform: rotate(45deg); margin-right: 8rpx; }
 
 .tag {
   display: inline-flex;
@@ -376,19 +390,6 @@ page {
   transform: scaleY(0.5);
   transform-origin: 0 100%;
 }
-
-/* ---- 语义横幅：语义色 /10 底 + 墨字（彩字压浅底对比不够）；容器圆角 ---- */
-.banner {
-  border-radius: var(--radius-container);
-  padding: 24rpx 32rpx;
-  font-size: 28rpx;
-  line-height: 1.6;
-  color: var(--color-text-dark);
-}
-.banner-success { background: var(--color-success-tint); }
-.banner-danger { background: var(--color-danger-tint); }
-.banner-warning { background: var(--color-warning-tint); }
-.banner-line { margin-top: 8rpx; font-size: 26rpx; color: var(--color-text); }
 
 /* ---- 错误文字：留在出事的地方，危险色加深档 ---- */
 .err { color: var(--color-danger-deep); margin-top: 16rpx; font-size: 26rpx; line-height: 1.6; }
@@ -444,6 +445,9 @@ page {
   page {
     --color-hl: rgba(255, 255, 255, 0.1);
     --color-hl-strong: rgba(255, 255, 255, 0.5);
+    --color-method: var(--color-surface);
+    --color-method-inner: var(--color-fill);
+    --color-method-line: var(--color-hl);
     --color-danger-dark: #c64449; /* 深色危险按下态：压墨字 3.84:1，只持续 100ms，按状态件 3:1 线放行（v5.7.1） */
     --color-success-tint: rgba(33, 177, 131, 0.12);
     --color-warning-tint: rgba(255, 162, 77, 0.12);

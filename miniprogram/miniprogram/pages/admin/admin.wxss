@@ -89,7 +89,7 @@
   margin-top: 24rpx;
   padding: 32rpx;
   border-radius: calc(var(--radius-container) - 8rpx);
-  background: var(--color-tint-primary);
+  background: var(--color-method-inner);
 }
 .pempty-t1 { font-size: 30rpx; font-weight: 600; color: var(--color-text-dark); }
 .pempty-t2 { margin-top: 8rpx; font-size: 26rpx; line-height: 1.6; color: var(--color-text); }
@@ -138,9 +138,20 @@
 .frow-err { background: var(--color-danger-tint); }
 .frow-err .frow-amt { border-color: var(--color-danger); }
 
-/* 横幅在发放结果里的排版 */
-.banner + .banner, .banner + .panel { margin-top: 24rpx; }
-.banner-t { font-weight: 600; }
+/* 发放结果：结论是这一屏的判断。
+   全部成功 = 标志青里程碑块（青面三件套：只有墨字，d3 主句 + 墨 72% 说明）；
+   部分成功 = 白表面 + 警示记号；失败 = 白表面上的失败结论 + 逐人原因（不铺语义色底，记号用语义加深档） */
+.outcome { padding: 32rpx; border-radius: var(--radius-container); background: var(--color-field-brand); color: var(--color-ink); }
+.outcome.outcome-partial { background: var(--color-surface); color: var(--color-text-dark); }
+.outcome-mark { margin-bottom: 8rpx; }
+.outcome-t { font-size: 34rpx; line-height: 1.4; font-weight: 900; }
+.outcome-d { margin-top: 8rpx; font-size: 26rpx; line-height: 1.6; color: var(--color-ink-2); }
+.outcome-partial .outcome-d { color: var(--color-text); }
+.notice { padding: 32rpx; border-radius: var(--radius-container); background: var(--color-surface); }
+.notice-h { font-size: 34rpx; line-height: 1.4; font-weight: 900; color: var(--color-danger-deep); }
+.notice-t { font-weight: 600; }
+.notice-d { margin-top: 8rpx; font-size: 26rpx; line-height: 1.6; color: var(--color-text); }
+.outcome + .notice, .outcome + .panel, .notice + .panel { margin-top: 24rpx; }
 .reward-ok { margin: 24rpx 0; }
 .btn.result-btn { margin-top: 24rpx; }
 .btn.quick-btn { margin-top: 8rpx; }
@@ -223,10 +234,11 @@
 .alert-actions { display: flex; justify-content: flex-end; margin: -8rpx 0 8rpx; }
 .batch-actions { display: flex; justify-content: flex-end; margin: -8rpx 0 16rpx; }
 
-/* 汇总 = 浅青块（方法与范围）：合计 56rpx（比上方 n1 的可发额度低一档，额度是这页的主角）+ 口径 + 两个在途数 */
+/* 汇总 = 浅青块（方法与范围）：合计与两个在途数都是 n2（上方额度块的 n1 是这页唯一的主数字）+ 一行口径 */
 .stats { margin: 16rpx 0 24rpx; padding: 32rpx; }
-.sm-label { font-size: 26rpx; font-weight: 600; color: var(--color-text); }
-.sm-num { margin-top: 8rpx; font-family: var(--font-num); font-variant-numeric: tabular-nums lining-nums; font-size: 56rpx; font-weight: 800; line-height: 1.2; color: var(--color-text-dark); white-space: nowrap; }
+.stats-top { display: flex; align-items: baseline; justify-content: space-between; gap: 24rpx; }
+.sm-label { min-width: 0; font-size: 26rpx; font-weight: 600; color: var(--color-text); }
+.sm-num { flex: none; color: var(--color-text-dark); }
 .sm-sub { margin-top: 8rpx; font-size: 24rpx; line-height: 1.6; color: var(--color-text); }
 .stat-pair { display: flex; margin-top: 24rpx; padding-top: 24rpx; border-top: 1px solid var(--color-hl); }
 .stat-cell { flex: 1; }
@@ -366,7 +378,7 @@
 .rv-line { margin-top: 16rpx; font-size: 26rpx; line-height: 1.6; color: var(--color-text); }
 .rv-em { color: var(--color-text-dark); font-weight: 600; }
 .rv-sub { margin-top: 8rpx; padding-left: 24rpx; font-size: 24rpx; color: var(--color-text-light); }
-.rv-warn { margin: 24rpx 0 0; font-size: 26rpx; }
+.rv-warn { margin-top: 16rpx; }
 .rv-list { margin-top: 24rpx; }
 .rv-row { padding-top: 24rpx; padding-bottom: 24rpx; }
 .rv-row-top { display: flex; justify-content: space-between; gap: 16rpx; font-size: 30rpx; color: var(--color-text-dark); }
@@ -417,13 +429,13 @@
 .sheet-title { font-size: 34rpx; font-weight: 900; color: var(--color-text-dark); }
 .sheet-body { flex: 1; overflow-y: auto; padding: 0 32rpx 24rpx; }
 .sh-amt { display: flex; align-items: center; gap: 24rpx; margin-top: 8rpx; }
-.sh-amt-v { font-family: var(--font-num); font-variant-numeric: tabular-nums lining-nums; font-size: 56rpx; font-weight: 800; line-height: 1.2; color: var(--color-text-dark); }
+.sh-amt-v { color: var(--color-text-dark); } /* n1：抽屉盖住整页，这一笔的金额是抽屉里唯一的主数字 */
 /* 下一步：内层浅青块（方法与说明），圆角 = 容器 − 8rpx */
 .sh-next {
   margin: 16rpx 0 8rpx;
   padding: 20rpx 24rpx;
   border-radius: calc(var(--radius-container) - 8rpx);
-  background: var(--color-tint-primary);
+  background: var(--color-method-inner);
   font-size: 26rpx;
   line-height: 1.6;
   color: var(--color-text-dark);
