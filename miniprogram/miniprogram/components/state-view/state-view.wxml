@@ -1,10 +1,16 @@
-<view class="state">
-  <view wx:if="{{icon==='spinner'}}" class="band-spinner state-icon" aria-label="加载中">
+<!-- 加载：山形弧带居中 + 两行字（版式未知时的整页等待）。
+     出错 / 空 / 无权限：浅青说明块（方法与说明）——两行人话（发生了什么、下一步做什么）+ 一个次按钮，
+     不放图标（CRAFT-UI §八 空态；DESIGN §九 #12 没有信息的装饰）。icon 属性仍区分加载与其它，取值不变 -->
+<view wx:if="{{icon==='spinner'}}" class="state" aria-busy="true">
+  <view class="band-spinner" aria-label="加载中">
     <view class="band band-1"></view><view class="band band-2"></view><view class="band band-3"></view><view class="band band-4"></view>
   </view>
-  <view wx:else class="li li-{{icon}} state-icon" aria-hidden="true"></view>
   <view class="state-t1">{{title}}</view>
   <view class="state-t2" wx:if="{{desc}}">{{desc}}</view>
-  <view class="state-detail" wx:if="{{detail}}">{{detail}}</view>
-  <button class="btn btn-fill state-btn" wx:if="{{btnText}}" bindtap="onAction">{{btnText}}</button>
+</view>
+<view wx:else class="emp" aria-live="polite">
+  <view class="emp-t1">{{title}}</view>
+  <view class="emp-t2" wx:if="{{desc}}">{{desc}}</view>
+  <view class="emp-detail num" wx:if="{{detail}}">{{detail}}</view>
+  <button class="btn btn-secondary btn-md emp-btn" hover-class="is-press" wx:if="{{btnText}}" bindtap="onAction">{{btnText}}</button>
 </view>

@@ -14,61 +14,54 @@
   </block>
 
   <block wx:elif="{{isAdmin}}">
-    <!-- 编辑式导语 -->
+    <!-- 编辑式导语：一句判断 + 角色标签 -->
     <view class="head">
-      <view class="lede">把奖励<text class="em">发给对的人</text>，到账<text class="em">全程可查</text>。</view>
-      <view class="head-sub">
-        <text class="badge badge-blue" wx:if="{{roleLabel}}">{{roleLabel}}</text>
+      <view class="lede"><view>把奖励<text class="em">发给对的人</text>，</view><view>到账<text class="em">全程可查</text>。</view></view>
+      <view class="head-sub" wx:if="{{roleLabel}}">
+        <text class="tag tag-primary">{{roleLabel}}</text>
       </view>
     </view>
 
-    <!-- Tab：发丝线 + 主色下划指示 -->
-    <view class="tabs hairline-b">
-      <view class="tab {{tab==='send'?'on':''}}" data-tab="send" bindtap="switchTab">发放</view>
-      <view class="tab {{tab==='records'?'on':''}}" data-tab="records" bindtap="switchTab">记录<text class="tab-dot" wx:if="{{failAlert > 0}}"></text></view>
-      <view class="tab {{tab==='rank'?'on':''}}" data-tab="rank" bindtap="switchTab">客户</view>
-      <view class="tab {{tab==='staff'?'on':''}}" data-tab="staff" bindtap="switchTab" wx:if="{{isSuper}}">员工</view>
+    <!-- 标签页：切换的是另一页内容；发丝线 + 主色下划指示 -->
+    <view class="tabs">
+      <view class="tab {{tab==='send'?'on':''}}" data-tab="send" bindtap="switchTab" hover-class="is-press">发放</view>
+      <view class="tab {{tab==='records'?'on':''}}" data-tab="records" bindtap="switchTab" hover-class="is-press">记录<text class="tab-dot" wx:if="{{failAlert > 0}}"></text></view>
+      <view class="tab {{tab==='rank'?'on':''}}" data-tab="rank" bindtap="switchTab" hover-class="is-press">客户</view>
+      <view class="tab {{tab==='staff'?'on':''}}" data-tab="staff" bindtap="switchTab" hover-class="is-press" wx:if="{{isSuper}}">员工</view>
     </view>
 
     <!-- ================= 发放 ================= -->
     <block wx:if="{{tab==='send'}}">
-      <!-- 方式：选中 chip 主色底 -->
-      <view class="chips">
-        <view class="chip {{sendMode==='target'?'on':''}}" data-m="target" bindtap="switchSendMode">定向发放</view>
-        <view class="chip {{sendMode==='quick'?'on':''}}" data-m="quick" bindtap="switchSendMode">链接快发</view>
+      <!-- 方式：两个短选项、只能选一个、切换同一处的视图 → 分段（CRAFT-UI §九） -->
+      <view class="seg mode-seg" aria-role="radiogroup" aria-label="发放方式">
+        <view class="seg-k {{sendMode==='quick' ? 'at-1' : ''}}"></view>
+        <view class="seg-i {{sendMode==='target'?'on':''}}" data-m="target" bindtap="switchSendMode" hover-class="is-press" aria-role="radio" aria-checked="{{sendMode==='target'}}">定向发放</view>
+        <view class="seg-i {{sendMode==='quick'?'on':''}}" data-m="quick" bindtap="switchSendMode" hover-class="is-press" aria-role="radio" aria-checked="{{sendMode==='quick'}}">链接快发</view>
       </view>
-      <view class="chips-note t-light" wx:if="{{sendMode==='target'}}">选定客户后发放，只有本人能领取</view>
-      <view class="chips-note t-light" wx:else>生成不记名卡片转发，任何人打开可领</view>
+      <view class="mode-note" wx:if="{{sendMode==='target'}}">选定客户后发放，只有本人能领取</view>
+      <view class="mode-note" wx:else>生成不记名卡片转发，任何人打开可领</view>
 
       <!-- ===== 定向发放 ===== -->
       <block wx:if="{{sendMode==='target'}}">
-        <!-- 四步任务流可见：选客户 → 填金额 → 复核 → 通知（设计系统「轮尺」，当前步实心挖空、已过步实心） -->
-        <view class="steps" aria-label="发放步骤">
-          <view class="round-ruler">
-            <view class="r {{step==='pick' ? 'r-now' : 'r-done'}}"></view>
-            <view class="r {{step==='fill' ? 'r-now' : step==='pick' ? '' : 'r-done'}}"></view>
-            <view class="r {{step==='review' ? 'r-now' : step==='result' ? 'r-done' : ''}}"></view>
-            <view class="r {{step==='result' ? 'r-now' : ''}}"></view>
-          </view>
-          <view class="steps-t">
-            <text class="{{step==='pick' ? 'on' : ''}}">选客户</text>
-            <text class="{{step==='fill' ? 'on' : ''}}">填金额</text>
-            <text class="{{step==='review' ? 'on' : ''}}">复核</text>
-            <text class="{{step==='result' ? 'on' : ''}}">通知</text>
-          </view>
+        <!-- 四步任务流可见：选客户 → 填金额 → 复核 → 通知（分段进度条：走过的和当前步实心，当前步的字加粗） -->
+        <view class="stepbar steps" aria-label="发放步骤">
+          <view class="sb-i {{step==='pick' ? 'now' : 'done'}}"><view class="sb-bar"></view><text class="sb-t">选客户</text></view>
+          <view class="sb-i {{step==='fill' ? 'now' : step==='pick' ? '' : 'done'}}"><view class="sb-bar"></view><text class="sb-t">填金额</text></view>
+          <view class="sb-i {{step==='review' ? 'now' : step==='result' ? 'done' : ''}}"><view class="sb-bar"></view><text class="sb-t">复核</text></view>
+          <view class="sb-i {{step==='result' ? 'now' : ''}}"><view class="sb-bar"></view><text class="sb-t">通知</text></view>
         </view>
 
-        <!-- 步骤1 · 选客户（白底描边块）。统一名单一人一行：企微客户与直连客户合并展示
+        <!-- 步骤1 · 选客户（白表面）。统一名单一人一行：企微客户与直连客户合并展示
              （后端 openid 桥去重），操作员按备注选人即可，不必关心这个人从哪个渠道来 -->
         <view class="panel" wx:if="{{step==='pick'}}">
           <view class="prow">
-            <view class="ptitle t-dark">选择客户</view>
+            <view class="ptitle">选择客户</view>
             <view class="pactions">
-              <view class="textbtn" wx:if="{{wecomOn}}" bindtap="syncCustomers">{{syncing?'同步中…':'从企微同步'}}</view>
-              <view class="textbtn" bindtap="toggleDirectAdd">{{dAddOpen?'收起':'添加客户'}}</view>
+              <view class="textbtn" wx:if="{{wecomOn}}" bindtap="syncCustomers" hover-class="is-press">{{syncing?'同步中…':'从企微同步'}}</view>
+              <view class="textbtn" bindtap="toggleDirectAdd" hover-class="is-press">{{dAddOpen?'收起':'添加客户'}}</view>
             </view>
           </view>
-          <view class="psub t-light" wx:if="{{wecomOn && lastSyncText}}">企微档案上次同步 {{lastSyncText}}</view>
+          <view class="psub" wx:if="{{wecomOn && lastSyncText}}">企微档案上次同步 {{lastSyncText}}</view>
 
           <!-- 手动添加直连客户（同 openid 再保存 = 改备注），保存后立即出现在名单里 -->
           <view class="dadd" wx:if="{{dAddOpen}}">
@@ -76,39 +69,39 @@
                    value="{{dNewOpenid}}" bindinput="onDNewOpenid" />
             <input class="input dadd-input" placeholder="备注名（选填，如 张老板）" placeholder-class="ph"
                    value="{{dNewRemark}}" bindinput="onDNewRemark" />
-            <button class="btn btn-blue btn-block dadd-btn" bindtap="addDirect" loading="{{dAdding}}" disabled="{{dAdding}}">保存到名单</button>
+            <button class="btn btn-primary btn-block dadd-btn" hover-class="is-press" bindtap="addDirect" loading="{{dAdding}}" disabled="{{dAdding}}">保存到名单</button>
           </view>
 
           <view class="searchbar">
             <input class="input searchinput" placeholder="搜备注名 / 客户名 / openid" placeholder-class="ph" value="{{custQ}}"
                    bindinput="onCustQ" confirm-type="search" bindconfirm="searchCustomers" />
-            <button class="btn btn-blue searchbtn" bindtap="searchCustomers">搜索</button>
+            <button class="btn btn-primary searchbtn" hover-class="is-press" bindtap="searchCustomers">搜索</button>
           </view>
 
           <block wx:if="{{custList.length}}">
-            <view class="cust hairline-b" wx:for="{{custList}}" wx:key="key"
+            <view class="row cust" wx:for="{{custList}}" wx:key="key" hover-class="is-press"
                   data-key="{{item.key}}" data-kind="{{item.kind}}" data-label="{{item.label}}" bindtap="toggleCust">
               <view class="cb {{selectedMap[item.key]?'on':''}}"></view>
               <view class="cust-main">
-                <view class="cust-name t-dark">{{item.label}}</view>
-                <view class="cust-sub t-light" wx:if="{{item.sub}}">{{item.sub}}</view>
+                <view class="cust-name">{{item.label}}</view>
+                <view class="cust-sub" wx:if="{{item.sub}}">{{item.sub}}</view>
               </view>
-              <text class="badge {{item.active?'badge-blue':''}}">{{item.kind==='eu' ? (item.active?'开过小程序':'未开过') : !item.removable ? '开过小程序' : (item.active?'领过奖励':'手动添加')}}</text>
-              <view class="frow-del" wx:if="{{item.removable}}" data-oid="{{item.key}}" data-label="{{item.label}}" catchtap="removeDirect">移除</view>
+              <text class="tag {{item.active?'tag-primary':''}}">{{item.kind==='eu' ? (item.active?'开过小程序':'未开过') : !item.removable ? '开过小程序' : (item.active?'领过奖励':'手动添加')}}</text>
+              <view class="frow-del" wx:if="{{item.removable}}" data-oid="{{item.key}}" data-label="{{item.label}}" catchtap="removeDirect" hover-class="is-press" hover-stop-propagation>移除</view>
             </view>
-            <view class="loadmore textbtn" wx:if="{{custHasMore}}" bindtap="loadMoreCustomers">{{custLoading ? '加载中…' : '加载更多'}}</view>
+            <view class="loadmore textbtn" wx:if="{{custHasMore}}" bindtap="loadMoreCustomers" hover-class="is-press">{{custLoading ? '加载中…' : '加载更多'}}</view>
           </block>
-          <!-- 空态三分：加载失败 / 加载中 / 搜索无结果 / 真没有客户，不许互相冒充 -->
+          <!-- 空态三分：加载失败 / 加载中 / 搜索无结果 / 真没有客户，不许互相冒充。
+               面板里的空态是一块内层浅青（方法与说明），圆角减一档 -->
           <view class="pempty" wx:elif="{{custError}}">
-            <view class="li li-alert pempty-icon"></view>
-            <view class="pempty-t1 t-dark">客户名单加载失败</view>
-            <view class="pempty-t2 t-light">网络开小差了，点下方按钮重试</view>
-            <button class="btn btn-fill pempty-btn" bindtap="searchCustomers">重新加载</button>
+            <view class="pempty-t1">客户名单加载失败</view>
+            <view class="pempty-t2">网络开小差了，点下方按钮重试</view>
+            <view class="pempty-acts"><button class="btn btn-secondary btn-md pempty-btn" hover-class="is-press" bindtap="searchCustomers">重新加载</button></view>
           </view>
-          <!-- 加载中：骨架行 ×3 占住客户行的位置（scenarios/04「骨架屏优先」） -->
-          <view class="pskel" wx:elif="{{!custLoaded}}" aria-label="正在加载客户">
-            <view class="sk-row hairline-b" wx:for="{{[1, 2, 3]}}" wx:key="*this">
-              <view class="skeleton-base sk-tail" style="width:40rpx;height:40rpx"></view>
+          <!-- 加载中：骨架行 ×3 占住客户行的位置（版式已知用骨架） -->
+          <view class="pskel" wx:elif="{{!custLoaded}}" aria-label="正在加载客户" aria-busy="true">
+            <view class="sk-row" wx:for="{{[1, 2, 3]}}" wx:key="*this">
+              <view class="skeleton-base sk-line" style="width:40rpx;height:40rpx;flex:none"></view>
               <view class="sk-main">
                 <view class="skeleton-base sk-line sk-line-w"></view>
                 <view class="skeleton-base sk-line sk-line-n"></view>
@@ -117,16 +110,16 @@
             </view>
           </view>
           <view class="pempty" wx:elif="{{custQ}}">
-            <view class="li li-users pempty-icon"></view>
-            <view class="pempty-t1 t-dark">没有匹配「{{custQ}}」的客户</view>
-            <view class="pempty-t2 t-light">备注名/客户名可模糊搜，openid 需要完整精确搜{{wecomOn ? '；新客户可先从企微同步' : ''}}</view>
+            <view class="pempty-t1">没有匹配「{{custQ}}」的客户</view>
+            <view class="pempty-t2">备注名/客户名可模糊搜，openid 需要完整精确搜{{wecomOn ? '；新客户可先从企微同步' : ''}}</view>
           </view>
           <view class="pempty" wx:else>
-            <view class="li li-users pempty-icon"></view>
-            <view class="pempty-t1 t-dark">还没有客户</view>
-            <view class="pempty-t2 t-light">{{wecomOn ? '从企微同步客户档案，或点「添加客户」录入 openid；客户领取过奖励也会自动进名单' : '点「添加客户」录入 openid（客户打开小程序领取页可复制）；客户领取过奖励也会自动进名单'}}</view>
-            <button class="btn btn-fill pempty-btn" wx:if="{{wecomOn}}" bindtap="syncCustomers">从企微同步</button>
-            <button class="btn btn-fill pempty-btn" bindtap="toggleDirectAdd">添加客户</button>
+            <view class="pempty-t1">还没有客户</view>
+            <view class="pempty-t2">{{wecomOn ? '从企微同步客户档案，或点「添加客户」录入 openid；客户领取过奖励也会自动进名单' : '点「添加客户」录入 openid（客户打开小程序领取页可复制）；客户领取过奖励也会自动进名单'}}</view>
+            <view class="pempty-acts">
+              <button class="btn btn-secondary btn-md pempty-btn" hover-class="is-press" wx:if="{{wecomOn}}" bindtap="syncCustomers">从企微同步</button>
+              <button class="btn btn-secondary btn-md pempty-btn" hover-class="is-press" bindtap="toggleDirectAdd">添加客户</button>
+            </view>
           </view>
 
           <view class="err" wx:if="{{sendErr}}">{{sendErr}}</view>
@@ -135,58 +128,66 @@
         <!-- 步骤2 · 逐人金额 -->
         <view class="panel" wx:if="{{step==='fill'}}">
           <view class="prow">
-            <view class="ptitle t-dark">每人金额与备注</view>
-            <view class="textbtn" bindtap="backPick">重选客户</view>
+            <view class="ptitle">每人金额与备注</view>
+            <view class="textbtn" bindtap="backPick" hover-class="is-press">重选客户</view>
           </view>
-          <view class="psub t-light">单人 {{minAmountYuan}}–{{perUserCapYuan}} 元；超过 ¥{{splitCapYuan}} 自动拆成多笔，客户逐笔确认收款；备注客户可见</view>
+          <view class="psub">单人 {{minAmountYuan}}–{{perUserCapYuan}} 元；超过 ¥{{splitCapYuan}} 自动拆成多笔，客户逐笔确认收款；备注客户可见</view>
           <!-- 进入本步即刷新额度（提交复核前还会再刷一次） -->
-          <view class="psub t-light" wx:if="{{period && period.hasQuota}}">可发额度剩余 <text class="num t-dark">{{period.neg ? '-' : ''}}¥{{period.remainingYuan}}</text>（{{period.updatedAt}} 更新）</view>
+          <view class="psub" wx:if="{{period && period.hasQuota}}">可发额度剩余 <text class="num psub-em">{{period.neg ? '−' : ''}}¥{{period.remainingYuan}}</text>（{{period.updatedAt}} 更新）</view>
 
           <view class="fillall">
             <input class="input fa-amt num" type="digit" placeholder="统一金额" placeholder-class="ph" value="{{fillAmount}}" bindinput="onFillAmount" />
             <input class="input fa-note" placeholder="统一备注" placeholder-class="ph" value="{{fillNote}}" bindinput="onFillNote" />
-            <view class="textbtn" bindtap="applyFill">填充全部</view>
+            <view class="textbtn" bindtap="applyFill" hover-class="is-press">填充全部</view>
           </view>
 
-          <!-- 每人两行：第一行姓名 + 金额，第二行备注 + 移除（原先四样挤一行，名字和备注都被压窄） -->
-          <view class="frow hairline-b {{errIdx === index ? 'frow-err' : ''}}" wx:for="{{selected}}" wx:key="key">
+          <!-- 每人两行：第一行姓名 + 金额，第二行备注 + 移除。frow-err 被 admin.js 用来滚到出错的那一行，类名不能改 -->
+          <view class="row frow {{errIdx === index ? 'frow-err' : ''}}" wx:for="{{selected}}" wx:key="key">
             <view class="frow-top">
-              <view class="frow-name t-dark">{{item.label}}</view>
+              <view class="frow-name">{{item.label}}</view>
               <input class="input frow-amt num" type="digit" placeholder="金额" placeholder-class="ph" value="{{item.amountYuan}}"
                      data-i="{{index}}" bindinput="onRowAmount" />
             </view>
             <view class="frow-bot">
               <input class="input frow-note" placeholder="备注（客户可见，选填）" placeholder-class="ph" value="{{item.note}}"
                      data-i="{{index}}" bindinput="onRowNote" />
-              <view class="frow-del" data-i="{{index}}" bindtap="removeRow" aria-label="移除">移除</view>
+              <view class="frow-del" data-i="{{index}}" bindtap="removeRow" hover-class="is-press" aria-label="移除">移除</view>
             </view>
           </view>
 
           <view class="err" wx:if="{{sendErr}}">{{sendErr}}</view>
         </view>
 
-        <!-- 步骤3 · 复核：原生确认弹窗写不下拆单与逐人明细，换成整页；确认/返回在底部操作栏 -->
+        <!-- 步骤3 · 复核：原生确认弹窗写不下拆单与逐人明细，换成整页；确认/返回在底部操作栏。
+             一屏一句判断 = 本批合计（n1），人数笔数次一级（n2） -->
         <view class="panel" wx:if="{{step==='review' && review}}">
-          <view class="ptitle t-dark">复核这批发放</view>
-          <view class="psub t-light">确认无误再发放。创建后客户在小程序内确认收款才到账，未领取不扣款</view>
+          <view class="ptitle">复核这批发放</view>
+          <view class="psub">确认无误再发放。创建后客户在小程序内确认收款才到账，未领取不扣款</view>
           <view class="rv-sum">
-            <view class="rv-cell"><view class="rv-k">人数</view><view class="rv-v num">{{review.people}}</view></view>
-            <view class="rv-cell"><view class="rv-k">笔数</view><view class="rv-v num">{{review.bills}}</view></view>
-            <view class="rv-cell rv-cell-wide"><view class="rv-k">合计</view><view class="rv-v num">¥{{review.totalYuan}}</view></view>
+            <view class="rv-k">合计</view>
+            <view class="rv-total n1"><text class="unit">¥</text>{{review.totalYuan}}</view>
+            <!-- 要先处理的提醒紧贴合计（留在出事的地方）：语义色加深档圆点记号，不铺语义色底 -->
+            <!-- 超出可发额度：不能发放（底部按钮禁用），说清差多少、怎么解开 -->
+            <view class="st st-fail st-line rv-warn" wx:if="{{review.block}}">超出可发额度 ¥{{review.overYuan}}，不能发放。到「记录」充值或校准后，返回修改再复核</view>
+            <!-- 唯一放行：按原内容重试上次没收到结果的那批（上次若已建成，额度已扣过，超出是重复计算） -->
+            <view class="st st-warn st-line rv-warn" wx:elif="{{review.over}}">本次合计超出可发额度 ¥{{review.overYuan}}。这是按原内容重试上次没收到结果的那批，不会重复创建，仍可提交</view>
+            <view class="st st-warn st-line rv-warn" wx:if="{{review.doubt==='same'}}">上次提交没有收到结果：本次按原内容重试，已创建的不会重复创建</view>
+            <view class="st st-fail st-line rv-warn" wx:if="{{review.doubt==='changed'}}">上次提交没有收到结果，可能已经创建成功。内容改过后再提交会作为新的一批发放，若上次已创建，客户会收到两批。建议先到「记录」核对</view>
+            <view class="rv-cells">
+              <view class="rv-cell"><view class="rv-k">人数</view><view class="rv-v n2">{{review.people}}</view></view>
+              <view class="rv-cell"><view class="rv-k">笔数</view><view class="rv-v n2">{{review.bills}}</view></view>
+            </view>
           </view>
-          <view class="rv-line">最大单人 <text class="num t-dark">¥{{review.maxYuan}}</text>（{{review.maxLabel}}）</view>
+          <view class="rv-line">最大单人 <text class="num rv-em">¥{{review.maxYuan}}</text>（{{review.maxLabel}}）</view>
           <block wx:if="{{review.splits.length}}">
             <view class="rv-line">超过 ¥{{review.splitCap}} 自动拆单，客户逐笔确认：</view>
             <view class="rv-sub" wx:for="{{review.splits}}" wx:key="*this">{{item}}</view>
           </block>
-          <view class="rv-line">可发额度 <text class="num t-dark" wx:if="{{review.quotaText}}">{{review.quotaText}}</text>（{{review.quotaNote}}）</view>
-          <view class="banner banner-warning rv-warn" wx:if="{{review.over}}">本次合计超出可发额度，请先确认商户余额充足</view>
-          <view class="banner banner-warning rv-warn" wx:if="{{review.doubt==='same'}}">上次提交没有收到结果：本次按原内容重试，已创建的不会重复创建</view>
-          <view class="banner banner-danger rv-warn" wx:if="{{review.doubt==='changed'}}">上次提交没有收到结果，可能已经创建成功。内容改过后再提交会作为新的一批发放，若上次已创建，客户会收到两批。建议先到「记录」核对</view>
+          <view class="rv-line">可发额度 <text class="num rv-em" wx:if="{{review.quotaText}}">{{review.quotaText}}</text>（{{review.quotaNote}}）</view>
           <view class="rv-list">
-            <view class="rv-row hairline-b" wx:for="{{review.list}}" wx:key="key">
-              <view class="rv-row-top"><text class="rv-name t-dark">{{item.label}}</text><text class="rv-amt num t-dark">¥{{item.yuan}}</text></view>
-              <view class="rv-note t-light" wx:if="{{item.note}}">{{item.note}}</view>
+            <view class="row rv-row" wx:for="{{review.list}}" wx:key="key">
+              <view class="rv-row-top"><text class="rv-name">{{item.label}}</text><text class="rv-amt num">¥{{item.yuan}}</text></view>
+              <view class="rv-note" wx:if="{{item.note}}">{{item.note}}</view>
             </view>
           </view>
           <view class="err" wx:if="{{sendErr}}">{{sendErr}}</view>
@@ -195,73 +196,77 @@
         <!-- 步骤4 · 结果 + 通知。三态：全部成功 / 部分成功 / 一笔都没建（后端允许 createdCount=0，
              那时绝不能出绿色"已创建"和"通知客户"——钱一分没发，只给原因和"返回修改"） -->
         <block wx:if="{{step==='result' && batchResult && !batchResult.createdCount}}">
-          <view class="banner banner-danger">
-            <view class="t-dark">这一批没有创建成功，钱没有发出</view>
-            <view class="t-body banner-line" wx:for="{{batchResult.errors}}" wx:key="i">{{item.label}}：{{item.error}}</view>
+          <!-- 一笔都没建：白表面上的失败结论（d3，危险加深档）+ 逐人原因 -->
+          <view class="notice">
+            <view class="notice-h">这一批没有创建成功，钱没有发出</view>
+            <view class="notice-d" wx:for="{{batchResult.errors}}" wx:key="i">{{item.label}}：{{item.error}}</view>
           </view>
-          <button class="btn btn-blue btn-block" bindtap="backToFill">返回修改</button>
-          <view class="textbtn center-self" bindtap="newBatch">放弃，重新选人</view>
+          <button class="btn btn-primary btn-block result-btn" hover-class="is-press" bindtap="backToFill">返回修改</button>
+          <view class="textbtn center-self" bindtap="newBatch" hover-class="is-press">放弃，重新选人</view>
         </block>
         <block wx:elif="{{step==='result' && batchResult}}">
-          <view class="banner {{batchResult.errors.length ? 'banner-warning' : 'banner-success'}}">
-            <text class="t-dark">{{batchResult.errors.length ? '部分创建成功：' : ''}}已为 <text class="num">{{batchResult.peopleCount}}</text> 人创建 <text class="num">{{batchResult.createdCount}}</text> 笔定向奖励{{batchResult.createdCount > batchResult.peopleCount ? '（大额已自动拆单，客户逐笔确认）' : ''}}，客户打开小程序即可领取</text>
-            <view class="banner-line t-body" wx:if="{{batchResult.duplicate}}">检测到该批此前已创建成功——以上为已建结果，未重复创建</view>
+          <!-- 结果是这一屏的判断：全部成功 = 标志青里程碑块（墨字，d3）；部分成功 = 白表面 + 警示记号 -->
+          <view class="outcome {{batchResult.errors.length ? 'outcome-partial' : ''}}">
+            <view class="st st-warn outcome-mark" wx:if="{{batchResult.errors.length}}">部分创建成功</view>
+            <view class="outcome-t">已为 <text class="num">{{batchResult.peopleCount}}</text> 人创建 <text class="num">{{batchResult.createdCount}}</text> 笔定向奖励</view>
+            <view class="outcome-d">{{batchResult.createdCount > batchResult.peopleCount ? '大额已自动拆单，客户逐笔确认；' : ''}}客户打开小程序即可领取</view>
+            <view class="outcome-d" wx:if="{{batchResult.duplicate}}">检测到该批此前已创建成功——以上为已建结果，未重复创建</view>
           </view>
-          <view class="banner banner-danger" wx:if="{{batchResult.errors.length}}">
-            <view class="t-dark">{{batchResult.errors.length}} 位客户没有全部发出，补发前请先核对：</view>
-            <view class="t-body banner-line" wx:for="{{batchResult.errors}}" wx:key="i">{{item.label}}：{{item.state}}——{{item.error}}</view>
+          <view class="notice" wx:if="{{batchResult.errors.length}}">
+            <view class="st st-fail st-line notice-t">{{batchResult.errors.length}} 位客户没有全部发出，补发前请先核对：</view>
+            <view class="notice-d" wx:for="{{batchResult.errors}}" wx:key="i">{{item.label}}：{{item.state}}——{{item.error}}</view>
           </view>
 
-          <view class="panel">
-            <view class="ptitle t-dark">通知客户来领</view>
+          <view class="panel notify-panel">
+            <view class="ptitle">通知客户来领</view>
             <!-- 首选：小程序直达通知（订阅消息服务通知，员工零操作，点开直达领取页）。
                  只覆盖此前在小程序点过「允许提醒」的客户；其余按原因列出走下方兜底 -->
             <block wx:if="{{subMiniOn}}">
-              <button class="btn btn-blue btn-block" bindtap="sendMiniNotify" loading="{{miniNotifying}}"
+              <button class="btn btn-primary btn-block" hover-class="is-press" bindtap="sendMiniNotify" loading="{{miniNotifying}}"
                       disabled="{{miniNotifying || (miniDone && !(miniNotify && miniNotify.failedCount))}}">{{miniDone ? (miniNotify && miniNotify.failedCount ? '重试失败 ' + miniNotify.failedCount + ' 人' : '直达通知已完成') : '小程序直达通知'}}</button>
-              <view class="psub t-light">直达仅覆盖开过小程序且点过「允许提醒」的客户，其余请用下方方式补发</view>
+              <view class="psub">直达仅覆盖开过小程序且点过「允许提醒」的客户，其余请用下方方式补发</view>
             </block>
             <!-- 通知报错共用一处展示：直达通知与企微群发的 sendErr 都落这里（企微块可能整块隐藏） -->
             <view class="err" wx:if="{{sendErr}}">{{sendErr}}</view>
             <!-- 企微群发只对企微客户有意义：本批全是直连客户时整块隐藏 -->
             <block wx:if="{{wecomOn && batchResult.targets.length}}">
               <textarea class="input notify-ta" value="{{notifyText}}" bindinput="onNotifyText" maxlength="200" auto-height />
-              <button class="btn btn-blue btn-block" bindtap="sendNotify" loading="{{notifying}}"
+              <button class="btn {{subMiniOn ? 'btn-secondary' : 'btn-primary'}} btn-block" hover-class="is-press" bindtap="sendNotify" loading="{{notifying}}"
                       disabled="{{notifyDone && !(notifyResult && notifyResult.failCount)}}">{{notifyDone ? (notifyResult && notifyResult.failCount ? '重试 ' + notifyResult.failCount + ' 位未进入群发的客户' : '已创建群发，去企微点发送') : '企微群发通知'}}</button>
-              <view class="psub t-light" wx:if="{{!notifyDone}}">任务按「谁跟进谁发」派给对应员工，在企微「消息-客户联系」提醒里点一次发送即可送达</view>
-              <view class="psub t-light" wx:if="{{!myWecomUserid}}">提示：让超管在「员工」里给你配置企微账号后，你跟进的客户任务会直接派给你</view>
+              <view class="psub" wx:if="{{!notifyDone}}">任务按「谁跟进谁发」派给对应员工，在企微「消息-客户联系」提醒里点一次发送即可送达</view>
+              <view class="psub" wx:if="{{!myWecomUserid}}">提示：让超管在「员工」里给你配置企微账号后，你跟进的客户任务会直接派给你</view>
             </block>
-            <view class="psub t-light" wx:else>{{wecomOn ? '本批为直连客户：用上方直达通知，或把领取入口转发到客户聊天' : '未连接企微，可直接把小程序转发到客户聊天'}}</view>
-            <!-- 通知结果：按客户去向分四类，每人只归一类，各给下一步 -->
+            <view class="psub" wx:else>{{wecomOn ? '本批为直连客户：用上方直达通知，或把领取入口转发到客户聊天' : '未连接企微，可直接把小程序转发到客户聊天'}}</view>
+            <!-- 通知结果：按客户去向分类，每人只归一类，各给下一步（行表：标签 / 说明 / 尾值） -->
             <view class="nsum" wx:if="{{notifySum}}">
-              <view class="nsum-row" wx:if="{{notifySum.direct}}">
-                <view class="nsum-h"><text class="t-dark">已直达</text><text class="num t-dark">{{notifySum.direct}} 人</text></view>
+              <view class="row nsum-row" wx:if="{{notifySum.direct}}">
+                <view class="nsum-h"><text>已直达</text><text class="num">{{notifySum.direct}} 人</text></view>
                 <view class="nsum-d">微信服务通知已送达，客户点开即到领取页：{{notifySum.directText}}</view>
               </view>
-              <view class="nsum-row" wx:if="{{notifySum.wecom}}">
-                <view class="nsum-h"><text class="t-dark">企微待员工发送</text><text class="num t-dark">{{notifySum.wecom}} 人</text></view>
+              <view class="row nsum-row" wx:if="{{notifySum.wecom}}">
+                <view class="nsum-h"><text>企微待员工发送</text><text class="num">{{notifySum.wecom}} 人</text></view>
                 <view class="nsum-d" wx:for="{{notifyResult.lines}}" wx:key="*this">{{item}}</view>
                 <view class="nsum-d">跟进员工在企微「消息-客户联系」提醒里点一次【发送】才会送达</view>
               </view>
-              <view class="nsum-row" wx:if="{{notifySum.unknown}}">
-                <view class="nsum-h"><text class="t-dark">企微结果未知</text><text class="num t-dark">{{notifySum.unknown}} 人</text></view>
+              <view class="row nsum-row" wx:if="{{notifySum.unknown}}">
+                <view class="nsum-h"><text>企微结果未知</text><text class="num">{{notifySum.unknown}} 人</text></view>
                 <view class="nsum-d">提交超时，群发任务可能已建、也可能没建：{{notifySum.unknownText}}</view>
                 <view class="nsum-d">请先到企微「客户联系」核对；确认没有任务再转发补发，免得重复打扰</view>
               </view>
-              <view class="nsum-row" wx:if="{{notifySum.failed}}">
-                <view class="nsum-h"><text class="t-danger">发送失败</text><text class="num t-danger">{{notifySum.failed}} 人</text></view>
+              <view class="row nsum-row" wx:if="{{notifySum.failed}}">
+                <view class="nsum-h t-danger"><text>发送失败</text><text class="num">{{notifySum.failed}} 人</text></view>
                 <view class="nsum-d">{{notifySum.failedText}}</view>
                 <view class="nsum-d">授权已退回，点上方「重试失败」再发一次</view>
               </view>
-              <view class="nsum-row" wx:if="{{notifySum.forward}}">
-                <view class="nsum-h"><text class="t-dark">需转发</text><text class="num t-dark">{{notifySum.forward}} 人</text></view>
+              <view class="row nsum-row" wx:if="{{notifySum.forward}}">
+                <view class="nsum-h"><text>需转发</text><text class="num">{{notifySum.forward}} 人</text></view>
                 <view class="nsum-d">没订阅提醒、没开过小程序或没进群发：{{notifySum.forwardText}}</view>
                 <view class="nsum-d">用下方按钮把领取入口转发到他们的聊天</view>
               </view>
             </view>
-            <button class="btn btn-fill btn-block" open-type="share">转发领取入口给客户</button>
-            <view class="textbtn center-self" wx:if="{{batchResult.batchId}}" bindtap="viewBatchLedger">查看本批台账</view>
-            <view class="textbtn center-self" bindtap="newBatch">再发一批</view>
+            <button class="btn btn-secondary btn-block share-btn" hover-class="is-press" open-type="share">转发领取入口给客户</button>
+            <view class="textbtn center-self" wx:if="{{batchResult.batchId}}" bindtap="viewBatchLedger" hover-class="is-press">查看本批台账</view>
+            <view class="textbtn center-self" bindtap="newBatch" hover-class="is-press">再发一批</view>
           </view>
         </block>
       </block>
@@ -281,51 +286,51 @@
           <text class="flabel">姓名</text>
           <input class="input finput" placeholder="单笔 2000 元及以上必填实名" placeholder-class="ph" value="{{name}}" bindinput="onName" />
         </view>
-        <button class="btn btn-blue btn-block" bindtap="onGenerate" loading="{{loading}}" disabled="{{loading}}">生成奖励</button>
+        <button class="btn {{reward ? 'btn-secondary' : 'btn-primary'}} btn-block quick-btn" hover-class="is-press" bindtap="onGenerate" loading="{{loading}}" disabled="{{loading}}">生成奖励</button>
         <view class="err" wx:if="{{error}}">{{error}}</view>
         <block wx:if="{{reward}}">
-          <view class="banner banner-success reward-ok">
-            <text class="t-dark">已生成 <text class="num">¥{{reward.amountText}}</text>{{reward.remark ? ' · ' + reward.remark : ''}}，转发给客户即可领取</text>
+          <!-- 生成好了 = 标志青里程碑块；此后「生成奖励」退为次按钮，转发是唯一的主按钮 -->
+          <view class="outcome reward-ok">
+            <view class="outcome-t">已生成 <text class="num">¥{{reward.amountText}}</text>{{reward.remark ? ' · ' + reward.remark : ''}}</view>
+            <view class="outcome-d">转发给客户即可领取</view>
           </view>
-          <button class="btn btn-blue btn-block" open-type="share">转发给客户领取</button>
+          <button class="btn btn-primary btn-block" hover-class="is-press" open-type="share">转发给客户领取</button>
         </block>
       </view>
     </block>
 
     <!-- ================= 记录 ================= -->
     <block wx:if="{{tab==='records'}}">
-      <!-- 可发额度（运行式余额）：充值累加携带结余；员工看着剩余往下走（发放员/管理员都可用） -->
-      <view class="block block-primary bal" wx:if="{{period}}">
-        <view class="bal-top">
-          <text class="bal-label">可发额度 · 剩余</text>
-          <!-- 台账计算器，发放员/管理员都可记（后端同样只要求 isAdmin） -->
-          <view class="bal-actions">
-            <text class="bal-refresh" data-mode="add" bindtap="openQuotaPanel">充值</text>
-            <text class="bal-refresh" data-mode="set" bindtap="openQuotaPanel">校准</text>
-          </view>
-        </view>
+      <!-- 可发额度（运行式余额）= 深青证据块：n1 剩余 + 一句口径；底部一条线隔出两个动作（校准 / 充值）。
+           台账计算器，发放员/管理员都可记（后端同样只要求 isAdmin） -->
+      <view class="block block-deep bal" wx:if="{{period}}">
+        <view class="bal-label">可发额度 · 剩余</view>
         <block wx:if="{{period.hasQuota}}">
-          <view class="bal-num num">{{period.neg ? '-' : ''}}¥{{period.remainingYuan}}</view>
+          <view class="bal-num n1">{{period.neg ? '−' : ''}}<text class="unit">¥</text>{{period.remainingYuan}}</view>
           <view class="bal-sub">自上次充值或校准已发放 ¥{{period.paidSinceYuan}}{{period.neg ? ' · 待领取已超出账户余额，请充值' : period.low ? ' · 额度已用尽，请充值' : ''}}</view>
         </block>
         <block wx:else>
-          <view class="bal-num num">— —</view>
+          <view class="bal-num n1">— —</view>
           <view class="bal-sub">点「充值」记入账户余额，之后自动算剩余</view>
         </block>
+        <view class="bal-foot">
+          <button class="btn btn-sm btn-ghost-on-deep bal-btn" hover-class="is-press" data-mode="set" bindtap="openQuotaPanel">校准</button>
+          <button class="btn btn-sm btn-on-deep bal-btn" hover-class="is-press" data-mode="add" bindtap="openQuotaPanel">充值</button>
+        </view>
       </view>
 
       <!-- 充值/校准输入面板：页面内自绘（桌面端小程序不支持 showModal editable，弹窗无输入框） -->
       <view class="panel quota-panel" wx:if="{{quotaPanel}}">
         <view class="prow">
-          <view class="ptitle t-dark">{{quotaPanel.mode === 'set' ? '校准余额' : '充值'}}</view>
-          <view class="textbtn textbtn-plain" bindtap="cancelQuotaPanel">取消</view>
+          <view class="ptitle">{{quotaPanel.mode === 'set' ? '校准余额' : '充值'}}</view>
+          <view class="textbtn textbtn-plain" bindtap="cancelQuotaPanel" hover-class="is-press">取消</view>
         </view>
-        <view class="psub t-light">{{quotaPanel.mode === 'set' ? '填商户平台的可用余额（不含冻结）。校准后剩余 = 可用余额 − 待领取（已发出、客户还没领的钱），账一直准的话数字不会变' : '充值金额会累加进可发额度（自动携带上期结余）'}}</view>
+        <view class="psub">{{quotaPanel.mode === 'set' ? '填商户平台的可用余额（不含冻结）。校准后剩余 = 可用余额 − 待领取（已发出、客户还没领的钱），账一直准的话数字不会变' : '充值金额会累加进可发额度（自动携带上期结余）'}}</view>
         <view class="quota-row">
           <input class="input quota-input num" type="digit" focus="{{true}}"
                  placeholder="{{quotaPanel.mode === 'set' ? '商户可用余额(元)' : '本次充值金额(元)'}}" placeholder-class="ph"
                  value="{{quotaPanel.value}}" bindinput="onQuotaInput" bindconfirm="confirmQuotaPanel" />
-          <button class="btn btn-blue quota-btn" bindtap="confirmQuotaPanel" loading="{{quotaSaving}}" disabled="{{quotaSaving}}">{{quotaPanel.mode === 'set' ? '设为剩余' : '加进额度'}}</button>
+          <button class="btn btn-primary quota-btn" hover-class="is-press" bindtap="confirmQuotaPanel" loading="{{quotaSaving}}" disabled="{{quotaSaving}}">{{quotaPanel.mode === 'set' ? '设为剩余' : '加进额度'}}</button>
         </view>
       </view>
 
@@ -333,33 +338,33 @@
       <view class="searchbar rec-search">
         <input class="input searchinput" placeholder="搜备注 / 客户名 / 金额 / 单号" placeholder-class="ph" value="{{recQ}}"
                bindinput="onRecQ" confirm-type="search" bindconfirm="searchRecords" />
-        <button class="btn btn-blue searchbtn" bindtap="searchRecords">搜索</button>
+        <button class="btn btn-primary searchbtn" hover-class="is-press" bindtap="searchRecords">搜索</button>
       </view>
 
       <!-- 台账筛选：状态 × 时间范围（天数窗/自然月互斥）；点客户名可只看单人往来。
            状态 6 个放一行横滑（折行时单独掉一个「失败/撤回」，筛选区占三行）；出血到屏幕边，
            右缘露半个 chip 提示还能滑 -->
       <scroll-view class="fscroll" scroll-x enable-flex enhanced show-scrollbar="{{false}}">
-        <view class="fchip {{recFilter.status==='all'?'on':''}}" data-k="status" data-v="all" bindtap="pickRecFilter">全部</view>
-        <view class="fchip {{recFilter.status==='created'?'on':''}}" data-k="status" data-v="created" bindtap="pickRecFilter">待领取</view>
-        <view class="fchip {{recFilter.status==='expired'?'on':''}}" data-k="status" data-v="expired" bindtap="pickRecFilter">已过期</view>
-        <view class="fchip {{recFilter.status==='waiting'?'on':''}}" data-k="status" data-v="waiting" bindtap="pickRecFilter">待确认</view>
-        <view class="fchip {{recFilter.status==='success'?'on':''}}" data-k="status" data-v="success" bindtap="pickRecFilter">已到账</view>
-        <view class="fchip {{recFilter.status==='failed'?'on':''}}" data-k="status" data-v="failed" bindtap="pickRecFilter">失败/撤回</view>
+        <view class="chip {{recFilter.status==='all'?'on':''}}" hover-class="is-press" data-k="status" data-v="all" bindtap="pickRecFilter">全部</view>
+        <view class="chip {{recFilter.status==='created'?'on':''}}" hover-class="is-press" data-k="status" data-v="created" bindtap="pickRecFilter">待领取</view>
+        <view class="chip {{recFilter.status==='expired'?'on':''}}" hover-class="is-press" data-k="status" data-v="expired" bindtap="pickRecFilter">已过期</view>
+        <view class="chip {{recFilter.status==='waiting'?'on':''}}" hover-class="is-press" data-k="status" data-v="waiting" bindtap="pickRecFilter">待确认</view>
+        <view class="chip {{recFilter.status==='success'?'on':''}}" hover-class="is-press" data-k="status" data-v="success" bindtap="pickRecFilter">已到账</view>
+        <view class="chip {{recFilter.status==='failed'?'on':''}}" hover-class="is-press" data-k="status" data-v="failed" bindtap="pickRecFilter">失败/撤回</view>
         <view class="fscroll-end"></view>
       </scroll-view>
-      <view class="fchips">
-        <view class="fchip {{recFilter.days===0 && !recFilter.month ?'on':''}}" data-k="days" data-v="0" bindtap="pickRecFilter">全部时间</view>
-        <view class="fchip {{recFilter.days===7?'on':''}}" data-k="days" data-v="7" bindtap="pickRecFilter">近7天</view>
-        <view class="fchip {{recFilter.days===30?'on':''}}" data-k="days" data-v="30" bindtap="pickRecFilter">近30天</view>
+      <view class="chips">
+        <view class="chip {{recFilter.days===0 && !recFilter.month ?'on':''}}" hover-class="is-press" data-k="days" data-v="0" bindtap="pickRecFilter">全部时间</view>
+        <view class="chip {{recFilter.days===7?'on':''}}" hover-class="is-press" data-k="days" data-v="7" bindtap="pickRecFilter">近7天</view>
+        <view class="chip {{recFilter.days===30?'on':''}}" hover-class="is-press" data-k="days" data-v="30" bindtap="pickRecFilter">近30天</view>
         <picker mode="date" fields="month" value="{{recFilter.month}}" bindchange="pickRecMonth">
-          <view class="fchip {{recFilter.month?'on':''}}">{{recFilter.month || '按月'}}</view>
+          <view class="chip {{recFilter.month?'on':''}}" hover-class="is-press">{{recFilter.month || '按月'}}</view>
         </picker>
-        <!-- 生效中的附加筛选：点一下清除。清除图标与全站同一套线性图标（不用 ✕ 字符） -->
-        <view class="fchip fchip-target" wx:if="{{recFilter.month}}" bindtap="clearRecMonth" aria-label="清除月份"><view class="ic-x"></view></view>
-        <view class="fchip fchip-target" wx:if="{{recFilter.q}}" bindtap="clearRecQ">「{{recFilter.q}}」<view class="ic-x"></view></view>
-        <view class="fchip fchip-target" wx:if="{{recFilter.target || recFilter.targetOpenid}}" bindtap="clearCustomerFilter">{{recFilter.targetLabel}}<view class="ic-x"></view></view>
-        <view class="fchip fchip-target" wx:if="{{recFilter.batch}}" bindtap="clearBatchFilter">本批发放<view class="ic-x"></view></view>
+        <!-- 生效中的附加筛选：主色底 + 一个画出来的 ×，点一下清除（不用 ✕ 字符） -->
+        <view class="chip on chip-x" wx:if="{{recFilter.month}}" hover-class="is-press" bindtap="clearRecMonth" aria-label="清除月份"><view class="ic-x"></view></view>
+        <view class="chip on chip-x" wx:if="{{recFilter.q}}" hover-class="is-press" bindtap="clearRecQ">「{{recFilter.q}}」<view class="ic-x"></view></view>
+        <view class="chip on chip-x" wx:if="{{recFilter.target || recFilter.targetOpenid}}" hover-class="is-press" bindtap="clearCustomerFilter">{{recFilter.targetLabel}}<view class="ic-x"></view></view>
+        <view class="chip on chip-x" wx:if="{{recFilter.batch}}" hover-class="is-press" bindtap="clearBatchFilter">本批发放<view class="ic-x"></view></view>
       </view>
 
       <!-- 失败筛选下的知悉出口：处理完标记一下，角标/主页警示清零；历史单永远可查。
@@ -367,26 +372,25 @@
            不该允许一键推进全局水位把被筛掉的失败也悄悄知悉掉 -->
       <view class="alert-actions"
             wx:if="{{recFilter.status === 'failed' && failAlert > 0 && !recFilter.days && !recFilter.month && !recFilter.target && !recFilter.targetOpenid && !recFilter.batch && !recFilter.q}}">
-        <view class="textbtn" bindtap="ackAlerts">标记 {{failAlert}} 笔异常为已处理</view>
+        <view class="textbtn" bindtap="ackAlerts" hover-class="is-press">标记 {{failAlert}} 笔异常为已处理</view>
       </view>
 
-      <!-- 汇总（跟随筛选：范围内合计/动账，即期间或单人资金消耗） -->
-      <view class="statrow" wx:if="{{stats}}">
-        <view class="block tint-primary stat-main">
-          <view class="sm-label">{{recFilter.target || recFilter.targetOpenid ? recFilter.targetLabel + ' · 往来合计' : '发放合计'}}</view>
-          <view class="sm-num num">¥{{statsTotalYuan}}</view>
-          <view class="sm-sub">共 {{stats.total}} 笔 · 已到账 {{stats.success_count}} 笔 · 实际动账 ¥{{statsPaidYuan}}{{stats.cancelled_count > 0 ? ' · 撤回 ' + stats.cancelled_count + ' 笔' : ''}}</view>
+      <!-- 汇总 = 浅青块（方法与范围：跟随筛选的口径——范围内合计/动账，即期间或单人资金消耗）；数字只用 n2，额度块的 n1 是这页唯一的主数字。
+           两个在途状态分开数：待领取 = 客户还没点领取（未过期）；待确认 = 已发起转账、客户还没在微信里确认 -->
+      <view class="block tint stats" wx:if="{{stats}}">
+        <view class="stats-top">
+          <text class="sm-label">{{recFilter.target || recFilter.targetOpenid ? recFilter.targetLabel + ' · 往来合计' : '发放合计'}}</text>
+          <text class="sm-num n2">¥{{statsTotalYuan}}</text>
         </view>
-        <!-- 两个在途状态分开数：待领取 = 客户还没点领取（未过期）；待确认 = 已发起转账、客户还没在微信里确认。
-             原先这里标"待确认"、数的却是两者之和 -->
-        <view class="stat-side">
-          <view class="block tint-primary stat-mini">
+        <view class="sm-sub">共 {{stats.total}} 笔 · 已到账 {{stats.success_count}} 笔 · 实际动账 ¥{{statsPaidYuan}}{{stats.cancelled_count > 0 ? ' · 撤回 ' + stats.cancelled_count + ' 笔' : ''}}</view>
+        <view class="stat-pair">
+          <view class="stat-cell">
             <view class="smm-label">待领取</view>
-            <view class="smm-num num t-dark">{{stats.unclaimedText}}</view>
+            <view class="smm-num n2">{{stats.unclaimedText}}</view>
           </view>
-          <view class="block tint-accent stat-mini">
+          <view class="stat-cell">
             <view class="smm-label">待确认</view>
-            <view class="smm-num num t-dark">{{stats.claimedText}}</view>
+            <view class="smm-num n2">{{stats.claimedText}}</view>
           </view>
         </view>
       </view>
@@ -394,39 +398,40 @@
       <!-- 批次视图专属：整批撤回未到账（一次确认 + 逐笔回执，不用 30 次逐条点）。
            可撤回 = 未领取（含已过期）+ 待确认，正是批量撤回接口实际处理的两类 -->
       <view class="batch-actions" wx:if="{{recFilter.batch && stats && stats.revocable_count > 0}}">
-        <view class="textbtn textbtn-danger" bindtap="revokeBatch">撤回本批未到账（{{stats.revocable_count}} 笔）</view>
+        <view class="textbtn textbtn-danger" bindtap="revokeBatch" hover-class="is-press">撤回本批未到账（{{stats.revocable_count}} 笔）</view>
       </view>
 
-      <!-- 记录：画布直排 + 发丝线（不一条一卡）；点行看详情（rid/微信单号，对账取证用） -->
+      <!-- 记录：行表收进一张白卡（不一条一卡）；点行看详情（rid/微信单号，对账取证用） -->
       <block wx:if="{{records.length}}">
-        <view class="rec hairline-b" wx:for="{{records}}" wx:key="rid" data-i="{{index}}" bindtap="showRecDetail">
-          <view class="rec-l">
-            <view class="rec-line1">
-              <text class="rec-amt num t-dark">¥{{item.yuan}}</text>
-              <text class="rec-who t-light" wx:if="{{item.who}}" data-eu="{{item.eu}}" data-oid="{{item.oid}}" data-label="{{item.who}}" catchtap="filterByCustomer">{{item.who}}</text>
+        <view class="rows">
+          <view class="row rec" wx:for="{{records}}" wx:key="rid" data-i="{{index}}" bindtap="showRecDetail" hover-class="is-press">
+            <view class="rec-l">
+              <view class="rec-line1">
+                <text class="rec-amt n2">¥{{item.yuan}}</text>
+                <view class="rec-who" wx:if="{{item.who}}" data-eu="{{item.eu}}" data-oid="{{item.oid}}" data-label="{{item.who}}" catchtap="filterByCustomer" hover-class="is-press" hover-stop-propagation>{{item.who}}</view>
+              </view>
+              <view class="rec-remark">{{item.sub}}</view>
             </view>
-            <view class="rec-remark t-light">{{item.sub}}</view>
-          </view>
-          <!-- 右列固定两层，与左列两行对齐：时间 + 状态 / 操作（查看本批、撤回并成一行）。
-               原先四样竖排，带操作的行比普通行高出一倍 -->
-          <view class="rec-r">
-            <view class="rec-meta">
-              <text class="rec-time t-light num">{{item.createdAt}}</text>
-              <text class="badge {{item.cls==='ok'?'badge-success':item.cls==='fail'?'badge-danger':item.cls==='muted'?'badge-muted':'badge-warning'}}">{{item.statusText}}</text>
-            </view>
-            <view class="rec-acts" wx:if="{{(item.batchId && !recFilter.batch) || item.canRevoke}}">
-              <text class="rec-batch" wx:if="{{item.batchId && !recFilter.batch}}" data-batch="{{item.batchId}}" catchtap="filterByBatch">查看本批</text>
-              <text class="rec-revoke" wx:if="{{item.canRevoke}}" data-rid="{{item.rid}}" data-yuan="{{item.yuan}}" data-who="{{item.who}}" catchtap="revokeReward">撤回</text>
+            <!-- 右列固定两层，与左列两行对齐：时间 + 状态 / 操作（查看本批、撤回并成一行） -->
+            <view class="rec-r">
+              <view class="rec-meta">
+                <text class="rec-time num">{{item.createdAt}}</text>
+                <text class="st st-{{item.cls}}">{{item.statusText}}</text>
+              </view>
+              <view class="rec-acts" wx:if="{{(item.batchId && !recFilter.batch) || item.canRevoke}}">
+                <view class="rec-batch" wx:if="{{item.batchId && !recFilter.batch}}" data-batch="{{item.batchId}}" catchtap="filterByBatch" hover-class="is-press" hover-stop-propagation>查看本批</view>
+                <view class="rec-revoke" wx:if="{{item.canRevoke}}" data-rid="{{item.rid}}" data-yuan="{{item.yuan}}" data-who="{{item.who}}" catchtap="revokeReward" hover-class="is-press" hover-stop-propagation>撤回</view>
+              </view>
             </view>
           </view>
         </view>
-        <view class="loadmore textbtn" wx:if="{{recHasMore}}" bindtap="loadMoreRecords">{{recLoading ? '加载中…' : '加载更多'}}</view>
+        <view class="loadmore textbtn" wx:if="{{recHasMore}}" bindtap="loadMoreRecords" hover-class="is-press">{{recLoading ? '加载中…' : '加载更多'}}</view>
       </block>
       <!-- 三态：加载失败（可重试）/ 加载中 / 真空，绝不用空态冒充前两者 -->
       <state-view wx:elif="{{recError}}" icon="alert" title="记录加载失败" desc="网络开小差了，点下方按钮重试" btn-text="重新加载" bind:action="reloadRecords" />
-      <!-- 加载中：骨架行 ×3 对齐记录行（金额行 + 备注行 + 右侧徽标位） -->
-      <view class="list-skel" wx:elif="{{!recLoaded}}" aria-label="正在加载记录">
-        <view class="sk-row hairline-b" wx:for="{{[1, 2, 3]}}" wx:key="*this">
+      <!-- 加载中：骨架行 ×3 对齐记录行（金额行 + 备注行 + 右侧状态位） -->
+      <view class="rows list-skel" wx:elif="{{!recLoaded}}" aria-label="正在加载记录" aria-busy="true">
+        <view class="row sk-row" wx:for="{{[1, 2, 3]}}" wx:key="*this">
           <view class="sk-main">
             <view class="skeleton-base sk-line sk-line-w"></view>
             <view class="skeleton-base sk-line sk-line-n"></view>
@@ -441,41 +446,41 @@
 
     <!-- ================= 客户（等级总榜） ================= -->
     <block wx:if="{{tab==='rank'}}">
-      <view class="panel rank-head">
-        <view class="prow">
-          <view class="ptitle t-dark">客户等级榜</view>
-          <view class="psub t-light" style="margin-top:0">共 {{rankTotal}} 位</view>
-        </view>
-        <view class="psub t-light">按累计到账排序 · 点任意一行查看该客户的资金往来</view>
+      <view class="sec sec-flat rank-head">
+        <text class="sec-t">客户等级榜</text>
+        <text class="sec-v">共 <text class="num">{{rankTotal}}</text> 位</text>
       </view>
+      <view class="sec-note">按累计到账排序 · 点任意一行查看该客户的资金往来</view>
 
       <!-- 等级分布 + 筛选：点某级只看该级客户，再点取消 -->
-      <view class="lvchips">
-        <view class="lvchip {{rankLv==null?'on':''}}" data-lv="" bindtap="pickRankLv">全部 {{rankTotal}}</view>
-        <view class="lvchip {{rankLv===item.lv?'on':''}}" wx:for="{{rankDist}}" wx:key="lv" data-lv="{{item.lv}}" bindtap="pickRankLv">
+      <view class="chips lvchips">
+        <view class="chip {{rankLv==null?'on':''}}" hover-class="is-press" data-lv="" bindtap="pickRankLv">全部 <text class="num">{{rankTotal}}</text></view>
+        <view class="chip {{rankLv===item.lv?'on':''}}" hover-class="is-press" wx:for="{{rankDist}}" wx:key="lv" data-lv="{{item.lv}}" bindtap="pickRankLv">
           LV{{item.lv}}·{{item.name}} <text class="lvchip-n num">{{item.count}}</text>
         </view>
       </view>
       <block wx:if="{{rank.length}}">
-        <view class="rk hairline-b" wx:for="{{rank}}" wx:key="rank"
-              data-eu="{{item.eu}}" data-oid="{{item.openid}}" data-label="{{item.name}}" bindtap="goCustomerLedger">
-          <text class="rk-no num {{item.rank<=3?'rk-top':''}}">{{item.rank}}</text>
-          <view class="rk-main">
-            <view class="rk-name t-dark">
-              <text class="rk-nm">{{item.name}}</text>
-              <text class="badge badge-blue">LV{{item.lv}} · {{item.lvName}}</text>
+        <view class="rows">
+          <view class="row rk" wx:for="{{rank}}" wx:key="rank" hover-class="is-press"
+                data-eu="{{item.eu}}" data-oid="{{item.openid}}" data-label="{{item.name}}" bindtap="goCustomerLedger">
+            <text class="rk-no n2 {{item.rank<=3?'rk-top':''}}">{{item.rank}}</text>
+            <view class="rk-main">
+              <view class="rk-name">
+                <text class="rk-nm">{{item.name}}</text>
+                <text class="tag tag-primary">LV{{item.lv}} · {{item.lvName}}</text>
+              </view>
+              <view class="rk-sub">合作 {{item.count}} 次</view>
             </view>
-            <view class="rk-sub t-light">合作 {{item.count}} 次</view>
+            <text class="rk-amt n2">¥{{item.totalYuanText}}</text>
           </view>
-          <text class="rk-amt num t-dark">¥{{item.totalYuanText}}</text>
         </view>
-        <view class="loadmore textbtn" wx:if="{{rankHasMore}}" bindtap="loadMoreRank">{{rankLoading ? '加载中…' : '加载更多'}}</view>
+        <view class="loadmore textbtn" wx:if="{{rankHasMore}}" bindtap="loadMoreRank" hover-class="is-press">{{rankLoading ? '加载中…' : '加载更多'}}</view>
       </block>
       <state-view wx:elif="{{rankError}}" icon="alert" title="榜单加载失败" desc="网络开小差了，点下方按钮重试" btn-text="重新加载" bind:action="reloadRank" />
       <!-- 加载中：骨架行 ×3 对齐榜单行（名次位 + 名字/次数 + 右侧金额位） -->
-      <view class="list-skel" wx:elif="{{!rankLoaded}}" aria-label="正在加载榜单">
-        <view class="sk-row hairline-b" wx:for="{{[1, 2, 3]}}" wx:key="*this">
-          <view class="skeleton-base sk-tail" style="width:56rpx;height:40rpx"></view>
+      <view class="rows list-skel" wx:elif="{{!rankLoaded}}" aria-label="正在加载榜单" aria-busy="true">
+        <view class="row sk-row" wx:for="{{[1, 2, 3]}}" wx:key="*this">
+          <view class="skeleton-base sk-line" style="width:48rpx;height:40rpx;flex:none"></view>
           <view class="sk-main">
             <view class="skeleton-base sk-line sk-line-w"></view>
             <view class="skeleton-base sk-line sk-line-n"></view>
@@ -490,11 +495,11 @@
     <block wx:if="{{tab==='staff' && isSuper}}">
       <view class="panel">
         <view class="prow">
-          <view class="ptitle t-dark">{{editingOpenid ? '编辑员工' : '添加发放员'}}</view>
-          <view class="textbtn textbtn-plain" wx:if="{{editingOpenid}}" bindtap="cancelEditStaff">取消编辑</view>
+          <view class="ptitle">{{editingOpenid ? '编辑员工' : '添加发放员'}}</view>
+          <view class="textbtn textbtn-plain" wx:if="{{editingOpenid}}" bindtap="cancelEditStaff" hover-class="is-press">取消编辑</view>
         </view>
-        <view class="psub t-light" wx:if="{{!editingOpenid}}">员工打开本小程序复制他的编号发你，粘贴到这里；添加后立即生效</view>
-        <view class="psub t-light" wx:else>保存将覆盖备注名/角色/企微账号（企微账号留空则保留原值），并重新启用该员工</view>
+        <view class="psub" wx:if="{{!editingOpenid}}">员工打开本小程序复制他的编号发你，粘贴到这里；添加后立即生效</view>
+        <view class="psub" wx:else>保存将覆盖备注名/角色/企微账号（企微账号留空则保留原值），并重新启用该员工</view>
         <view class="field">
           <text class="flabel">编号</text>
           <input class="input finput" placeholder="粘贴员工 openid" placeholder-class="ph" value="{{newOpenid}}" bindinput="onNewOpenid" disabled="{{!!editingOpenid}}" />
@@ -507,38 +512,40 @@
           <text class="flabel">企微账号</text>
           <input class="input finput" placeholder="员工的企微userid（选填）" placeholder-class="ph" value="{{newWecomUserid}}" bindinput="onNewWecomUserid" />
         </view>
-        <view class="psub t-light">配置后：该员工发起群发时，他跟进的客户任务会直接派给他本人（企微后台「通讯录-成员-账号」可查）</view>
+        <view class="psub field-note">配置后：该员工发起群发时，他跟进的客户任务会直接派给他本人（企微后台「通讯录-成员-账号」可查）</view>
         <view class="field">
           <text class="flabel">角色</text>
-          <view class="chips chips-inline">
-            <view class="chip {{newRole==='operator'?'on':''}}" data-role="operator" bindtap="pickRole">发放员</view>
-            <view class="chip {{newRole==='super'?'on':''}}" data-role="super" bindtap="pickRole">超管</view>
+          <!-- 两个短选项、只能选一个 → 分段 -->
+          <view class="seg role-seg" aria-role="radiogroup" aria-label="角色">
+            <view class="seg-k {{newRole==='super' ? 'at-1' : ''}}"></view>
+            <view class="seg-i {{newRole==='operator'?'on':''}}" data-role="operator" bindtap="pickRole" hover-class="is-press" aria-role="radio" aria-checked="{{newRole==='operator'}}">发放员</view>
+            <view class="seg-i {{newRole==='super'?'on':''}}" data-role="super" bindtap="pickRole" hover-class="is-press" aria-role="radio" aria-checked="{{newRole==='super'}}">超管</view>
           </view>
         </view>
-        <button class="btn btn-blue btn-block" bindtap="addStaff" loading="{{staffLoading}}">{{editingOpenid ? '保存修改' : '添加'}}</button>
+        <button class="btn btn-primary btn-block staff-btn" hover-class="is-press" bindtap="addStaff" loading="{{staffLoading}}">{{editingOpenid ? '保存修改' : '添加'}}</button>
         <view class="err" wx:if="{{staffMsg}}">{{staffMsg}}</view>
       </view>
 
       <view class="panel">
-        <view class="ptitle t-dark">员工（{{admins.length}}）</view>
+        <view class="ptitle">员工（<text class="num">{{admins.length}}</text>）</view>
         <view class="err err-tap" wx:if="{{staffListErr}}" bindtap="loadAdmins">员工列表加载失败，点此重试</view>
-        <view class="staff hairline-b" wx:for="{{admins}}" wx:key="openid">
-          <view class="staff-l" data-v="{{item.openid}}" bindtap="copyText">
-            <view class="staff-name t-dark">
-              <!-- 名字包成 text：裸文本节点参与 flex 换行会让徽标掉行后参差 -->
+        <view class="row staff" wx:for="{{admins}}" wx:key="openid">
+          <view class="staff-l" data-v="{{item.openid}}" bindtap="copyText" hover-class="is-press">
+            <view class="staff-name">
+              <!-- 名字包成 text：裸文本节点参与 flex 换行会让标签掉行后参差 -->
               <text class="staff-nm">{{item.name}}</text>
-              <text class="badge {{item.isSuper?'badge-blue':''}}">{{item.roleText}}</text>
-              <text class="badge" wx:if="{{item.isMe}}">我</text>
-              <text class="badge badge-danger" wx:if="{{!item.enabled}}">已停用</text>
+              <text class="tag {{item.isSuper?'tag-primary':''}}">{{item.roleText}}</text>
+              <text class="tag" wx:if="{{item.isMe}}">我</text>
+              <text class="tag tag-danger" wx:if="{{!item.enabled}}">已停用</text>
             </view>
-            <view class="staff-oid t-light num">{{item.openid}}</view>
-            <view class="staff-oid t-light num" wx:if="{{item.wecomUserid}}">企微：{{item.wecomUserid}}</view>
+            <view class="staff-oid num">{{item.openid}}</view>
+            <view class="staff-oid num" wx:if="{{item.wecomUserid}}">企微：{{item.wecomUserid}}</view>
           </view>
           <view class="staff-actions">
-            <view class="textbtn staff-act" catchtap="editStaff" data-openid="{{item.openid}}">编辑</view>
-            <view class="textbtn staff-act textbtn-plain" wx:if="{{!item.isMe}}" catchtap="toggleStaffEnabled"
+            <view class="textbtn staff-act" catchtap="editStaff" data-openid="{{item.openid}}" hover-class="is-press">编辑</view>
+            <view class="textbtn staff-act textbtn-plain" wx:if="{{!item.isMe}}" catchtap="toggleStaffEnabled" hover-class="is-press"
                   data-openid="{{item.openid}}" data-enabled="{{item.enabled}}">{{item.enabled ? '停用' : '启用'}}</view>
-            <view class="textbtn staff-act textbtn-danger" wx:if="{{!item.isMe}}" data-openid="{{item.openid}}" catchtap="removeStaff">移除</view>
+            <view class="textbtn staff-act textbtn-danger" wx:if="{{!item.isMe}}" data-openid="{{item.openid}}" catchtap="removeStaff" hover-class="is-press">移除</view>
           </view>
         </view>
       </view>
@@ -548,46 +555,47 @@
   <!-- 非管理员 -->
   <block wx:else>
     <state-view icon="users" title="你还不是发放员" desc="把下面的编号发给管理员，加入后即可发奖" />
-    <view class="panel">
+    <view class="panel openid-panel">
       <view class="openid-row">
         <text class="openid-text num">{{ openid || '请在微信小程序内打开' }}</text>
-        <text class="openid-copy" wx:if="{{openid}}" data-v="{{openid}}" bindtap="copyText">复制</text>
+        <view class="openid-copy" wx:if="{{openid}}" data-v="{{openid}}" bindtap="copyText" hover-class="is-press">复制</view>
       </view>
       <view class="err" wx:if="{{error}}">{{error}}</view>
     </view>
   </block>
 
-  <!-- 定向发放底部固定操作栏：长名单不用滚到底才能操作。选人 → 已选人数 + 下一步；
+  <!-- 定向发放底部固定操作栏（通栏、直角、表面 + 发丝线）：长名单不用滚到底才能操作。选人 → 已选人数 + 下一步；
        填金额 → 人数与实时合计 + 去复核；复核 → 返回修改 + 确认发放 -->
-  <view class="actionbar hairline-t" wx:if="{{ready && isAdmin && tab==='send' && sendMode==='target' && (step==='pick' || step==='fill' || step==='review')}}">
+  <view class="actionbar" wx:if="{{ready && isAdmin && tab==='send' && sendMode==='target' && (step==='pick' || step==='fill' || step==='review')}}">
     <block wx:if="{{step==='pick'}}">
-      <view class="ab-info">已选 <text class="num t-dark ab-strong">{{selected.length}}</text> 人</view>
-      <view class="textbtn textbtn-plain" wx:if="{{selected.length}}" bindtap="clearSelected">清空</view>
-      <button class="btn btn-blue ab-btn" bindtap="goFill" disabled="{{!selected.length}}">下一步：填金额</button>
+      <view class="ab-info">已选 <text class="num ab-strong">{{selected.length}}</text> 人</view>
+      <view class="textbtn textbtn-plain" wx:if="{{selected.length}}" bindtap="clearSelected" hover-class="is-press">清空</view>
+      <button class="btn btn-primary btn-md ab-btn" hover-class="is-press" bindtap="goFill" disabled="{{!selected.length}}">下一步：填金额</button>
     </block>
     <block wx:elif="{{step==='fill'}}">
-      <view class="ab-info"><text class="num t-dark ab-strong">{{selected.length}}</text> 人 · 合计 <text class="num t-dark ab-strong">¥{{fillTotalYuan}}</text></view>
-      <button class="btn btn-blue ab-btn" bindtap="submitBatch" loading="{{loading}}" disabled="{{loading}}">下一步：复核</button>
+      <view class="ab-info"><text class="num ab-strong">{{selected.length}}</text> 人 · 合计 <text class="num ab-strong">¥{{fillTotalYuan}}</text></view>
+      <button class="btn btn-primary btn-md ab-btn" hover-class="is-press" bindtap="submitBatch" loading="{{loading}}" disabled="{{loading}}">下一步：复核</button>
     </block>
     <block wx:else>
-      <view class="textbtn textbtn-plain" bindtap="backFromReview">返回修改</view>
-      <view class="ab-info"></view>
-      <button class="btn btn-blue ab-btn" bindtap="confirmReview" loading="{{loading}}" disabled="{{loading}}">{{review.confirmText}} {{review.people}} 人</button>
+      <view class="textbtn textbtn-plain" bindtap="backFromReview" hover-class="is-press">返回修改</view>
+      <!-- 禁用要说清为什么：超出多少就写在按钮旁边 -->
+      <view class="ab-info"><text class="st st-fail ab-over" wx:if="{{review.block}}">超出额度 ¥{{review.overYuan}}</text></view>
+      <button class="btn btn-primary btn-md ab-btn" hover-class="is-press" bindtap="confirmReview" loading="{{loading}}" disabled="{{loading || review.block}}">{{review.confirmText}} {{review.people}} 人</button>
     </block>
   </view>
 
-  <!-- 记录详情半屏面板：原生弹窗放不下失败原因、发放人、批次、完整单号、撤回记录和下一步；
-       单号可单独复制，常用动作就在面板里 -->
+  <!-- 记录详情抽屉（从底部滑出，只圆不贴边的上沿两角）：原生弹窗放不下失败原因、发放人、批次、完整单号、撤回记录和下一步；
+       单号可单独复制，常用动作就在抽屉里 -->
   <view class="sheet-mask" wx:if="{{detail}}" bindtap="closeDetail"></view>
   <view class="sheet" wx:if="{{detail}}" catchtap="noop">
     <view class="sheet-head">
       <text class="sheet-title">记录详情</text>
-      <view class="textbtn textbtn-plain" bindtap="closeDetail">关闭</view>
+      <view class="textbtn textbtn-plain" bindtap="closeDetail" hover-class="is-press">关闭</view>
     </view>
     <view class="sheet-body">
       <view class="sh-amt">
-        <text class="num">¥{{detail.yuan}}</text>
-        <text class="badge {{detail.cls==='ok'?'badge-success':detail.cls==='fail'?'badge-danger':detail.cls==='muted'?'badge-muted':'badge-warning'}}">{{detail.statusText}}</text>
+        <text class="sh-amt-v n1"><text class="unit">¥</text>{{detail.yuan}}</text>
+        <text class="st st-{{detail.cls}}">{{detail.statusText}}</text>
       </view>
       <view class="sh-next" wx:if="{{detail.nextStep}}">{{detail.nextStep}}</view>
       <view class="sh-kv"><text class="sh-k">客户</text><text class="sh-v">{{detail.who || '不记名（链接领取）'}}</text></view>
@@ -598,13 +606,13 @@
       <view class="sh-kv" wx:if="{{detail.failReason}}"><text class="sh-k">失败原因</text><text class="sh-v t-danger">{{detail.failReason}}</text></view>
       <view class="sh-kv" wx:if="{{detail.revokedAt}}"><text class="sh-k">撤回</text><text class="sh-v">{{detail.revokedAt}}{{detail.revokedBy ? ' · ' + detail.revokedBy : ''}}</text></view>
       <view class="sh-kv" wx:if="{{detail.batchId}}"><text class="sh-k">批次</text><text class="sh-v num">{{detail.batchId}}</text></view>
-      <view class="sh-kv"><text class="sh-k">商户单号</text><text class="sh-v num">{{detail.rid}}</text><text class="sh-copy" data-v="{{detail.rid}}" bindtap="copyText">复制</text></view>
-      <view class="sh-kv"><text class="sh-k">微信单号</text><text class="sh-v num">{{detail.billNo || '转账发起后生成'}}</text><text class="sh-copy" wx:if="{{detail.billNo}}" data-v="{{detail.billNo}}" bindtap="copyText">复制</text></view>
+      <view class="sh-kv"><text class="sh-k">商户单号</text><text class="sh-v num">{{detail.rid}}</text><view class="sh-copy" data-v="{{detail.rid}}" bindtap="copyText" hover-class="is-press">复制</view></view>
+      <view class="sh-kv"><text class="sh-k">微信单号</text><text class="sh-v num">{{detail.billNo || '转账发起后生成'}}</text><view class="sh-copy" wx:if="{{detail.billNo}}" data-v="{{detail.billNo}}" bindtap="copyText" hover-class="is-press">复制</view></view>
     </view>
     <view class="sheet-acts" wx:if="{{detail.eu || detail.oid || (detail.batchId && !recFilter.batch) || detail.canRevoke}}">
-      <button class="btn btn-fill sh-btn" wx:if="{{detail.eu || detail.oid}}" bindtap="detailCustomer">只看此客户</button>
-      <button class="btn btn-fill sh-btn" wx:if="{{detail.batchId && !recFilter.batch}}" bindtap="detailBatch">查看本批</button>
-      <button class="btn btn-red sh-btn" wx:if="{{detail.canRevoke}}" bindtap="detailRevoke">撤回</button>
+      <button class="btn btn-secondary btn-md sh-btn" hover-class="is-press" wx:if="{{detail.eu || detail.oid}}" bindtap="detailCustomer">只看此客户</button>
+      <button class="btn btn-secondary btn-md sh-btn" hover-class="is-press" wx:if="{{detail.batchId && !recFilter.batch}}" bindtap="detailBatch">查看本批</button>
+      <button class="btn btn-danger-quiet btn-md sh-btn" hover-class="is-press" wx:if="{{detail.canRevoke}}" bindtap="detailRevoke">撤回</button>
     </view>
   </view>
 

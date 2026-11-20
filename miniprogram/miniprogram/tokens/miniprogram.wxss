@@ -1,6 +1,8 @@
 /**
  * BYWOOD 小程序 token v2（rpx 制，750 设计稿）
  * 规则同 DESIGN.md + scenarios/04-miniprogram.md；换算：1px（375 稿）= 2rpx。
+ * v5.9：控件圆角一档 --radius-control: 16rpx（DESIGN.md §5）。
+ * v6.1：补六条按角色的曲线与时长 + --ease-spring；控件内件圆角写 calc(var(--radius-control) - 8rpx)（= 4px，CRAFT §十二）。
  * WXSS 支持 CSS 变量；深色模式在 app.json 开 "darkmode": true 后用媒体查询翻转。
  * DIN 字体小程序不可内置——数字用系统栈 + 加粗 + tabular（.num 类）近似。
  */
@@ -8,6 +10,8 @@ page {
   --color-primary: #1e5754;
   --color-primary-dark: #16413f;
   --color-on-primary: #ffffff; /* 主色按钮上的字（v5.7.1），深色模式翻成墨字 */
+  --radius-control: 16rpx; /* 控件圆角一档（v5.9）= 8px：按钮 / 输入类 / chips */
+  --radius-container: 24rpx; /* v6.3：容器一档 = 12px：卡、色块、浮层、图片；嵌一层减 8rpx；通栏的栏仍直角 */
   --color-accent: #b8502f;
   --color-block-primary: #1e5754;
   --color-block-accent: #b8502f;
@@ -31,6 +35,17 @@ page {
   --color-text-faint: rgba(0, 0, 0, 0.3);
   --color-border: rgba(0, 0, 0, 0.08);
   --color-border-strong: #e5e6eb;
+
+  /* 动效（v6.1 补：v6.0 只写进了 globals.css，本文件漏了；值同 DESIGN.md front matter）。
+   * --ease-spring 在小程序里退回落定曲线：各端 WebView 对 linear() 支持不齐 */
+  --ease-out: cubic-bezier(0, 0, 0.58, 1);
+  --ease-out-strong: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.42, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.42, 0, 0.58, 1);
+  --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-continuity: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-press: 100ms; --duration-hover: 150ms; --duration-sm: 200ms; --duration-md: 320ms; --duration-lg: 480ms; --duration-morph: 420ms;
 
   background: var(--color-bg);
   color: var(--color-text);
@@ -85,16 +100,17 @@ page {
 .money { color: var(--color-accent); }
 
 /* ---- 按钮（覆盖原生 button 样式）---- */
-.btn { border-radius: 0; border: none; font-weight: 600; }
+.btn { border-radius: var(--radius-control); border: none; font-weight: 600; } /* v5.9：控件圆角一档，容器仍是 0 */
 .btn::after { border: none; }
 .btn-primary { background: var(--color-primary); color: var(--color-on-primary); height: 96rpx; line-height: 96rpx; font-size: 32rpx; }
-.btn-primary.btn-hover { background: var(--color-primary-dark); transform: scale(0.98); }
+.btn-primary.btn-hover { background: var(--color-primary-dark); transform: scale(0.97); } /* v6：按下 .97（CRAFT.md §二） */
+.btn { transition: transform var(--duration-press) var(--ease-out), background-color var(--duration-hover) var(--ease-out); }
 .btn-secondary { background: var(--color-fill); color: var(--color-text-dark); height: 80rpx; line-height: 80rpx; font-size: 28rpx; }
 
 /* ---- 色块 ----
  * v5.7：类名改角色名（block-primary / block-accent / tint-primary / tint-accent）。色相旧名保留为兼容别名，
  * 已接入的小程序不必改代码；新写一律用角色名，下次大版本移除别名。 */
-.block { padding: 32rpx; }
+.block { padding: 32rpx; border-radius: var(--radius-container); }
 .block-primary, .block-blue { background: var(--color-block-primary); color: #fff; }
 .block-primary .label, .block-blue .label { color: rgba(255, 255, 255, 0.85); }
 .block-accent, .block-red { background: var(--color-block-accent); color: #fff; }
@@ -114,7 +130,7 @@ page {
 .cell-hover { background: var(--color-fill); }
 
 /* ---- 徽标：语义浅底 + 加深档文字 ---- */
-.badge { display: inline-block; height: 40rpx; line-height: 40rpx; padding: 0 12rpx; font-size: 24rpx; }
+.badge { border-radius: calc(var(--radius-control) - 8rpx); display: inline-block; height: 40rpx; line-height: 40rpx; padding: 0 12rpx; font-size: 24rpx; }
 .badge-success { background: rgba(0, 181, 120, 0.1); color: var(--color-success-deep); }
 .badge-warning { background: rgba(255, 143, 31, 0.1); color: var(--color-warning-deep); }
 .badge-danger  { background: rgba(217, 43, 60, 0.1); color: var(--color-danger-deep); }

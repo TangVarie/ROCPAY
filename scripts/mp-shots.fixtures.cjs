@@ -99,7 +99,7 @@ const admin = [
   ['send-fill', { ...A, step: 'fill', selected: sel, fillTotalYuan: '638.00', period }],
   ['send-fill-error', { ...A, step: 'fill', selected: sel, fillTotalYuan: '638.00', period, errIdx: 1, error: '陈老板 的金额不能小于 ¥0.1' }],
   ['send-review', { ...A, step: 'review', selected: sel, review }],
-  ['send-review-over', { ...A, step: 'review', selected: sel, review: { ...review, over: true, quotaText: '¥200.00', quotaNote: '14:21 刚刷新 · 合计超出可发额度' } }],
+  ['send-review-over', { ...A, step: 'review', selected: sel, review: { ...review, over: true, overYuan: '438.00', block: true, quotaText: '¥200.00', quotaNote: '14:21 刚刷新' } }],
   ['result-fresh', { ...result }],
   ['result-notified', {
     ...result, miniDone: true, notifyDone: true, miniNotify: { sent: 1, failedCount: 0 },

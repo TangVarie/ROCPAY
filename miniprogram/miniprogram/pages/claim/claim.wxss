@@ -1,152 +1,164 @@
-/* ===== 领取页 · BYWOOD（色板 v5.1，token 见 app.wxss）=====
-   间距取阶梯 8/16/24/32/40/48/64/96 rpx；字号取移动端阶梯（大数字 80rpx = 40px 档）*/
+/* ===== 领取页 · BYWOOD v6.3（token 与构件见 app.wxss）=====
+   一屏一句判断：待领时是深青证据块里的那个金额（n1），到账时是青面上的「已到账」。
+   间距只取 8/16/24/32/40/48/64 rpx；字只取七个字级 + 两级数字 */
 
-/* 奖励色块：纯色，无渐变无阴影。
-   领取前 = 赭石块（价值/金额，块内恒白）；到账后 = 品牌面色（标志青做底 + 墨字，v5.1）——
-   BRAND-LANGUAGE 日用层「青面只在里程碑」，钱到账就是这页唯一的里程碑。
-   块内文字一律继承块的 color（赭块白 / 青面墨），不在子元素上写第二套色 */
+/* ① 发放方：品牌 + 发放员工，放在奖励块上方（链接领取最先回答"这是谁发的"） */
+.issuer { display: flex; align-items: baseline; gap: 16rpx; padding: 16rpx 8rpx 24rpx; }
+.issuer-brand { font-size: 30rpx; font-weight: 700; color: var(--color-text-dark); }
+.issuer-who { font-size: 26rpx; color: var(--color-text-light); }
+
+/* ===== 奖励块 =====
+   领取前 = 深青证据块：白字三档、白 14% 线，块里唯一的按钮标志青底墨字；
+   到账后 = 标志青承诺块：墨字三档、墨 14% 线、墨版轮印（青面三件套）。
+   块内文字一律读所在底的变量（下面两组 --rb-*），子元素不写第二套色 */
 .reward-block {
   position: relative; /* 轮印定位基准 */
-  margin-top: 16rpx;
-  padding: 48rpx 40rpx 40rpx;
-  text-align: center;
-  color: #ffffff;
+  padding: 40rpx 40rpx 40rpx;
+  --rb-c1: var(--color-on-deep);
+  --rb-c2: var(--color-on-deep-2);
+  --rb-c3: var(--color-on-deep-3);
+  --rb-line: var(--color-line-on-deep);
+  --rb-bg: var(--color-deep);
+  color: var(--rb-c2);
 }
-/* 到账块角落的轮印（v5.5 闲章）。kit 的 .round-seal 默认 text-dark，深色模式会翻白——青面上一律墨，压回 --color-ink */
+/* 页面 wxss 晚于 app.wxss 生效：复合选择器把青面的墨字搭档压回来 */
+.reward-block.field-brand {
+  --rb-c1: var(--color-ink);
+  --rb-c2: var(--color-ink-2);
+  --rb-c3: var(--color-ink-3);
+  --rb-line: var(--color-line-on-field);
+  --rb-bg: var(--color-field-brand);
+  color: var(--rb-c2);
+}
+/* 到账块角落的轮印（v5.5 闲章）。kit 的 .round-seal 默认 text-dark，深色模式会翻白——青面上一律墨 */
 .rb-seal {
   position: absolute;
-  top: 24rpx;
-  right: 24rpx;
+  top: 32rpx;
+  right: 32rpx;
   color: var(--color-ink);
 }
-/* 页面 wxss 晚于 app.wxss 生效，单类 .reward-block 的白字会压过 app.wxss 的 .field-brand 墨字——
-   青面上白字只有 1.77:1（BRAND.md §2 明禁），这里用复合选择器把墨字压回去 */
-.reward-block.field-brand { color: var(--color-ink); }
+
+/* ② 状态：标签档（sm 600），到账时前面一个描边勾 */
 .rb-label {
-  font-size: 26rpx;
-  font-weight: 500;
-  letter-spacing: 1rpx;
-}
-.rb-amount {
-  margin: 24rpx 0 8rpx;
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-}
-.rb-sign { font-size: 42rpx; margin-right: 8rpx; font-weight: 600; }
-/* 40px 大数字档（v5.0.1 的 120rpx 在阶梯之外，DESIGN.md §3：梯外字号 = bug） */
-.rb-num { font-size: 80rpx; line-height: 1.15; font-weight: 700; }
-/* 大额拆单：共 N 笔 · 合计 提示（赭底上白字不降透明度：纯白对赭石 4.97:1
-   刚过小字 4.5:1，降透明度即不达标；层级差交给字号/字重，不牺牲对比度） */
-.rb-multi { margin-top: 16rpx; font-size: 24rpx; line-height: 1.5; }
-/* 领取按钮：赭块上白底 + 赭字（4.97:1；深色块底换深赭，白底上对比更高）。到账后按钮不再渲染 */
-/* 不是 .btn，同样要压 style v2 的默认 184px 宽（见 app.wxss 按钮段） */
-.rb-btn:not([size='mini']) {
-  width: 100%;
-  margin: 48rpx 0 0;
-  padding: 0 32rpx;
-  height: 96rpx;
   display: flex;
   align-items: center;
-  justify-content: center;
-  line-height: normal;
-  border-radius: var(--r-control);
-  font-size: 32rpx;
+  gap: 16rpx;
+  min-height: 42rpx;
+  font-size: 26rpx;
   font-weight: 600;
-  border: none;
-  background: #ffffff;
-  color: var(--color-block-accent);
-  transition: transform 120ms ease-out;
+  color: var(--rb-c2);
 }
-.rb-btn::after { border: none; }
-.rb-btn:active { transform: scale(0.98); }
-.reward-block .rb-btn[disabled] { background: rgba(255, 255, 255, 0.85); color: rgba(184, 80, 47, 0.55); }
-.rb-tip { margin-top: 24rpx; font-size: 26rpx; font-weight: 500; min-height: 34rpx; }
-/* 金额未核验：占住金额的位置但不给数字（21px 导语档，比 40px 金额低两档，读得出"不是金额"） */
-.rb-unverified { font-size: 42rpx; font-weight: 600; line-height: 1.9; }
-/* 已确认、查单中：山形弧带跟随块内文字色（赭块上白、青面上墨），占住按钮的位置不跳版 */
+/* 描边画勾：小确认（≤64px）用回弹曲线，淡入 + 轻微上移，只这一次；色块从深青换成青面本身已经够醒目 */
+.rb-check {
+  flex: none;
+  width: 28rpx;
+  height: 14rpx;
+  margin: 0 4rpx 8rpx;
+  border-left: 5rpx solid var(--rb-c1);
+  border-bottom: 5rpx solid var(--rb-c1);
+  transform: rotate(-45deg);
+  animation: checkIn 320ms var(--ease-overshoot) 120ms backwards;
+}
+@keyframes checkIn {
+  from { opacity: 0; transform: translateY(8rpx) rotate(-45deg) scale(0.6); }
+  to { opacity: 1; transform: translateY(0) rotate(-45deg) scale(1); }
+}
+
+/* 失败 / 撤回终态：一屏一句判断是结论（没有到账 / 已被撤回），升到 d3；金额降为 n2 注档色 */
+.rb-label.rb-label-dead { font-size: 34rpx; line-height: 1.4; font-weight: 900; color: var(--rb-c1); }
+
+/* 金额：n1（80rpx / 800），¥ 跟着数字走（0.4em 显示字） */
+.rb-amount { margin-top: 16rpx; color: var(--rb-c1); }
+.rb-amount.rb-amount-dead { margin-top: 8rpx; color: var(--rb-c2); }
+/* 金额未核验：占住金额的位置但不给数字（d3 档，比 n1 低两档，读得出"不是金额"） */
+.rb-unverified { display: block; font-size: 34rpx; font-weight: 900; line-height: 88rpx; }
+/* 大额拆单：第 N/M 笔 · 已到账累计 */
+.rb-multi { margin-top: 8rpx; font-size: 24rpx; line-height: 1.5; color: var(--rb-c2); }
+
+/* 事由 / 到账：收款单的行表——标签 c2 / 内容 c1 600，行间线跟随所在底 */
+.rb-meta { margin-top: 32rpx; padding-top: 8rpx; border-top: 1px solid var(--rb-line); }
+.rb-row { display: flex; justify-content: space-between; gap: 24rpx; padding-top: 16rpx; font-size: 26rpx; line-height: 1.5; }
+.rb-k { flex: none; color: var(--rb-c2); }
+.rb-v { font-weight: 600; text-align: right; word-break: break-all; color: var(--rb-c1); }
+/* 到账凭证的单号：标签和「复制」一行，32 位单号单独一行靠右。
+   复制 = 青面上的小控件：墨 14% 线框、内件圆角；能点的范围靠内边距撑到 88rpx，负外边距抵回去，行高不变 */
+.rb-row-copy { align-items: center; }
+.rb-rid { padding-top: 4rpx; font-size: 24rpx; font-weight: 600; line-height: 1.5; text-align: right; word-break: break-all; color: var(--rb-c1); }
+.rb-copy { flex: none; padding: 22rpx 0 22rpx 20rpx; margin: -22rpx 0; min-width: 88rpx; box-sizing: border-box; text-align: right; }
+.rb-copy-t {
+  display: inline-block;
+  padding: 0 16rpx;
+  border: 1px solid var(--rb-line);
+  border-radius: calc(var(--radius-control) - 8rpx);
+  font-size: 24rpx;
+  font-weight: 600;
+  line-height: 44rpx;
+  color: var(--rb-c1);
+  transition: background-color var(--duration-press) var(--ease-out);
+}
+.rb-copy.is-press .rb-copy-t { background: var(--rb-line); }
+
+/* ③ 进度：分段进度条（构件见 app.wxss .stepbar），块内读所在底的搭档——实心 = 主字、轨道 = 所在底的线 */
+.stepbar.rb-steps { margin-top: 40rpx; --sb-on: var(--rb-c1); --sb-off: var(--rb-line); --sb-t: var(--rb-c2); --sb-t-now: var(--rb-c1); }
+
+/* ④ 主按钮：深青块上标志青底墨字（app.wxss .btn-on-deep），整行 96rpx */
+.reward-block .btn.rb-btn { margin-top: 48rpx; }
+/* 加载中/禁用：深青上的灰底淡字（白 14% 底、白 55% 字），无按下 */
+.reward-block .btn.rb-btn[disabled] { background: var(--color-line-on-deep); color: var(--color-on-deep-3); transform: none; }
+/* 已确认、查单中：山形弧带跟随块内主字，占住按钮的位置不跳版 */
 .rb-wait { margin-top: 48rpx; height: 96rpx; display: flex; align-items: center; justify-content: center; }
-.rb-wait .band-spinner .band { background: currentColor; }
+.rb-wait .band-spinner .band { background: var(--rb-c1); }
+/* 提示：主字档（失败原因、进行中的说明都是要读的信息）；官方确认说明：注档 */
+.rb-tip { margin-top: 24rpx; font-size: 26rpx; line-height: 1.6; color: var(--rb-c1); }
+.rb-fine { margin-top: 16rpx; font-size: 24rpx; line-height: 1.6; color: var(--rb-c3); }
+
+/* ⑥ 帮助 + 合作记录：奖励块之下的注（mi 档），与块内文字左缘对齐 */
+.help { margin-top: 24rpx; padding: 0 8rpx; font-size: 24rpx; line-height: 1.6; color: var(--color-text-light); }
+.coop { margin-top: 16rpx; padding: 0 8rpx; font-size: 24rpx; line-height: 1.6; color: var(--color-text-light); }
+/* 员工入口：一行文字按钮，靠左 */
+.textbtn.staff-entry { margin-top: 24rpx; justify-content: flex-start; padding: 0 8rpx; font-size: 26rpx; }
+
+/* 奖励提醒（白表面）：一行理由在上，按钮在下；开启/拒绝后只剩一行结果 */
+.sub { margin-top: 32rpx; }
+.sub-t { font-size: 26rpx; line-height: 1.6; color: var(--color-text); }
+.btn.sub-btn { margin-top: 24rpx; }
 /* 管理员入口：奖励块与档案之后，次按钮 */
-.btn.admin-entry { margin-top: 24rpx; }
-.rb-fine { margin-top: 16rpx; font-size: 24rpx; line-height: 1.5; }
-
-/* 状态页（空/错/加载）的版式在 components/state-view 里，两个页面共用 */
-
+.btn.admin-entry { margin-top: 32rpx; }
 
 /* ===== 操作端主页（管理员进门即仪表盘） ===== */
 .ahome-lede { padding: 24rpx 8rpx 32rpx; }
-.ah-hero { margin-bottom: 24rpx; }
-.ah-label { font-size: 26rpx; color: rgba(255, 255, 255, 0.85); }
-.ah-num { font-size: 80rpx; font-weight: 700; color: #ffffff; line-height: 1.15; margin-top: 8rpx; }
-.ah-sub { font-size: 24rpx; color: rgba(255, 255, 255, 0.8); margin-top: 8rpx; }
-/* 额度告罄：深色块内禁第三种彩色文字（DESIGN.md #13），告警全由 ah-sub 文案承担
-   （原先数字再从 700 加到 800，肉眼分不出，已去掉） */
-/* 异常警示块：语义 danger 浅底 + 加深档标题，进门可见、点击直达失败筛选。
-   状态语义不借品牌赭浅调（tint-accent 归"价值/金额"类数据块用） */
-.ah-alert { margin-bottom: 24rpx; padding: 24rpx 32rpx; background: var(--color-danger-tint); }
-.ah-alert:active { opacity: 0.85; }
-.ah-alert-t { font-size: 30rpx; font-weight: 700; color: var(--color-danger-deep); }
-.ah-alert-s { font-size: 24rpx; color: var(--color-text-light); margin-top: 8rpx; }
-.ah-minis { display: flex; gap: 24rpx; margin-bottom: 32rpx; }
-.ah-mini { flex: 1; padding: 24rpx; }
-.ahm-label { font-size: 24rpx; color: var(--color-text-light); }
-.ahm-num { font-size: 42rpx; font-weight: 700; line-height: 1.2; margin-top: 8rpx; }
-.ah-tips { margin-top: 24rpx; text-align: center; font-size: 24rpx; letter-spacing: 1rpx; }
+/* 深青证据块：可发额度 n1，底部一条白 14% 线隔出累计发放 */
+.ah-hero { margin-bottom: 16rpx; padding: 40rpx; }
+.ah-label { font-size: 26rpx; font-weight: 600; color: var(--color-on-deep-2); }
+.ah-num { margin-top: 16rpx; color: var(--color-on-deep); }
+/* 额度告罄：深青块里不加第三种颜色，告警由文案承担 */
+.ah-sub { margin-top: 16rpx; font-size: 26rpx; color: var(--color-on-deep); }
+.ah-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 24rpx;
+  margin-top: 40rpx;
+  padding-top: 24rpx;
+  border-top: 1px solid var(--color-line-on-deep);
+  font-size: 24rpx;
+  color: var(--color-on-deep-2);
+}
+.ah-foot .num { font-weight: 700; color: var(--color-on-deep); }
+/* 异常：必须修的，留在出事的地方——白表面 + 危险加深档圆点记号 + 箭头，点击直达失败台账；大块区域按下只变底色 */
+.panel.ah-alert { display: flex; align-items: center; gap: 24rpx; margin-bottom: 16rpx; padding: 28rpx 32rpx; transition: background-color var(--duration-press) var(--ease-out); }
+.panel.ah-alert.is-press { background: var(--color-fill); }
+.ah-alert-main { flex: 1; min-width: 0; }
+.ah-alert-t.st { font-size: 30rpx; font-weight: 700; }
+.ah-alert-s { margin-top: 8rpx; font-size: 24rpx; color: var(--color-text-light); }
+/* 近 24 小时：一张行表，标签 / 尾值（n2） */
+.ah-rows { margin-bottom: 32rpx; }
+.ah-row { display: flex; align-items: center; justify-content: space-between; gap: 24rpx; min-height: 104rpx; padding: 0 32rpx; box-sizing: border-box; }
+.ah-k { font-size: 26rpx; color: var(--color-text); }
+.ah-v { color: var(--color-text-dark); }
+.ah-tips { margin-top: 24rpx; font-size: 24rpx; color: var(--color-text-light); text-align: center; }
+.ah-total { margin-top: 16rpx; font-size: 24rpx; color: var(--color-text-light); text-align: center; }
+.ah-total .num { font-weight: 700; color: var(--color-text-dark); }
 
-/* ===== 到账仪式感（克制版：纯 CSS，无渐变无阴影；每屏动效焦点 ≤1 处 = 这一块）===== */
-/* 描边画勾：与 .cb.on::after 同款，颜色跟块内文字色（青面上是墨），淡入 + 轻微上移。
-   不回弹、整块也不放大：色块从赭转青面本身已经够醒目 */
-.rb-checkwrap { display: flex; justify-content: center; margin-bottom: 16rpx; }
-.rb-check {
-  width: 52rpx;
-  height: 26rpx;
-  border-left: 6rpx solid currentColor;
-  border-bottom: 6rpx solid currentColor;
-  transform: rotate(-45deg);
-  animation: checkIn 300ms ease-out backwards;
-}
-@keyframes checkIn {
-  from { opacity: 0; transform: translateY(8rpx) rotate(-45deg); }
-  to { opacity: 1; transform: translateY(0) rotate(-45deg); }
-}
-/* 尊重系统「减弱动态效果」：画勾直接出现，到账状态仍由色块变青面表达 */
 @media (prefers-reduced-motion: reduce) {
   .rb-check { animation: none; }
 }
-
-/* ===== 可信收款单 ===== */
-/* ① 发放方：品牌 + 发放员工，放在奖励块上方（链接领取最先回答"这是谁发的"） */
-.issuer { display: flex; align-items: baseline; gap: 16rpx; padding: 16rpx 8rpx 0; }
-.issuer-brand { font-size: 30rpx; font-weight: 600; color: var(--color-text-dark); }
-.issuer-who { font-size: 26rpx; color: var(--color-text-light); }
-/* 事由 / 到账：收款单两行，左键右值；分隔线跟随块内文字色（赭块白 / 青面墨），不降文字透明度
-   （赭底白字 4.97:1 刚过小字底线，层级只靠字重） */
-.rb-meta { margin-top: 32rpx; text-align: left; }
-.rb-meta::before { content: ''; display: block; height: 1px; background: currentColor; opacity: 0.3; transform: scaleY(0.5); }
-.rb-row { display: flex; justify-content: space-between; gap: 24rpx; padding-top: 16rpx; font-size: 26rpx; line-height: 1.5; }
-.rb-k { flex: none; }
-.rb-v { font-weight: 600; text-align: right; word-break: break-all; }
-/* 到账凭证的单号：标签和「复制」一行，32 位单号单独一行（和其它值一样靠右，24rpx 在窄屏上也排得下一行）。
-   复制是墨字墨框（青面上只许墨字），看上去是个小标签，能点的范围靠内边距撑到 88rpx，负外边距抵回去，行高不变 */
-.rb-row-copy { align-items: center; }
-.rb-rid { padding-top: 4rpx; font-size: 24rpx; font-weight: 600; line-height: 1.5; text-align: right; word-break: break-all; }
-.rb-copy { flex: none; padding: 22rpx 0 22rpx 20rpx; margin: -22rpx 0; min-width: 88rpx; box-sizing: border-box; text-align: right; }
-.rb-copy-t { display: inline-block; padding: 0 12rpx; border: 1px solid currentColor; font-size: 24rpx; font-weight: 600; line-height: 42rpx; }
-.rb-copy:active { opacity: 0.6; }
-/* ③ 进度轮尺：kit 的 .round-ruler 默认主色，块内改跟随文字色；当前步内圈挖空用块底色 */
-.rb-steps { margin-top: 40rpx; }
-.rb-steps .round-ruler { color: inherit; }
-.block-accent .rb-steps .r-now::after { border-color: var(--color-block-accent); }
-.field-brand .rb-steps .r-now::after { border-color: var(--color-field-brand); }
-.rb-steps-t { display: flex; justify-content: space-between; margin-top: 12rpx; font-size: 24rpx; }
-/* ⑥ 帮助 + 合作记录 + 员工入口：奖励块之下的次要信息，统一一档小字 */
-.help { margin-top: 24rpx; padding: 0 8rpx; font-size: 24rpx; line-height: 1.6; color: var(--color-text-light); text-align: center; }
-.coop { margin-top: 16rpx; padding: 0 8rpx; font-size: 24rpx; line-height: 1.6; color: var(--color-text-light); text-align: center; }
-.staff-entry { margin-top: 32rpx; padding: 28rpx 24rpx; text-align: center; font-size: 26rpx; font-weight: 600; color: var(--color-primary); }
-.staff-entry:active { opacity: 0.6; }
-
-/* 奖励提醒：一行理由在上，按钮在下；开启/拒绝后只剩一行结果 */
-.sub { margin-top: 40rpx; }
-.sub-t { padding: 0 8rpx; font-size: 24rpx; line-height: 1.6; color: var(--color-text-light); text-align: center; }
-.btn.sub-btn { margin-top: 16rpx; }

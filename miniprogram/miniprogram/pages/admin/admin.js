@@ -529,6 +529,12 @@ Page({
     // 内容改了 → 只能当新的一批（换键），若上次其实已建，客户会收到两批——必须先说清楚
     const snap = this._batchSnapOf(selected);
     const changedAfterDoubt = this._batchInDoubt && this._batchKey && this._batchSnap !== snap;
+    const doubt = changedAfterDoubt ? 'changed' : this._batchInDoubt ? 'same' : '';
+    // 超出可发额度就不让发（按钮禁用 + confirmReview 再拦一次）。没记过额度（hasQuota=false）不拦。
+    // 唯一放行：按原内容重试上次没收到结果的那批（doubt==='same'）——上次若已建成，额度已经扣过，
+    // 这里的"超出"是重复计算；而重试命中已建批次只回放、不重复创建。拦住它反而拿不回上次的结果
+    const overFen = remain != null ? totalFen - Math.round(remain * 100) : 0;
+    const over = overFen > 0;
     this._reviewBatch = selected;
     this._reviewSnap = snap;
     this.setData({
@@ -546,8 +552,10 @@ Page({
         quotaNote: hasQuota
           ? fresh ? `${period.updatedAt} 刚刷新` : `刷新失败，这是 ${period.updatedAt || '进页面时'} 的数`
           : fresh ? '未记账，请自行确认商户余额充足' : '暂时查不到，请自行确认商户余额充足',
-        over: remain != null && remain < totalFen / 100,
-        doubt: changedAfterDoubt ? 'changed' : this._batchInDoubt ? 'same' : '',
+        over,
+        overYuan: over ? fmtYuan(overFen / 100) : '',
+        block: over && doubt !== 'same', // 超额度禁止确认发放（见上）
+        doubt,
         confirmText: changedAfterDoubt ? '仍然发放' : '确认发放',
         list: selected.map((s) => ({ key: s.key, label: s.label, yuan: fmtYuan(Number(s.amountYuan)), note: s.note || '' })),
       },
@@ -556,6 +564,8 @@ Page({
   },
   confirmReview() {
     if (this.data.loading || !this._reviewBatch) return;
+    // 超出可发额度：按钮已禁用，这里再拦一次（禁用态在部分基础库上仍可能触发 tap）
+    if (this.data.review && this.data.review.block) return;
     this._doSubmitBatch(this._reviewBatch, this._reviewSnap);
   },
   backFromReview() {
