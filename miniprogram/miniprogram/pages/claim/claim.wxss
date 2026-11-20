@@ -98,12 +98,8 @@
 }
 .rb-copy.is-press .rb-copy-t { background: var(--rb-line); }
 
-/* ③ 进度轮尺：kit 的 .round-ruler 默认主色，块内改跟随主字；当前步内圈挖空用块底色 */
-.rb-steps { margin-top: 40rpx; }
-.rb-steps .round-ruler { color: var(--rb-c1); }
-.rb-steps .r-now::after { border-color: var(--rb-bg); }
-.rb-steps-t { display: flex; justify-content: space-between; margin-top: 12rpx; font-size: 24rpx; color: var(--rb-c2); }
-.rb-steps-t .on { color: var(--rb-c1); font-weight: 600; } /* 当前步：与工作台的步骤条同一种写法 */
+/* ③ 进度：分段进度条（构件见 app.wxss .stepbar），块内读所在底的搭档——实心 = 主字、轨道 = 所在底的线 */
+.stepbar.rb-steps { margin-top: 40rpx; --sb-on: var(--rb-c1); --sb-off: var(--rb-line); --sb-t: var(--rb-c2); --sb-t-now: var(--rb-c1); }
 
 /* ④ 主按钮：深青块上标志青底墨字（app.wxss .btn-on-deep），整行 96rpx */
 .reward-block .btn.rb-btn { margin-top: 48rpx; }

@@ -335,10 +335,8 @@
 .openid-copy.is-press { color: var(--color-primary-dark); }
 
 /* ===== 定向发放四步任务流 ===== */
-/* 步骤条：kit 的轮尺（主色），当前步文字加深 */
-.steps { margin: 16rpx 8rpx 32rpx; }
-.steps-t { display: flex; justify-content: space-between; margin-top: 12rpx; font-size: 24rpx; color: var(--color-text-light); }
-.steps-t .on { color: var(--color-text-dark); font-weight: 600; }
+/* 步骤条：分段进度条（构件见 app.wxss .stepbar），画布上用主色 */
+.stepbar.steps { margin: 16rpx 0 32rpx; }
 
 /* 底部固定操作栏：通栏直角，表面色 + 顶部发丝线，避开安全区；有它时页面底部垫高，不盖住最后一行 */
 .page.page-bar { padding-bottom: calc(176rpx + env(safe-area-inset-bottom)); }

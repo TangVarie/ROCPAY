@@ -57,18 +57,12 @@
           </block>
         </view>
 
-        <!-- ③ 进度：「轮尺」三步——领取 → 微信确认 → 到账（颜色随块内文字） -->
-        <view class="rb-steps" wx:if="{{status!=='dead' && !(mode==='token' && amtUnverified)}}" aria-hidden="true">
-          <view class="round-ruler">
-            <view class="r {{ (status==='idle' || status==='loading' || status==='fail') && !resume ? 'r-now' : 'r-done' }}"></view>
-            <view class="r {{ (status==='idle' || status==='loading' || status==='fail') ? (resume ? 'r-now' : '') : 'r-done' }}"></view>
-            <view class="r {{ (status==='ok' || status==='between' || status==='nextfail') ? 'r-done' : (status==='confirming' || status==='arriving') ? 'r-now' : '' }}"></view>
-          </view>
-          <view class="rb-steps-t">
-            <text class="{{ (status==='idle' || status==='loading' || status==='fail') && !resume ? 'on' : '' }}">领取</text>
-            <text class="{{ (status==='idle' || status==='loading' || status==='fail') && resume ? 'on' : '' }}">微信确认</text>
-            <text class="{{ (status==='idle' || status==='loading' || status==='fail') ? '' : 'on' }}">到账</text>
-          </view>
+        <!-- ③ 进度：分段进度条三步——领取 → 微信确认 → 到账。走过的和当前步的色条实心，没到的只剩轨道；
+             当前步的字加粗。颜色读所在底（深青块上白、青面上墨） -->
+        <view class="stepbar rb-steps" wx:if="{{status!=='dead' && !(mode==='token' && amtUnverified)}}" aria-hidden="true">
+          <view class="sb-i {{ (status==='idle' || status==='loading' || status==='fail') && !resume ? 'now' : 'done' }}"><view class="sb-bar"></view><text class="sb-t">领取</text></view>
+          <view class="sb-i {{ (status==='idle' || status==='loading' || status==='fail') ? (resume ? 'now' : '') : 'done' }}"><view class="sb-bar"></view><text class="sb-t">微信确认</text></view>
+          <view class="sb-i {{ (status==='ok' || status==='between' || status==='nextfail') ? 'done' : (status==='confirming' || status==='arriving') ? 'now' : '' }}"><view class="sb-bar"></view><text class="sb-t">到账</text></view>
         </view>
 
         <!-- ④ 主按钮（深青块上：标志青底墨字）：只在领取前/可重试时出现。金额未核验给"重新连接"；入账查询超时给"刷新到账结果"；

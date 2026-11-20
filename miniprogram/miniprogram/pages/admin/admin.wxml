@@ -43,20 +43,12 @@
 
       <!-- ===== 定向发放 ===== -->
       <block wx:if="{{sendMode==='target'}}">
-        <!-- 四步任务流可见：选客户 → 填金额 → 复核 → 通知（「轮尺」，当前步实心挖空、已过步实心） -->
-        <view class="steps" aria-label="发放步骤">
-          <view class="round-ruler">
-            <view class="r {{step==='pick' ? 'r-now' : 'r-done'}}"></view>
-            <view class="r {{step==='fill' ? 'r-now' : step==='pick' ? '' : 'r-done'}}"></view>
-            <view class="r {{step==='review' ? 'r-now' : step==='result' ? 'r-done' : ''}}"></view>
-            <view class="r {{step==='result' ? 'r-now' : ''}}"></view>
-          </view>
-          <view class="steps-t">
-            <text class="{{step==='pick' ? 'on' : ''}}">选客户</text>
-            <text class="{{step==='fill' ? 'on' : ''}}">填金额</text>
-            <text class="{{step==='review' ? 'on' : ''}}">复核</text>
-            <text class="{{step==='result' ? 'on' : ''}}">通知</text>
-          </view>
+        <!-- 四步任务流可见：选客户 → 填金额 → 复核 → 通知（分段进度条：走过的和当前步实心，当前步的字加粗） -->
+        <view class="stepbar steps" aria-label="发放步骤">
+          <view class="sb-i {{step==='pick' ? 'now' : 'done'}}"><view class="sb-bar"></view><text class="sb-t">选客户</text></view>
+          <view class="sb-i {{step==='fill' ? 'now' : step==='pick' ? '' : 'done'}}"><view class="sb-bar"></view><text class="sb-t">填金额</text></view>
+          <view class="sb-i {{step==='review' ? 'now' : step==='result' ? 'done' : ''}}"><view class="sb-bar"></view><text class="sb-t">复核</text></view>
+          <view class="sb-i {{step==='result' ? 'now' : ''}}"><view class="sb-bar"></view><text class="sb-t">通知</text></view>
         </view>
 
         <!-- 步骤1 · 选客户（白表面）。统一名单一人一行：企微客户与直连客户合并展示

@@ -382,6 +382,25 @@ page {
 .tag-primary { background: var(--color-tint-primary); color: var(--color-primary); }
 .tag-danger { background: var(--color-danger-tint); color: var(--color-danger-deep); }
 
+/* ---- 步骤条：分段进度条（v6 样张 mobile-home 的 .ticks / 任务卡的 .bar 同一种写法）----
+   一步一段，走过的和当前步实心，没到的只剩轨道；字写在各自色条下方、左对齐，当前步的字加粗。
+   进度条属「铺满宽度的东西」，直角（DESIGN §六）。颜色走变量，块里用时改成所在底的搭档。
+   不用 kit 的 .round-ruler：那是「轮」的静态刻度，不是进度条（scenarios/04），
+   16rpx 空心小方块放在色块里像没加载出来的占位符 */
+.stepbar {
+  --sb-on: var(--color-primary);
+  --sb-off: var(--color-hl);
+  --sb-t: var(--color-text-light);
+  --sb-t-now: var(--color-text-dark);
+  display: flex;
+  gap: 8rpx;
+}
+.sb-i { flex: 1; min-width: 0; }
+.sb-bar { height: 8rpx; background: var(--sb-off); transition: background-color var(--duration-md) var(--ease-out); }
+.sb-i.done .sb-bar, .sb-i.now .sb-bar { background: var(--sb-on); }
+.sb-t { display: block; margin-top: 12rpx; font-size: 24rpx; line-height: 1.5; color: var(--sb-t); white-space: nowrap; transition: color var(--duration-md) var(--ease-out); }
+.sb-i.now .sb-t { color: var(--sb-t-now); font-weight: 600; }
+
 /* ---- 发丝线：覆盖 kit 的 1rpx 版 ----
    1rpx 在部分机型换算成 <1 物理像素会被吞/深浅不一，改用 1px + scaleY(0.5)；颜色取带青的发丝线 */
 .hairline-b::after {
